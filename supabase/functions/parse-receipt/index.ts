@@ -79,16 +79,27 @@ serve(async (req) => {
                 type: 'text',
                 text: `Parse this grocery receipt and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), category, and discount (as number, optional).
 
-CRITICAL DISCOUNT HANDLING RULES - THIS IS EXTREMELY IMPORTANT:
-1. NEVER create separate items for discounts (lines with negative amounts like "Kycklingfärs rabatt -11,90")
-2. When you see a discount line (negative amount), find the corresponding product item above it
-3. Calculate the final price by subtracting the discount: final_price = original_price - discount_amount
-4. Store the discount as a POSITIVE number in the "discount" field
-5. Only create ONE item per product, with the final calculated price
-6. Example: 
-   - Receipt shows: "Kycklingfärs 115,90" and "Kycklingfärs 2f -11,90"
-   - You should create: ONE item with name="Kycklingfärs", quantity=2, price=104.00, discount=11.90
-   - DO NOT create two items, DO NOT include "rabatt" in the item name
+🚨 ABSOLUTE RULES FOR DISCOUNT HANDLING - FOLLOW THESE EXACTLY:
+
+1. NEVER EVER create items with NEGATIVE prices
+2. NEVER create items containing "rabatt", "special", "2för", "2f", or discount keywords in the name
+3. When you see a line with negative amount (like "STor&special -25KR" or "Kycklingfärs 2f -11,90"):
+   - This is NOT a separate product - it's a discount on the product ABOVE it
+   - Find the product item above it and apply the discount there
+   - DO NOT create a new item for this discount line
+   
+4. How to apply discounts correctly:
+   - Original product price = the price shown on the product line
+   - Discount amount = absolute value of the negative amount (make it positive)
+   - Final price = original price - discount amount
+   - Store: name=product name (without discount text), price=final price, discount=discount amount
+   
+5. Examples:
+   ❌ WRONG: Create "*Fus Base" (264) and "STor&special -25KR" (-25) as two items
+   ✅ CORRECT: Create ONE item: name="*Fus Base", price=239, discount=25
+   
+   ❌ WRONG: Create "Kycklingfärs" (115.90) and "Kycklingfärs rabatt" (-11.90) as two items  
+   ✅ CORRECT: Create ONE item: name="Kycklingfärs", quantity=2, price=104.00, discount=11.90
 
 Categories (one of: frukt_och_gront, mejeri, kott_fagel_chark, fisk_skaldjur, brod_bageri, skafferi, frysvaror, drycker, sotsaker_snacks, fardigmat, hushall_hygien, pant, other):
 - frukt_och_gront: Färska frukter, grönsaker, sallader, örter och rotfrukter
