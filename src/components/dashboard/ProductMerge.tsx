@@ -227,10 +227,28 @@ export const ProductMerge = () => {
     createMapping.mutate(selectedProducts);
   };
 
-  const handleAcceptSuggestion = (suggestion: SuggestedMerge) => {
-    setSelectedProducts(suggestion.products);
-    setMergedName(suggestion.suggestedName);
-    toast.success("Förslag accepterat! Granska och bekräfta sammanslagningen.");
+  const handleAcceptSuggestion = async (suggestion: SuggestedMerge) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const mappingsToCreate = suggestion.products.map(product => ({
+        user_id: user.id,
+        original_name: product,
+        mapped_name: suggestion.suggestedName,
+      }));
+
+      const { error } = await supabase
+        .from('product_mappings')
+        .insert(mappingsToCreate);
+
+      if (error) throw error;
+
+      queryClient.invalidateQueries({ queryKey: ['product-mappings'] });
+      toast.success("Produkter sammanslagna!");
+    } catch (error) {
+      toast.error("Kunde inte slå ihop produkter: " + (error as Error).message);
+    }
   };
 
   // Group mappings by mapped_name
