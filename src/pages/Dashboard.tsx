@@ -5,15 +5,17 @@ import { CategoryBreakdown } from "@/components/dashboard/CategoryBreakdown";
 import { StoreComparison } from "@/components/dashboard/StoreComparison";
 import { MonthlySummary } from "@/components/dashboard/MonthlySummary";
 import { Button } from "@/components/ui/button";
-import { Upload, ArrowLeft } from "lucide-react";
+import { Upload, ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { startOfMonth, endOfMonth, format } from "date-fns";
+import { startOfMonth, endOfMonth, format, addMonths, subMonths } from "date-fns";
 import { sv } from "date-fns/locale";
+import { useState } from "react";
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const [selectedMonth, setSelectedMonth] = useState(new Date());
 
   // Fetch current month's receipts
   const { data: receipts, isLoading } = useQuery({
@@ -29,9 +31,9 @@ const Dashboard = () => {
     },
   });
 
-  // Calculate this month's stats
-  const thisMonthStart = startOfMonth(new Date());
-  const thisMonthEnd = endOfMonth(new Date());
+  // Calculate selected month's stats
+  const thisMonthStart = startOfMonth(selectedMonth);
+  const thisMonthEnd = endOfMonth(selectedMonth);
   
   const thisMonthReceipts = receipts?.filter(r => {
     if (!r.receipt_date) return false;
@@ -42,6 +44,10 @@ const Dashboard = () => {
   const thisMonthTotal = thisMonthReceipts.reduce((sum, r) => sum + Number(r.total_amount || 0), 0);
   const thisMonthCount = thisMonthReceipts.length;
   const avgPerReceipt = thisMonthCount > 0 ? thisMonthTotal / thisMonthCount : 0;
+
+  const handlePreviousMonth = () => setSelectedMonth(prev => subMonths(prev, 1));
+  const handleNextMonth = () => setSelectedMonth(prev => addMonths(prev, 1));
+  const isCurrentMonth = format(selectedMonth, 'yyyy-MM') === format(new Date(), 'yyyy-MM');
 
   // Get top category this month
   const categoryTotals: Record<string, number> = {};
@@ -97,17 +103,47 @@ const Dashboard = () => {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={handlePreviousMonth}
+                  aria-label="Föregående månad"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <h2 className="text-xl font-semibold min-w-[200px] text-center">
+                  {format(selectedMonth, 'MMMM yyyy', { locale: sv })}
+                </h2>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={handleNextMonth}
+                  disabled={isCurrentMonth}
+                  aria-label="Nästa månad"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+              {!isCurrentMonth && (
+                <Button variant="ghost" onClick={() => setSelectedMonth(new Date())}>
+                  Gå till aktuell månad
+                </Button>
+              )}
+            </div>
+
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
               <Card className="shadow-card">
                 <CardHeader className="pb-2">
-                  <CardDescription>Denna månad</CardDescription>
+                  <CardDescription>Vald månad</CardDescription>
                   <CardTitle className="text-3xl">
                     {isLoading ? '...' : `${thisMonthTotal.toLocaleString('sv-SE', { maximumFractionDigits: 0 })} kr`}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-muted-foreground">
-                    {format(new Date(), 'MMMM yyyy', { locale: sv })}
+                    {format(selectedMonth, 'MMMM yyyy', { locale: sv })}
                   </p>
                 </CardContent>
               </Card>
@@ -150,7 +186,7 @@ const Dashboard = () => {
 
             <div className="grid gap-6 lg:grid-cols-2">
               <SpendingChart />
-              <CategoryBreakdown />
+              <CategoryBreakdown selectedMonth={selectedMonth} />
             </div>
           </TabsContent>
 

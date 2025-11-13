@@ -18,7 +18,7 @@ const categoryNames: Record<string, string> = {
   other: 'Övrigt',
 };
 
-export const CategoryBreakdown = () => {
+export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) => {
   const { data: receipts, isLoading } = useQuery({
     queryKey: ['receipts'],
     queryFn: async () => {
@@ -32,9 +32,10 @@ export const CategoryBreakdown = () => {
     },
   });
 
-  // Get current month's receipts
-  const thisMonthStart = startOfMonth(new Date());
-  const thisMonthEnd = endOfMonth(new Date());
+  // Use selected month or default to current month
+  const monthToUse = selectedMonth || new Date();
+  const thisMonthStart = startOfMonth(monthToUse);
+  const thisMonthEnd = endOfMonth(monthToUse);
   
   const thisMonthReceipts = receipts?.filter(r => {
     if (!r.receipt_date) return false;
