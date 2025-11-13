@@ -269,11 +269,19 @@ export default function Training() {
                   {/* Receipt Image */}
                   <div>
                     <Label>Receipt Image</Label>
-                    <img 
-                      src={selectedReceipt.image_url} 
-                      alt="Receipt" 
-                      className="w-full max-h-64 object-contain border rounded-lg mt-2"
-                    />
+                    <a 
+                      href={selectedReceipt.image_url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="block mt-2 cursor-pointer hover:opacity-80 transition-opacity"
+                    >
+                      <img 
+                        src={selectedReceipt.image_url} 
+                        alt="Receipt" 
+                        className="w-full max-h-64 object-contain border rounded-lg"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1 text-center">Klicka för att öppna i nytt fönster</p>
+                    </a>
                   </div>
 
                   {/* Store Info */}
