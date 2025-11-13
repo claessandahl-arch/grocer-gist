@@ -24,6 +24,7 @@ interface ReceiptItem {
   price: number;
   quantity: number;
   category: string;
+  discount?: number;
 }
 
 const categories = [
@@ -39,7 +40,6 @@ const categories = [
   'fardigmat',
   'hushall_hygien',
   'pant',
-  'rabatt',
   'other'
 ];
 
@@ -105,7 +105,7 @@ export default function Training() {
   const addItem = () => {
     setEditedData({
       ...editedData,
-      items: [...editedData.items, { name: '', price: 0, quantity: 1, category: 'other' }]
+      items: [...editedData.items, { name: '', price: 0, quantity: 1, category: 'other', discount: 0 }]
     });
   };
 
@@ -333,7 +333,7 @@ export default function Training() {
                                 onChange={(e) => updateItem(index, 'name', e.target.value)}
                               />
                             </div>
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-3 gap-2">
                               <div>
                                 <Label htmlFor={`item-price-${index}`}>Pris (kr)</Label>
                                 <Input
@@ -353,6 +353,17 @@ export default function Training() {
                                   placeholder="Antal"
                                   value={item.quantity}
                                   onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value))}
+                                />
+                              </div>
+                              <div>
+                                <Label htmlFor={`item-discount-${index}`}>Rabatt (kr)</Label>
+                                <Input
+                                  id={`item-discount-${index}`}
+                                  type="number"
+                                  step="0.01"
+                                  placeholder="0"
+                                  value={item.discount || 0}
+                                  onChange={(e) => updateItem(index, 'discount', parseFloat(e.target.value) || 0)}
                                 />
                               </div>
                             </div>

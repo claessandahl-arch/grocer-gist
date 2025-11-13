@@ -77,26 +77,29 @@ serve(async (req) => {
             content: [
               {
                 type: 'text',
-                text: `Parse this grocery receipt and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), and category (one of: frukt_och_gront, mejeri, kott_fagel_chark, fisk_skaldjur, brod_bageri, skafferi, frysvaror, drycker, sotsaker_snacks, fardigmat, hushall_hygien, pant, rabatt, other).
+                text: `Parse this grocery receipt and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), category, and discount (as number, optional).
 
-Category descriptions:
+CRITICAL DISCOUNT HANDLING RULES:
+1. When a discount line appears after a product (negative amount), DO NOT create a separate item for the discount
+2. Instead, subtract the discount from the product's price to get the net price
+3. Store the discount amount (as positive number) in the "discount" field of that product
+4. Example: "Kycklingfärs 115,90" followed by "Kycklingfärs 2f -11,90" should become ONE item with price=104.00 and discount=11.90
+
+Categories (one of: frukt_och_gront, mejeri, kott_fagel_chark, fisk_skaldjur, brod_bageri, skafferi, frysvaror, drycker, sotsaker_snacks, fardigmat, hushall_hygien, pant, other):
 - frukt_och_gront: Färska frukter, grönsaker, sallader, örter och rotfrukter
-- mejeri: Mjölk, fil, yoghurt, grädde, smör, margarin, ost och ägg
-- kott_fagel_chark: Färskt kött (nöt, fläsk, lamm), kyckling, kalkon, korv, pålägg, bacon och leverpastej
-- fisk_skaldjur: Färska, frysta och konserverade produkter (t.ex. lax, torsk, räkor, sill)
-- brod_bageri: Färskt bröd, bullar, kakor, kex och skorpor
-- skafferi: Pasta, ris, gryn, mjöl, socker, konserver (bönor, tomater, soppor), oljor, vinäger och kryddor
-- frysvaror: Frysta grönsaker, färdigrätter, glass, bär, bröd och pizzor
-- drycker: Läsk, juice, vatten, kaffe, te, öl och cider
-- sotsaker_snacks: Godis, choklad, chips, nötter och energibars
+- mejeri: Mjölk, grädde, fil, yoghurt, smör, margarin och ost
+- kott_fagel_chark: Färskt kött, fågel, charkuterier, korv och bacon
+- fisk_skaldjur: Färsk fisk, skaldjur, gravad lax och rökt fisk
+- brod_bageri: Bröd, bullar, kakor och bakverk
+- skafferi: Konserver, torra varor, pasta, ris, mjöl, såser, kryddor och konserver
+- frysvaror: Frysta produkter som glass, frysta grönsaker och färdigrätter
+- drycker: Vatten, läsk, juice, kaffe, te och alkoholfria drycker
+- sotsaker_snacks: Godis, chips, choklad och andra snacks
 - fardigmat: Salladsbarer, färdiglagade rätter, smörgåsar, oliver och specialostar
 - hushall_hygien: Rengöringsmedel, tvättmedel, toalettpapper, personliga hygienprodukter (schampo, tvål) och blöjor
 - pant: Avgift på flask- och burk drycker
-- rabatt: Rabatter, avdrag och besparingar (alltid negativt pris)
 
-IMPORTANT: Items with negative prices (discounts/savings) should ALWAYS be categorized as 'rabatt'.
-
-Look for savings, discounts, and weight information on items if available. Be precise with item names and prices.${storeContext}
+Look for weight information on items if available. Be precise with item names and net prices after discounts.${storeContext}
 
 Return only valid JSON with no markdown formatting.`
               },
@@ -127,12 +130,13 @@ Return only valid JSON with no markdown formatting.`
                       type: 'object',
                       properties: {
                         name: { type: 'string' },
-                        price: { type: 'number' },
+                        price: { type: 'number', description: 'Net price after any discounts have been subtracted' },
                         quantity: { type: 'number' },
                         category: {
                           type: 'string',
-                          enum: ['frukt_och_gront', 'mejeri', 'kott_fagel_chark', 'fisk_skaldjur', 'brod_bageri', 'skafferi', 'frysvaror', 'drycker', 'sotsaker_snacks', 'fardigmat', 'hushall_hygien', 'pant', 'rabatt', 'other']
-                        }
+                          enum: ['frukt_och_gront', 'mejeri', 'kott_fagel_chark', 'fisk_skaldjur', 'brod_bageri', 'skafferi', 'frysvaror', 'drycker', 'sotsaker_snacks', 'fardigmat', 'hushall_hygien', 'pant', 'other']
+                        },
+                        discount: { type: 'number', description: 'Discount amount as positive number, if any discount was applied to this item' }
                       },
                       required: ['name', 'price', 'quantity', 'category']
                     }
