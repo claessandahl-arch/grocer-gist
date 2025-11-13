@@ -314,37 +314,46 @@ export default function Training() {
                     <div className="space-y-4 max-h-96 overflow-y-auto">
                       {editedData?.items?.map((item: ReceiptItem, index: number) => (
                         <Card key={index} className="p-4">
-                          <div className="grid grid-cols-12 gap-2">
-                            <div className="col-span-5">
+                          <div className="space-y-3">
+                            <div>
+                              <Label htmlFor={`item-name-${index}`}>Produktnamn</Label>
                               <Input
-                                placeholder="Item name"
+                                id={`item-name-${index}`}
+                                placeholder="Produktnamn"
                                 value={item.name}
                                 onChange={(e) => updateItem(index, 'name', e.target.value)}
                               />
                             </div>
-                            <div className="col-span-2">
-                              <Input
-                                type="number"
-                                step="0.01"
-                                placeholder="Price"
-                                value={item.price}
-                                onChange={(e) => updateItem(index, 'price', parseFloat(e.target.value))}
-                              />
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <Label htmlFor={`item-price-${index}`}>Pris (kr)</Label>
+                                <Input
+                                  id={`item-price-${index}`}
+                                  type="number"
+                                  step="0.01"
+                                  placeholder="Pris"
+                                  value={item.price}
+                                  onChange={(e) => updateItem(index, 'price', parseFloat(e.target.value))}
+                                />
+                              </div>
+                              <div>
+                                <Label htmlFor={`item-quantity-${index}`}>Antal</Label>
+                                <Input
+                                  id={`item-quantity-${index}`}
+                                  type="number"
+                                  placeholder="Antal"
+                                  value={item.quantity}
+                                  onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value))}
+                                />
+                              </div>
                             </div>
-                            <div className="col-span-1">
-                              <Input
-                                type="number"
-                                placeholder="Qty"
-                                value={item.quantity}
-                                onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value))}
-                              />
-                            </div>
-                            <div className="col-span-3">
+                            <div>
+                              <Label htmlFor={`item-category-${index}`}>Kategori</Label>
                               <Select
                                 value={item.category}
                                 onValueChange={(value) => updateItem(index, 'category', value)}
                               >
-                                <SelectTrigger>
+                                <SelectTrigger id={`item-category-${index}`}>
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -354,15 +363,14 @@ export default function Training() {
                                 </SelectContent>
                               </Select>
                             </div>
-                            <div className="col-span-1">
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => removeItem(index)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => removeItem(index)}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Ta bort
+                            </Button>
                           </div>
                         </Card>
                       ))}
