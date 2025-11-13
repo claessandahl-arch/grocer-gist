@@ -200,21 +200,37 @@ export default function Training() {
     };
 
     if (existingPattern) {
-      await supabase
+      console.log('Updating existing pattern for:', storeName);
+      const { error: updateError } = await supabase
         .from('store_patterns')
         .update({
           pattern_data: patternData,
           usage_count: existingPattern.usage_count + 1
         })
         .eq('store_name', storeName);
+      
+      if (updateError) {
+        console.error('Error updating store pattern:', updateError);
+        toast.error('Kunde inte uppdatera inlärningsmönster');
+      } else {
+        console.log('Store pattern updated successfully');
+      }
     } else {
-      await supabase
+      console.log('Creating new pattern for:', storeName);
+      const { error: insertError } = await supabase
         .from('store_patterns')
         .insert({
           store_name: storeName,
           pattern_data: patternData,
           usage_count: 1
         });
+      
+      if (insertError) {
+        console.error('Error inserting store pattern:', insertError);
+        toast.error('Kunde inte spara inlärningsmönster');
+      } else {
+        console.log('Store pattern created successfully');
+      }
     }
   };
 
