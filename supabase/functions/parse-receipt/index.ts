@@ -79,38 +79,58 @@ serve(async (req) => {
                 type: 'text',
                 text: `Parse this grocery receipt and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), category, and discount (as number, optional).
 
-🚨 CRITICAL DISCOUNT RULES - MUST FOLLOW EXACTLY:
+🚨 CRITICAL PARSING RULES - MUST FOLLOW EXACTLY:
 
-1. ❌ NEVER create items with NEGATIVE prices (e.g., -25.00)
-2. ❌ NEVER create separate items for discount lines containing keywords: "rabatt", "special", "2för", "2f", "-KR", "-kr", "kampanj"
-3. ✅ When you see a negative amount line (like "STor&special -25KR", "Kycklingfärs 2f -11,90", "rabatt -15,00"):
-   - This line represents a DISCOUNT on the PREVIOUS product line
-   - The previous product is the one being discounted
-   - DO NOT create a separate item for the discount line
+1. MULTI-LINE PRODUCT NAMES:
+   ✅ Products can span multiple lines where the second line continues the product name
+   ✅ If a line has NO price/quantity but follows a product line, it's likely part of the product name
+   ✅ Combine the lines into ONE product with the full name
    
-4. ✅ How to correctly handle discounts:
+   Example:
+   *Juicy Melba    7340131603507    21,00    1,00 st    22,95
+   Nocco                                                  -5,90
+   
+   ❌ WRONG: Two items: "Juicy Melba" and "Nocco"
+   ✅ CORRECT: One item: "Juicy Melba Nocco" with price 17.05 (22.95 - 5.90) and discount 5.90
+
+2. DISCOUNT RULES:
+   ❌ NEVER create items with NEGATIVE prices (e.g., -25.00)
+   ❌ NEVER create separate items for discount lines containing keywords: "rabatt", "special", "2för", "2f", "-KR", "-kr", "kampanj"
+   ✅ When you see a negative amount line:
+      - If the line also contains text without prices/quantity, it's likely continuing the product name from above
+      - The negative amount is the DISCOUNT on the product
+      - DO NOT create a separate item for the discount line
+   
+3. How to correctly handle discounts:
    - Look at the product line ABOVE the discount line
+   - If the next line has text and a negative amount, combine the names
    - Original price = the total price shown on the product line
    - Discount = absolute value of the negative amount (convert to positive number)
    - Final price = original price - discount
-   - Create ONE item with: name=(product name), price=(final price), discount=(discount amount as positive number)
+   - Create ONE item with: name=(combined product name), price=(final price), discount=(discount amount as positive number)
    
-5. 🔍 Pattern recognition for discounts:
-   - Lines starting with "*" or "-" followed by discount keywords
-   - Lines with negative amounts (numbers with "-" prefix)
-   - Lines mentioning "special", "rabatt", "kampanj", "erbjudande"
+4. Pattern recognition:
+   - Lines with only text + negative amount = likely part of product name + discount
+   - Lines with discount keywords + negative amount = discount on previous product
    - These ALL mean: apply discount to the product ABOVE
    
 📋 REAL EXAMPLES - CORRECT PARSING:
 
-Example Receipt Line Format:
+Example 1 - Multi-line product name:
+  *Juicy Melba    7340131603507    21,00    1,00 st    22,95
+  Nocco                                                  -5,90
+
+❌ WRONG: { name: "Juicy Melba", price: 22.95 }, { name: "Nocco", price: -5.90 }
+✅ CORRECT: { name: "Juicy Melba Nocco", price: 17.05, quantity: 1, discount: 5.90 }
+
+Example 2 - Discount keyword:
   *Fus Base          8006540989197    264,00    1.00 st    289.00
   STor&special -25KR                                        -25,00
 
 ❌ WRONG: { name: "*Fus Base", price: 289 }, { name: "STor&special -25KR", price: -25 }
 ✅ CORRECT: { name: "Fus Base", price: 264, quantity: 1, discount: 25 }
 
-Example 2:
+Example 3 - Duplicate name discount:
   Kycklingfärs                        64,00     1 st       75.90
   Kycklingfärs 2f                                         -11.90
 
