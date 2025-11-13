@@ -27,6 +27,30 @@ serve(async (req) => {
 
     console.log('Parsing receipt image:', imageUrl);
 
+    // Fetch store patterns to improve parsing accuracy
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    let storeContext = '';
+    try {
+      const patternsResponse = await fetch(`${SUPABASE_URL}/rest/v1/store_patterns?select=*`, {
+        headers: {
+          'apikey': SUPABASE_SERVICE_ROLE_KEY || '',
+          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
+        }
+      });
+      
+      if (patternsResponse.ok) {
+        const patterns = await patternsResponse.json();
+        if (patterns && patterns.length > 0) {
+          storeContext = '\n\nLearned patterns from previous receipts:\n' + 
+            patterns.map((p: any) => `Store: ${p.store_name}, Common categories: ${JSON.stringify(p.pattern_data?.item_patterns || [])}`).join('\n');
+        }
+      }
+    } catch (e) {
+      console.log('Could not fetch store patterns:', e);
+    }
+
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -45,7 +69,11 @@ serve(async (req) => {
             content: [
               {
                 type: 'text',
-                text: 'Parse this grocery receipt and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), and category (one of: produce, dairy, meat, bakery, beverages, snacks, household, other). Return only valid JSON with no markdown formatting.'
+                text: `Parse this grocery receipt and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), and category (one of: produce, dairy, meat, bakery, beverages, snacks, household, other). 
+                
+Look for savings, discounts, and weight information on items if available. Be precise with item names and prices.${storeContext}
+
+Return only valid JSON with no markdown formatting.`
               },
               {
                 type: 'image_url',
