@@ -1,34 +1,104 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowUpRight, ArrowDownRight, Calendar } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { startOfMonth, endOfMonth, subMonths, format } from "date-fns";
+import { sv } from "date-fns/locale";
 
-const monthlyData = [
-  {
-    month: "Juni 2024",
-    total: 8473.2,
-    change: 12,
-    receipts: 15,
-    topCategory: "Frukt och grönt",
-    avgPerTrip: 564.9,
-  },
-  {
-    month: "Maj 2024",
-    total: 7561.5,
-    change: -8,
-    receipts: 14,
-    topCategory: "Mejeri",
-    avgPerTrip: 540.1,
-  },
-  {
-    month: "April 2024",
-    total: 8234.7,
-    change: 5,
-    receipts: 16,
-    topCategory: "Kött, fågel, chark",
-    avgPerTrip: 514.7,
-  },
-];
+const categoryNames: Record<string, string> = {
+  frukt_gront: 'Frukt och grönt',
+  mejeri: 'Mejeri',
+  kott_fagel_chark: 'Kött, fågel, chark',
+  brod_bageri: 'Bröd och bageri',
+  drycker: 'Drycker',
+  sotsaker_snacks: 'Sötsaker och snacks',
+  fardigmat: 'Färdigmat',
+  hushall_hygien: 'Hushåll och hygien',
+  delikatess: 'Delikatess',
+  pant: 'Pant',
+  other: 'Övrigt',
+};
 
 export const MonthlySummary = () => {
+  const { data: receipts, isLoading } = useQuery({
+    queryKey: ['receipts'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('receipts')
+        .select('*')
+        .order('receipt_date', { ascending: false });
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Calculate data for last 3 months
+  const getMonthData = (monthsAgo: number) => {
+    const monthStart = startOfMonth(subMonths(new Date(), monthsAgo));
+    const monthEnd = endOfMonth(subMonths(new Date(), monthsAgo));
+    
+    const monthReceipts = receipts?.filter(r => {
+      if (!r.receipt_date) return false;
+      const date = new Date(r.receipt_date);
+      return date >= monthStart && date <= monthEnd;
+    }) || [];
+
+    const total = monthReceipts.reduce((sum, r) => sum + Number(r.total_amount || 0), 0);
+    const count = monthReceipts.length;
+    const avgPerTrip = count > 0 ? total / count : 0;
+
+    // Get top category
+    const categoryTotals: Record<string, number> = {};
+    monthReceipts.forEach(receipt => {
+      const items = receipt.items as any[] || [];
+      items.forEach(item => {
+        const category = item.category || 'other';
+        categoryTotals[category] = (categoryTotals[category] || 0) + Number(item.price || 0);
+      });
+    });
+
+    const topCategoryEntry = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0];
+    const topCategory = topCategoryEntry ? categoryNames[topCategoryEntry[0]] || 'Övrigt' : 'Ingen data';
+
+    return {
+      month: format(monthStart, 'MMMM yyyy', { locale: sv }),
+      total,
+      receipts: count,
+      topCategory,
+      avgPerTrip,
+    };
+  };
+
+  const currentMonth = getMonthData(0);
+  const lastMonth = getMonthData(1);
+  const twoMonthsAgo = getMonthData(2);
+
+  const calculateChange = (current: number, previous: number) => {
+    if (previous === 0) return 0;
+    return Math.round(((current - previous) / previous) * 100);
+  };
+
+  const monthlyData = [
+    { ...currentMonth, change: calculateChange(currentMonth.total, lastMonth.total) },
+    { ...lastMonth, change: calculateChange(lastMonth.total, twoMonthsAgo.total) },
+    { ...twoMonthsAgo, change: 0 },
+  ];
+
+  if (isLoading) {
+    return <div className="text-center py-8">Laddar...</div>;
+  }
+
+  if (!receipts || receipts.length === 0) {
+    return (
+      <Card className="shadow-card">
+        <CardContent className="py-8 text-center text-muted-foreground">
+          Inga kvitton uppladdade ännu. Ladda upp ditt första kvitto för att se statistik!
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {monthlyData.map((month, idx) => (

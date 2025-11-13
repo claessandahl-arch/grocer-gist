@@ -1,16 +1,60 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-
-const data = [
-  { month: "Jan", amount: 645 },
-  { month: "Feb", amount: 712 },
-  { month: "Mar", amount: 689 },
-  { month: "Apr", amount: 756 },
-  { month: "May", amount: 823 },
-  { month: "Jun", amount: 847 },
-];
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { startOfMonth, endOfMonth, subMonths, format } from "date-fns";
+import { sv } from "date-fns/locale";
 
 export const SpendingChart = () => {
+  const { data: receipts, isLoading } = useQuery({
+    queryKey: ['receipts'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('receipts')
+        .select('*')
+        .order('receipt_date', { ascending: false });
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Calculate spending for last 6 months
+  const data = Array.from({ length: 6 }, (_, i) => {
+    const monthDate = subMonths(new Date(), 5 - i);
+    const monthStart = startOfMonth(monthDate);
+    const monthEnd = endOfMonth(monthDate);
+    
+    const monthReceipts = receipts?.filter(r => {
+      if (!r.receipt_date) return false;
+      const date = new Date(r.receipt_date);
+      return date >= monthStart && date <= monthEnd;
+    }) || [];
+
+    const total = monthReceipts.reduce((sum, r) => sum + Number(r.total_amount || 0), 0);
+
+    return {
+      month: format(monthDate, 'MMM', { locale: sv }),
+      amount: Math.round(total),
+    };
+  });
+
+  if (isLoading) {
+    return (
+      <Card className="shadow-card">
+        <CardHeader>
+          <CardTitle>Utgiftstrend</CardTitle>
+          <CardDescription>Dina matutgifter de senaste 6 månaderna</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+            Laddar...
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card className="shadow-card">
       <CardHeader>

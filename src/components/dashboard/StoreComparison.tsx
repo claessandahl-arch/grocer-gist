@@ -1,85 +1,111 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TrendingDown, TrendingUp } from "lucide-react";
-
-const storeData = [
-  {
-    item: "Organic Milk (1 Gallon)",
-    stores: [
-      { name: "Whole Foods", price: 6.99, badge: "highest" },
-      { name: "Trader Joe's", price: 4.99, badge: "lowest" },
-      { name: "Safeway", price: 5.49, badge: null },
-    ]
-  },
-  {
-    item: "Bananas (per lb)",
-    stores: [
-      { name: "Whole Foods", price: 0.79, badge: null },
-      { name: "Trader Joe's", price: 0.69, badge: "lowest" },
-      { name: "Safeway", price: 0.89, badge: "highest" },
-    ]
-  },
-  {
-    item: "Ground Beef (per lb)",
-    stores: [
-      { name: "Whole Foods", price: 8.99, badge: "highest" },
-      { name: "Trader Joe's", price: 6.99, badge: null },
-      { name: "Safeway", price: 5.99, badge: "lowest" },
-    ]
-  },
-];
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 export const StoreComparison = () => {
+  const { data: receipts, isLoading } = useQuery({
+    queryKey: ['receipts'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('receipts')
+        .select('*')
+        .order('receipt_date', { ascending: false });
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Group receipts by store
+  const storeData: Record<string, { total: number; count: number }> = {};
+  receipts?.forEach(receipt => {
+    const store = receipt.store_name || 'Okänd butik';
+    if (!storeData[store]) {
+      storeData[store] = { total: 0, count: 0 };
+    }
+    storeData[store].total += Number(receipt.total_amount || 0);
+    storeData[store].count += 1;
+  });
+
+  const stores = Object.entries(storeData)
+    .map(([name, data]) => ({
+      name,
+      total: data.total,
+      count: data.count,
+      average: data.count > 0 ? data.total / data.count : 0,
+    }))
+    .sort((a, b) => b.total - a.total);
+
+  if (isLoading) {
+    return <div className="text-center py-8">Laddar...</div>;
+  }
+
+  if (stores.length === 0) {
+    return (
+      <Card className="shadow-card">
+        <CardContent className="py-8 text-center text-muted-foreground">
+          Ingen butiksdata tillgänglig ännu
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const lowestAvg = stores.reduce((min, s) => s.average < min ? s.average : min, stores[0]?.average || 0);
+  const highestAvg = stores.reduce((max, s) => s.average > max ? s.average : max, stores[0]?.average || 0);
+
   return (
     <div className="space-y-6">
       <Card className="shadow-soft border-accent/20">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingDown className="h-5 w-5 text-accent" />
-            Prisjämförelse
+            Butiksjämförelse
           </CardTitle>
           <CardDescription>
-            Spara pengar genom att handla på rätt butiker för varje produkt
+            Översikt över dina utgifter per butik
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-2xl font-bold text-accent">Spara upp till 422 kr/månad</p>
-          <p className="text-sm text-muted-foreground mt-1">
-            Genom att köpa varor i butikerna med lägst priser
+          <p className="text-lg font-semibold">
+            {stores.length} {stores.length === 1 ? 'butik' : 'butiker'} besökta
           </p>
         </CardContent>
       </Card>
 
-      {storeData.map((item, idx) => (
+      {stores.map((store, idx) => (
         <Card key={idx} className="shadow-card">
           <CardHeader>
-            <CardTitle className="text-lg">{item.item}</CardTitle>
+            <div className="flex items-start justify-between">
+              <div>
+                <CardTitle className="text-lg">{store.name}</CardTitle>
+                <CardDescription>{store.count} kvitton</CardDescription>
+              </div>
+              {store.average === lowestAvg && stores.length > 1 && (
+                <Badge variant="default" className="bg-accent">
+                  <TrendingDown className="h-3 w-3 mr-1" />
+                  Lägst snitt
+                </Badge>
+              )}
+              {store.average === highestAvg && stores.length > 1 && lowestAvg !== highestAvg && (
+                <Badge variant="destructive">
+                  <TrendingUp className="h-3 w-3 mr-1" />
+                  Högst snitt
+                </Badge>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {item.stores.map((store, storeIdx) => (
-                <div 
-                  key={storeIdx}
-                  className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="font-medium">{store.name}</span>
-                    {store.badge === "lowest" && (
-                      <Badge variant="default" className="bg-accent">
-                        <TrendingDown className="h-3 w-3 mr-1" />
-                        Bästa pris
-                      </Badge>
-                    )}
-                    {store.badge === "highest" && (
-                      <Badge variant="destructive">
-                        <TrendingUp className="h-3 w-3 mr-1" />
-                        Högst
-                      </Badge>
-                    )}
-                  </div>
-                  <span className="text-lg font-bold">{store.price.toFixed(2)} kr</span>
-                </div>
-              ))}
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <p className="text-sm text-muted-foreground">Total spenderat</p>
+                <p className="text-2xl font-bold">{store.total.toLocaleString('sv-SE', { maximumFractionDigits: 0 })} kr</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Snitt per kvitto</p>
+                <p className="text-2xl font-bold">{store.average.toLocaleString('sv-SE', { maximumFractionDigits: 0 })} kr</p>
+              </div>
             </div>
           </CardContent>
         </Card>
