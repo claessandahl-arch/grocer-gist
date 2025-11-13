@@ -26,6 +26,7 @@ serve(async (req) => {
     }
 
     console.log('Parsing receipt image:', imageUrl);
+    console.log('Fetching store patterns for improved accuracy...');
 
     // Fetch store patterns to improve parsing accuracy
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
