@@ -3,18 +3,25 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload as UploadIcon, ArrowLeft, FileText, CheckCircle2, Loader2 } from "lucide-react";
+import { Upload as UploadIcon, ArrowLeft, FileText, CheckCircle2, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import type { Session } from "@supabase/supabase-js";
 import * as pdfjsLib from 'pdfjs-dist';
+
+interface PreviewFile {
+  name: string;
+  preview: string;
+  blob: Blob;
+}
 
 const Upload = () => {
   const navigate = useNavigate();
   const [session, setSession] = useState<Session | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [converting, setConverting] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
+  const [previewFiles, setPreviewFiles] = useState<PreviewFile[]>([]);
 
-  // Configure PDF.js worker
   useEffect(() => {
     pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
   }, []);
@@ -39,12 +46,14 @@ const Upload = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const convertPdfToImage = async (file: File): Promise<Blob> => {
+  const convertPdfToJpg = async (file: File): Promise<{ blob: Blob; preview: string }> => {
+    console.log('Converting PDF to JPG...');
+    
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     const page = await pdf.getPage(1);
     
-    const scale = 2;
+    const scale = 2.0;
     const viewport = page.getViewport({ scale });
     
     const canvas = document.createElement('canvas');
@@ -57,54 +66,97 @@ const Upload = () => {
     await page.render({
       canvasContext: context,
       viewport: viewport,
-      canvas: canvas
     } as any).promise;
     
-    return new Promise((resolve) => {
-      canvas.toBlob((blob) => {
-        if (blob) resolve(blob);
-        else throw new Error('Failed to convert canvas to blob');
-      }, 'image/png');
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error('Failed to convert canvas to blob'));
+        },
+        'image/jpeg',
+        0.95
+      );
     });
+
+    const preview = canvas.toDataURL('image/jpeg', 0.95);
+    console.log('PDF converted to JPG successfully');
+    
+    return { blob, preview };
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || !session) return;
+
+    setConverting(true);
+    const newPreviews: PreviewFile[] = [];
+
+    try {
+      for (const file of Array.from(files)) {
+        console.log('Processing file:', file.name, 'Type:', file.type);
+        
+        if (file.type === 'application/pdf') {
+          const { blob, preview } = await convertPdfToJpg(file);
+          newPreviews.push({
+            name: file.name,
+            preview,
+            blob
+          });
+        } else {
+          const preview = URL.createObjectURL(file);
+          newPreviews.push({
+            name: file.name,
+            preview,
+            blob: file
+          });
+        }
+      }
+      
+      setPreviewFiles(newPreviews);
+      toast.success(`${newPreviews.length} file(s) ready for upload`);
+    } catch (error) {
+      console.error('Preview generation failed:', error);
+      toast.error('Failed to process files');
+    } finally {
+      setConverting(false);
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!session || previewFiles.length === 0) return;
 
     setUploading(true);
     
     try {
-      const uploadPromises = Array.from(files).map(async (file) => {
-        let uploadFile: File | Blob = file;
-        let fileName = `${session.user.id}/${Date.now()}`;
+      const uploadPromises = previewFiles.map(async (previewFile, index) => {
+        const fileName = `${session.user.id}/${Date.now()}_${index}.jpg`;
         
-        // Convert PDF to image if needed
-        if (file.type === 'application/pdf') {
-          console.log('Converting PDF to image...');
-          const imageBlob = await convertPdfToImage(file);
-          uploadFile = imageBlob;
-          fileName += '.png';
-        } else {
-          const fileExt = file.name.split('.').pop();
-          fileName += `.${fileExt}`;
-        }
-        
+        console.log('Uploading:', fileName);
         const { error: uploadError } = await supabase.storage
           .from('receipts')
-          .upload(fileName, uploadFile);
+          .upload(fileName, previewFile.blob);
 
-        if (uploadError) throw uploadError;
+        if (uploadError) {
+          console.error('Upload error:', uploadError);
+          throw uploadError;
+        }
 
         const { data: { publicUrl } } = supabase.storage
           .from('receipts')
           .getPublicUrl(fileName);
 
+        console.log('Parsing with AI:', publicUrl);
         const { data: parsedData, error: parseError } = await supabase.functions.invoke('parse-receipt', {
           body: { imageUrl: publicUrl }
         });
 
-        if (parseError) throw parseError;
+        if (parseError) {
+          console.error('Parse error:', parseError);
+          throw new Error(`AI parsing failed: ${parseError.message}`);
+        }
+
+        console.log('Receipt parsed:', parsedData);
 
         const { error: dbError } = await supabase
           .from('receipts')
@@ -117,20 +169,28 @@ const Upload = () => {
             items: parsedData.items
           });
 
-        if (dbError) throw dbError;
+        if (dbError) {
+          console.error('Database error:', dbError);
+          throw dbError;
+        }
 
-        return file.name;
+        return previewFile.name;
       });
 
       const fileNames = await Promise.all(uploadPromises);
       setUploadedFiles(prev => [...prev, ...fileNames]);
-      toast.success(`Successfully uploaded and parsed ${files.length} receipt${files.length > 1 ? 's' : ''}`);
+      setPreviewFiles([]);
+      toast.success(`Successfully processed ${fileNames.length} receipt${fileNames.length > 1 ? 's' : ''}!`);
     } catch (error) {
       console.error('Upload error:', error);
-      toast.error('Failed to upload receipt. Please try again.');
+      toast.error(error instanceof Error ? error.message : 'Failed to process receipt');
     } finally {
       setUploading(false);
     }
+  };
+
+  const removePreview = (index: number) => {
+    setPreviewFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   return (
@@ -152,7 +212,7 @@ const Upload = () => {
             <CardHeader>
               <CardTitle>Upload Your Receipts</CardTitle>
               <CardDescription>
-                Upload your receipt images or PDFs - PDFs will be automatically converted to images
+                Upload images or PDFs - PDFs will be converted to JPG for preview
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -163,7 +223,7 @@ const Upload = () => {
                 <div className="flex flex-col items-center justify-center pt-5 pb-6">
                   <UploadIcon className="h-12 w-12 text-primary mb-4" />
                   <p className="mb-2 text-sm font-medium text-foreground">
-                    Click to upload or drag and drop
+                    Click to select files
                   </p>
                   <p className="text-xs text-muted-foreground">
                     PNG, JPG, or PDF (MAX. 10MB)
@@ -175,19 +235,64 @@ const Upload = () => {
                   className="hidden" 
                   multiple 
                   accept="image/png,image/jpeg,image/jpg,application/pdf"
-                  onChange={handleFileUpload}
-                  disabled={uploading}
+                  onChange={handleFileSelect}
+                  disabled={converting || uploading}
                 />
               </label>
 
-              {uploading && (
+              {converting && (
                 <div className="mt-4 flex flex-col items-center justify-center gap-4">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                  <p className="text-sm text-muted-foreground">Processing receipt (converting PDF if needed)...</p>
+                  <p className="text-sm text-muted-foreground">Converting PDF to JPG...</p>
                 </div>
               )}
             </CardContent>
           </Card>
+
+          {previewFiles.length > 0 && (
+            <Card className="shadow-card">
+              <CardHeader>
+                <CardTitle>Preview & Confirm</CardTitle>
+                <CardDescription>Review converted images before uploading</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4">
+                  {previewFiles.map((file, index) => (
+                    <div key={index} className="relative border rounded-lg p-4">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="absolute top-2 right-2"
+                        onClick={() => removePreview(index)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                      <p className="text-sm font-medium mb-2">{file.name}</p>
+                      <img 
+                        src={file.preview} 
+                        alt={file.name}
+                        className="max-w-full h-auto rounded border"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <Button 
+                  onClick={handleUpload} 
+                  className="w-full"
+                  disabled={uploading}
+                >
+                  {uploading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    `Upload ${previewFiles.length} file${previewFiles.length > 1 ? 's' : ''}`
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
 
           {uploadedFiles.length > 0 && (
             <Card className="shadow-card">
