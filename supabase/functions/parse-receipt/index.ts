@@ -83,6 +83,11 @@ serve(async (req) => {
                 type: 'text',
                 text: `Parse this grocery receipt and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), category, and discount (as number, optional).
 
+🏪 STORE NAME RULE:
+- Extract the BRAND/CHAIN NAME (e.g., "Willys", "ICA", "Coop", "Hemköp")
+- DO NOT use the location/city/address (e.g., NOT "Älvsjö", "Stockholm", etc.)
+- Look for the prominent store logo or brand name at the top of the receipt
+
 ${originalFilename ? `\n📁 FILENAME HINT: The original filename is "${originalFilename}". If it contains a date pattern (like "2025-10-26" or "2025-10-26T15_49_07"), use it to help determine the receipt_date. Match the date format YYYY-MM-DD.\n` : ''}
 
 🚨 CRITICAL PARSING RULES - MUST FOLLOW EXACTLY:
