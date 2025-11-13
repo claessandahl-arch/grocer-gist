@@ -38,6 +38,23 @@ export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) =
     },
   });
 
+  // Fetch manual product mappings
+  const { data: productMappings } = useQuery({
+    queryKey: ['product-mappings'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      const { data, error } = await supabase
+        .from('product_mappings')
+        .select('*')
+        .eq('user_id', user.id);
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
   // Use selected month or default to current month
   const monthToUse = selectedMonth || new Date();
   const thisMonthStart = startOfMonth(monthToUse);
@@ -51,6 +68,13 @@ export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) =
 
   // Normalize product names to merge similar items
   const normalizeProductName = (name: string): string => {
+    // First check if there's a manual mapping
+    const manualMapping = productMappings?.find(m => m.original_name === name);
+    if (manualMapping) {
+      return manualMapping.mapped_name.toLowerCase();
+    }
+
+    // Otherwise use automatic normalization
     return name
       .toLowerCase()
       .replace(/\s+/g, ' ') // normalize whitespace

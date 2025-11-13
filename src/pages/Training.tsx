@@ -9,6 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { ArrowLeft, Save, Trash2, RefreshCw } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ProductMerge } from "@/components/dashboard/ProductMerge";
 
 interface Receipt {
   id: string;
@@ -284,8 +286,15 @@ export default function Training() {
           Back to Dashboard
         </Button>
 
-        <div className="grid md:grid-cols-3 gap-6">
-          {/* Receipt List */}
+        <Tabs defaultValue="receipts" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="receipts">Kvitton</TabsTrigger>
+            <TabsTrigger value="products">Produkter</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="receipts" className="space-y-0">
+            <div className="grid md:grid-cols-3 gap-6">
+              {/* Receipt List */}
           <Card>
             <CardHeader>
               <CardTitle>Your Receipts</CardTitle>
@@ -506,7 +515,13 @@ export default function Training() {
               )}
             </CardContent>
           </Card>
-        </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="products">
+            <ProductMerge />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
