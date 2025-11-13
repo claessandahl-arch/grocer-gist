@@ -299,7 +299,7 @@ export const ProductMerge = () => {
     mergeGroups.mutate();
   };
 
-  // Group mappings by mapped_name
+  // Group mappings by mapped_name with stats
   const groupedMappings = mappings?.reduce((acc, mapping) => {
     if (!acc[mapping.mapped_name]) {
       acc[mapping.mapped_name] = [];
@@ -307,6 +307,26 @@ export const ProductMerge = () => {
     acc[mapping.mapped_name].push(mapping);
     return acc;
   }, {} as Record<string, Array<typeof mappings[number]>>);
+
+  // Calculate spending stats for each group
+  const groupStats = Object.entries(groupedMappings || {}).reduce((acc, [mappedName, items]) => {
+    const originalNames = new Set((items as any[]).map(item => item.original_name));
+    let totalSpending = 0;
+    let productCount = 0;
+
+    receipts?.forEach(receipt => {
+      const receiptItems = receipt.items as any[] || [];
+      receiptItems.forEach(item => {
+        if (originalNames.has(item.name)) {
+          totalSpending += Number(item.price) || 0;
+          productCount++;
+        }
+      });
+    });
+
+    acc[mappedName] = { totalSpending, productCount };
+    return acc;
+  }, {} as Record<string, { totalSpending: number; productCount: number }>);
 
   return (
     <div className="space-y-6">
@@ -438,24 +458,31 @@ export const ProductMerge = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {Object.entries(groupedMappings).map(([mappedName, items]: [string, any[]]) => (
-                  <div key={mappedName} className="border rounded-md p-4">
-                    <div className="flex items-start gap-3 mb-2">
-                      <Checkbox
-                        id={`group-${mappedName}`}
-                        checked={selectedGroups.includes(mappedName)}
-                        onCheckedChange={() => handleGroupToggle(mappedName)}
-                      />
-                      <div className="flex-1">
-                        <label htmlFor={`group-${mappedName}`} className="font-medium cursor-pointer">
-                          {mappedName}
-                        </label>
-                        <p className="text-sm text-muted-foreground">
-                          {items.length} {items.length === 1 ? 'produkt' : 'produkter'}
-                        </p>
+                <div className="space-y-4">
+                {Object.entries(groupedMappings).map(([mappedName, items]: [string, any[]]) => {
+                  const stats = groupStats[mappedName] || { totalSpending: 0, productCount: 0 };
+                  
+                  return (
+                    <div key={mappedName} className="border rounded-md p-4">
+                      <div className="flex items-start gap-3 mb-2">
+                        <Checkbox
+                          id={`group-${mappedName}`}
+                          checked={selectedGroups.includes(mappedName)}
+                          onCheckedChange={() => handleGroupToggle(mappedName)}
+                        />
+                        <div className="flex-1">
+                          <label htmlFor={`group-${mappedName}`} className="font-medium cursor-pointer">
+                            {mappedName}
+                          </label>
+                          <div className="flex gap-4 text-sm text-muted-foreground mt-1">
+                            <span>{items.length} {items.length === 1 ? 'variant' : 'varianter'}</span>
+                            <span>•</span>
+                            <span>{stats.productCount} köp</span>
+                            <span>•</span>
+                            <span className="font-medium">{stats.totalSpending.toFixed(0)} kr totalt</span>
+                          </div>
+                        </div>
                       </div>
-                    </div>
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -482,7 +509,8 @@ export const ProductMerge = () => {
                       </TableBody>
                     </Table>
                   </div>
-                ))}
+                );
+                })}
               </div>
             </CardContent>
           </Card>
