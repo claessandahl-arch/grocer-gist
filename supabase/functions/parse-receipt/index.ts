@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { imageUrl, isPdf } = await req.json();
+    const { imageUrl } = await req.json();
     
     if (!imageUrl) {
       return new Response(
@@ -25,43 +25,7 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
-    console.log('Parsing receipt:', isPdf ? 'PDF' : 'Image', imageUrl);
-
-    let contentArray;
-    
-    if (isPdf) {
-      // For PDFs, fetch and convert to base64
-      const pdfResponse = await fetch(imageUrl);
-      const pdfBlob = await pdfResponse.blob();
-      const pdfBuffer = await pdfBlob.arrayBuffer();
-      const pdfBase64 = btoa(String.fromCharCode(...new Uint8Array(pdfBuffer)));
-      
-      contentArray = [
-        {
-          type: 'text',
-          text: 'Parse this grocery receipt PDF and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), and category (one of: produce, dairy, meat, bakery, beverages, snacks, household, other). Return only valid JSON with no markdown formatting.'
-        },
-        {
-          type: 'image_url',
-          image_url: {
-            url: `data:application/pdf;base64,${pdfBase64}`
-          }
-        }
-      ];
-    } else {
-      contentArray = [
-        {
-          type: 'text',
-          text: 'Parse this grocery receipt and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), and category (one of: produce, dairy, meat, bakery, beverages, snacks, household, other). Return only valid JSON with no markdown formatting.'
-        },
-        {
-          type: 'image_url',
-          image_url: {
-            url: imageUrl
-          }
-        }
-      ];
-    }
+    console.log('Parsing receipt image:', imageUrl);
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -74,11 +38,22 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: 'You are a receipt parser. Extract structured data from receipt images or PDFs including store name, total amount, date, and itemized list with prices and categories. Return valid JSON only.'
+            content: 'You are a receipt parser. Extract structured data from receipt images including store name, total amount, date, and itemized list with prices and categories. Return valid JSON only.'
           },
           {
             role: 'user',
-            content: contentArray
+            content: [
+              {
+                type: 'text',
+                text: 'Parse this grocery receipt and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), and category (one of: produce, dairy, meat, bakery, beverages, snacks, household, other). Return only valid JSON with no markdown formatting.'
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: imageUrl
+                }
+              }
+            ]
           }
         ],
         tools: [
@@ -120,6 +95,9 @@ serve(async (req) => {
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error('AI gateway error:', response.status, errorText);
+      
       if (response.status === 429) {
         return new Response(
           JSON.stringify({ error: 'Rate limits exceeded, please try again later.' }),
@@ -132,24 +110,24 @@ serve(async (req) => {
           { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      const errorText = await response.text();
-      console.error('AI gateway error:', response.status, errorText);
+      
       return new Response(
-        JSON.stringify({ error: 'AI gateway error' }),
+        JSON.stringify({ error: `AI gateway error: ${errorText}` }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     const data = await response.json();
-    console.log('AI response:', JSON.stringify(data));
+    console.log('AI response received successfully');
 
     const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
     if (!toolCall || !toolCall.function?.arguments) {
+      console.error('No valid tool call in response:', JSON.stringify(data));
       throw new Error('No valid tool call in AI response');
     }
 
     const parsedData = JSON.parse(toolCall.function.arguments);
-    console.log('Parsed receipt data:', parsedData);
+    console.log('Parsed receipt data successfully');
 
     return new Response(
       JSON.stringify(parsedData),
