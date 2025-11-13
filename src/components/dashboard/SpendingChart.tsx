@@ -14,8 +14,8 @@ export const SpendingChart = () => {
   return (
     <Card className="shadow-card">
       <CardHeader>
-        <CardTitle>Spending Trend</CardTitle>
-        <CardDescription>Your grocery spending over the last 6 months</CardDescription>
+        <CardTitle>Utgiftstrend</CardTitle>
+        <CardDescription>Dina matutgifter de senaste 6 månaderna</CardDescription>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>

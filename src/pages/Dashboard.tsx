@@ -20,11 +20,11 @@ const Dashboard = () => {
               <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
                 <ArrowLeft className="h-5 w-5" />
               </Button>
-              <h1 className="text-2xl font-bold text-foreground">Receipt Insights</h1>
+              <h1 className="text-2xl font-bold text-foreground">Kvittoinsikter</h1>
             </div>
             <Button onClick={() => navigate("/upload")} className="gap-2">
               <Upload className="h-4 w-4" />
-              Upload Receipt
+              Ladda upp kvitto
             </Button>
           </div>
         </div>
@@ -33,47 +33,47 @@ const Dashboard = () => {
       <main className="container mx-auto px-4 py-8">
         <Tabs defaultValue="overview" className="space-y-6">
           <TabsList className="grid w-full max-w-md grid-cols-3">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="stores">Stores</TabsTrigger>
-            <TabsTrigger value="monthly">Monthly</TabsTrigger>
+            <TabsTrigger value="overview">Översikt</TabsTrigger>
+            <TabsTrigger value="stores">Butiker</TabsTrigger>
+            <TabsTrigger value="monthly">Månadsvis</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
               <Card className="shadow-card">
                 <CardHeader className="pb-2">
-                  <CardDescription>This Month</CardDescription>
-                  <CardTitle className="text-3xl">$847.32</CardTitle>
+                  <CardDescription>Denna månad</CardDescription>
+                  <CardTitle className="text-3xl">8 473 kr</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-muted-foreground">+12% from last month</p>
+                  <p className="text-sm text-muted-foreground">+12% från förra månaden</p>
                 </CardContent>
               </Card>
               <Card className="shadow-card">
                 <CardHeader className="pb-2">
-                  <CardDescription>Avg per Receipt</CardDescription>
-                  <CardTitle className="text-3xl">$56.49</CardTitle>
+                  <CardDescription>Snitt per kvitto</CardDescription>
+                  <CardTitle className="text-3xl">565 kr</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-muted-foreground">15 receipts uploaded</p>
+                  <p className="text-sm text-muted-foreground">15 kvitton uppladdade</p>
                 </CardContent>
               </Card>
               <Card className="shadow-card">
                 <CardHeader className="pb-2">
-                  <CardDescription>Top Category</CardDescription>
-                  <CardTitle className="text-2xl">Produce</CardTitle>
+                  <CardDescription>Topkategori</CardDescription>
+                  <CardTitle className="text-2xl">Frukt och grönt</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-muted-foreground">$234.50 spent</p>
+                  <p className="text-sm text-muted-foreground">2 345 kr spenderat</p>
                 </CardContent>
               </Card>
               <Card className="shadow-card">
                 <CardHeader className="pb-2">
-                  <CardDescription>Potential Savings</CardDescription>
-                  <CardTitle className="text-3xl text-accent">$42.18</CardTitle>
+                  <CardDescription>Potentiella besparingar</CardDescription>
+                  <CardTitle className="text-3xl text-accent">422 kr</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-muted-foreground">By comparing stores</p>
+                  <p className="text-sm text-muted-foreground">Genom att jämföra butiker</p>
                 </CardContent>
               </Card>
             </div>
