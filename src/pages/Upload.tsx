@@ -41,6 +41,7 @@ const Upload = () => {
     
     try {
       const uploadPromises = Array.from(files).map(async (file) => {
+        const isPdf = file.type === 'application/pdf';
         const fileExt = file.name.split('.').pop();
         const fileName = `${session.user.id}/${Date.now()}.${fileExt}`;
         
@@ -55,7 +56,10 @@ const Upload = () => {
           .getPublicUrl(fileName);
 
         const { data: parsedData, error: parseError } = await supabase.functions.invoke('parse-receipt', {
-          body: { imageUrl: publicUrl }
+          body: { 
+            imageUrl: publicUrl,
+            isPdf: isPdf
+          }
         });
 
         if (parseError) throw parseError;
@@ -120,7 +124,7 @@ const Upload = () => {
                     Click to upload or drag and drop
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    PNG, JPG (MAX. 10MB)
+                    PNG, JPG, or PDF (MAX. 10MB)
                   </p>
                 </div>
                 <input 
@@ -128,7 +132,7 @@ const Upload = () => {
                   type="file" 
                   className="hidden" 
                   multiple 
-                  accept="image/*"
+                  accept="image/*,.pdf"
                   onChange={handleFileUpload}
                   disabled={uploading}
                 />

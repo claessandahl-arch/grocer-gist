@@ -1,18 +1,17 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-Deno.serve(async (req) => {
+serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { imageUrl } = await req.json();
+    const { imageUrl, isPdf } = await req.json();
     
     if (!imageUrl) {
       return new Response(
@@ -26,9 +25,44 @@ Deno.serve(async (req) => {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
-    console.log('Parsing receipt image:', imageUrl);
+    console.log('Parsing receipt:', isPdf ? 'PDF' : 'Image', imageUrl);
 
-    // Call Lovable AI with vision capabilities to parse the receipt
+    let contentArray;
+    
+    if (isPdf) {
+      // For PDFs, fetch and convert to base64
+      const pdfResponse = await fetch(imageUrl);
+      const pdfBlob = await pdfResponse.blob();
+      const pdfBuffer = await pdfBlob.arrayBuffer();
+      const pdfBase64 = btoa(String.fromCharCode(...new Uint8Array(pdfBuffer)));
+      
+      contentArray = [
+        {
+          type: 'text',
+          text: 'Parse this grocery receipt PDF and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), and category (one of: produce, dairy, meat, bakery, beverages, snacks, household, other). Return only valid JSON with no markdown formatting.'
+        },
+        {
+          type: 'image_url',
+          image_url: {
+            url: `data:application/pdf;base64,${pdfBase64}`
+          }
+        }
+      ];
+    } else {
+      contentArray = [
+        {
+          type: 'text',
+          text: 'Parse this grocery receipt and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), and category (one of: produce, dairy, meat, bakery, beverages, snacks, household, other). Return only valid JSON with no markdown formatting.'
+        },
+        {
+          type: 'image_url',
+          image_url: {
+            url: imageUrl
+          }
+        }
+      ];
+    }
+
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -40,22 +74,11 @@ Deno.serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: 'You are a receipt parser. Extract structured data from receipt images including store name, total amount, date, and itemized list with prices and categories. Return valid JSON only.'
+            content: 'You are a receipt parser. Extract structured data from receipt images or PDFs including store name, total amount, date, and itemized list with prices and categories. Return valid JSON only.'
           },
           {
             role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: 'Parse this grocery receipt and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), and category (one of: produce, dairy, meat, bakery, beverages, snacks, household, other). Return only valid JSON with no markdown formatting.'
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: imageUrl
-                }
-              }
-            ]
+            content: contentArray
           }
         ],
         tools: [
@@ -120,7 +143,6 @@ Deno.serve(async (req) => {
     const data = await response.json();
     console.log('AI response:', JSON.stringify(data));
 
-    // Extract the parsed data from tool call
     const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
     if (!toolCall || !toolCall.function?.arguments) {
       throw new Error('No valid tool call in AI response');
