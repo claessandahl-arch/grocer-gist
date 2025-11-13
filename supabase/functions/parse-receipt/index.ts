@@ -43,8 +43,15 @@ serve(async (req) => {
       if (patternsResponse.ok) {
         const patterns = await patternsResponse.json();
         if (patterns && patterns.length > 0) {
-          storeContext = '\n\nLearned patterns from previous receipts:\n' + 
-            patterns.map((p: any) => `Store: ${p.store_name}, Common categories: ${JSON.stringify(p.pattern_data?.item_patterns || [])}`).join('\n');
+          storeContext = '\n\nIMPORTANT - Learned item categorizations from previous corrections:\n';
+          patterns.forEach((p: any) => {
+            storeContext += `\nFor ${p.store_name}:\n`;
+            const itemPatterns = p.pattern_data?.item_patterns || [];
+            itemPatterns.forEach((item: any) => {
+              storeContext += `- "${item.name_pattern}" should be categorized as "${item.category}"\n`;
+            });
+          });
+          storeContext += '\nWhen you see similar item names, use these learned categories. Match items by their core name, ignoring minor variations in spelling or formatting.\n';
         }
       }
     } catch (e) {
