@@ -78,6 +78,8 @@ type SuggestedMerge = {
 export const ProductMerge = () => {
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [mergedName, setMergedName] = useState("");
+  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
+  const [groupMergeName, setGroupMergeName] = useState("");
   const queryClient = useQueryClient();
 
   // Fetch all unique products from receipts
@@ -251,6 +253,52 @@ export const ProductMerge = () => {
     }
   };
 
+  // Merge selected groups mutation
+  const mergeGroups = useMutation({
+    mutationFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      // Update all mappings in selected groups to the new merged name
+      const { error } = await supabase
+        .from('product_mappings')
+        .update({ mapped_name: groupMergeName })
+        .in('mapped_name', selectedGroups)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['product-mappings'] });
+      setSelectedGroups([]);
+      setGroupMergeName("");
+      toast.success("Produktgrupper sammanslagna!");
+    },
+    onError: (error) => {
+      toast.error("Kunde inte slå ihop grupper: " + error.message);
+    },
+  });
+
+  const handleGroupToggle = (groupName: string) => {
+    setSelectedGroups(prev =>
+      prev.includes(groupName)
+        ? prev.filter(g => g !== groupName)
+        : [...prev, groupName]
+    );
+  };
+
+  const handleMergeGroups = () => {
+    if (selectedGroups.length < 2) {
+      toast.error("Välj minst 2 grupper att slå ihop");
+      return;
+    }
+    if (!groupMergeName.trim()) {
+      toast.error("Ange ett namn för den sammanslagna gruppen");
+      return;
+    }
+    mergeGroups.mutate();
+  };
+
   // Group mappings by mapped_name
   const groupedMappings = mappings?.reduce((acc, mapping) => {
     if (!acc[mapping.mapped_name]) {
@@ -379,50 +427,109 @@ export const ProductMerge = () => {
         </CardContent>
       </Card>
 
-      {/* Show existing mappings */}
+      {/* Show existing mappings with merge option */}
       {!mappingsLoading && groupedMappings && Object.keys(groupedMappings).length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Aktiva sammanslagningar</CardTitle>
-            <CardDescription>
-              Produkter du har slagit ihop manuellt
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {Object.entries(groupedMappings).map(([mappedName, items]: [string, any[]]) => (
-                <div key={mappedName} className="border rounded-md p-4">
-                  <h3 className="font-medium mb-2">{mappedName}</h3>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Originalnamn</TableHead>
-                        <TableHead className="w-[100px]">Åtgärd</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {items.map(item => (
-                        <TableRow key={item.id}>
-                          <TableCell>{item.original_name}</TableCell>
-                          <TableCell>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => deleteMapping.mutate(item.id)}
-                              disabled={deleteMapping.isPending}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </TableCell>
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle>Aktiva sammanslagningar</CardTitle>
+              <CardDescription>
+                Produkter du har slagit ihop. Välj grupper för att slå ihop dem ytterligare.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {Object.entries(groupedMappings).map(([mappedName, items]: [string, any[]]) => (
+                  <div key={mappedName} className="border rounded-md p-4">
+                    <div className="flex items-start gap-3 mb-2">
+                      <Checkbox
+                        id={`group-${mappedName}`}
+                        checked={selectedGroups.includes(mappedName)}
+                        onCheckedChange={() => handleGroupToggle(mappedName)}
+                      />
+                      <div className="flex-1">
+                        <label htmlFor={`group-${mappedName}`} className="font-medium cursor-pointer">
+                          {mappedName}
+                        </label>
+                        <p className="text-sm text-muted-foreground">
+                          {items.length} {items.length === 1 ? 'produkt' : 'produkter'}
+                        </p>
+                      </div>
+                    </div>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Originalnamn</TableHead>
+                          <TableHead className="w-[100px]">Åtgärd</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {items.map(item => (
+                          <TableRow key={item.id}>
+                            <TableCell>{item.original_name}</TableCell>
+                            <TableCell>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => deleteMapping.mutate(item.id)}
+                                disabled={deleteMapping.isPending}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Merge groups section */}
+          {selectedGroups.length > 1 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Slå ihop valda grupper</CardTitle>
+                <CardDescription>
+                  Sammanslå {selectedGroups.length} produktgrupper till en
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    Valda grupper ({selectedGroups.length}):
+                  </label>
+                  <div className="text-sm text-muted-foreground border rounded-md p-2">
+                    {selectedGroups.join(", ")}
+                  </div>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+
+                <div className="space-y-2">
+                  <label htmlFor="group-merge-name" className="text-sm font-medium">
+                    Namn för sammanslagna gruppen:
+                  </label>
+                  <Input
+                    id="group-merge-name"
+                    placeholder="T.ex. Coca-Cola"
+                    value={groupMergeName}
+                    onChange={(e) => setGroupMergeName(e.target.value)}
+                  />
+                </div>
+
+                <Button
+                  onClick={handleMergeGroups}
+                  disabled={!groupMergeName.trim() || mergeGroups.isPending}
+                  className="w-full"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Slå ihop {selectedGroups.length} grupper
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+        </>
       )}
     </div>
   );
