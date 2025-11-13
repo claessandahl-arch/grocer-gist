@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { imageUrl } = await req.json();
+    const { imageUrl, originalFilename } = await req.json();
     
     if (!imageUrl) {
       return new Response(
@@ -20,12 +20,16 @@ serve(async (req) => {
       );
     }
 
+    console.log('Parsing receipt image:', imageUrl);
+    if (originalFilename) {
+      console.log('Original filename:', originalFilename);
+    }
+
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
-    console.log('Parsing receipt image:', imageUrl);
     console.log('Fetching store patterns for improved accuracy...');
 
     // Fetch store patterns to improve parsing accuracy
@@ -78,6 +82,8 @@ serve(async (req) => {
               {
                 type: 'text',
                 text: `Parse this grocery receipt and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), category, and discount (as number, optional).
+
+${originalFilename ? `\n📁 FILENAME HINT: The original filename is "${originalFilename}". If it contains a date pattern (like "2025-10-26" or "2025-10-26T15_49_07"), use it to help determine the receipt_date. Match the date format YYYY-MM-DD.\n` : ''}
 
 🚨 CRITICAL PARSING RULES - MUST FOLLOW EXACTLY:
 

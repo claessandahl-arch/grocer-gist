@@ -134,6 +134,9 @@ const Upload = () => {
       const uploadPromises = previewFiles.map(async (previewFile, index) => {
         const fileName = `${session.user.id}/${Date.now()}_${index}.jpg`;
         
+        // Preserve original filename for date extraction
+        const originalFilename = previewFile.name.replace(/\.(pdf|jpg|jpeg|png)$/i, '');
+        
         console.log('Uploading:', fileName);
         const { error: uploadError } = await supabase.storage
           .from('receipts')
@@ -149,8 +152,12 @@ const Upload = () => {
           .getPublicUrl(fileName);
 
         console.log('Parsing with AI:', publicUrl);
+        console.log('Original filename:', originalFilename);
         const { data: parsedData, error: parseError } = await supabase.functions.invoke('parse-receipt', {
-          body: { imageUrl: publicUrl }
+          body: { 
+            imageUrl: publicUrl,
+            originalFilename: originalFilename 
+          }
         });
 
         if (parseError) {
