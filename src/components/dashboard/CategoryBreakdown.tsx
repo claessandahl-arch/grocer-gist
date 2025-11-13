@@ -134,11 +134,10 @@ export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) =
     const items = itemsByCategory[categoryKey] || {};
     return Object.entries(items)
       .map(([normalizedName, data]) => {
-        // Get the most common original name or the first one
-        const originalNamesArray = Array.from(data.originalNames);
-        const displayName = originalNamesArray.length === 1 
-          ? originalNamesArray[0] 
-          : originalNamesArray.sort((a, b) => a.length - b.length)[0]; // Use shortest name as display name
+        // Use the normalized/mapped name (capitalized) as the display name
+        const displayName = normalizedName.split(' ')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
         
         return {
           name: displayName,
