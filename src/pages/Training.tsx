@@ -39,6 +39,7 @@ const categories = [
   'fardigmat',
   'hushall_hygien',
   'pant',
+  'rabatt',
   'other'
 ];
 
