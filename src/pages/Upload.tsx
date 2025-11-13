@@ -6,12 +6,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Upload as UploadIcon, ArrowLeft, FileText, CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Session } from "@supabase/supabase-js";
+import * as pdfjsLib from 'pdfjs-dist';
 
 const Upload = () => {
   const navigate = useNavigate();
   const [session, setSession] = useState<Session | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
+
+  // Configure PDF.js worker
+  useEffect(() => {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+  }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -33,6 +39,35 @@ const Upload = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
+  const convertPdfToImage = async (file: File): Promise<Blob> => {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const page = await pdf.getPage(1);
+    
+    const scale = 2;
+    const viewport = page.getViewport({ scale });
+    
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Could not get canvas context');
+    
+    canvas.height = viewport.height;
+    canvas.width = viewport.width;
+    
+    await page.render({
+      canvasContext: context,
+      viewport: viewport,
+      canvas: canvas
+    } as any).promise;
+    
+    return new Promise((resolve) => {
+      canvas.toBlob((blob) => {
+        if (blob) resolve(blob);
+        else throw new Error('Failed to convert canvas to blob');
+      }, 'image/png');
+    });
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || !session) return;
@@ -41,12 +76,23 @@ const Upload = () => {
     
     try {
       const uploadPromises = Array.from(files).map(async (file) => {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${session.user.id}/${Date.now()}.${fileExt}`;
+        let uploadFile: File | Blob = file;
+        let fileName = `${session.user.id}/${Date.now()}`;
+        
+        // Convert PDF to image if needed
+        if (file.type === 'application/pdf') {
+          console.log('Converting PDF to image...');
+          const imageBlob = await convertPdfToImage(file);
+          uploadFile = imageBlob;
+          fileName += '.png';
+        } else {
+          const fileExt = file.name.split('.').pop();
+          fileName += `.${fileExt}`;
+        }
         
         const { error: uploadError } = await supabase.storage
           .from('receipts')
-          .upload(fileName, file);
+          .upload(fileName, uploadFile);
 
         if (uploadError) throw uploadError;
 
@@ -106,7 +152,7 @@ const Upload = () => {
             <CardHeader>
               <CardTitle>Upload Your Receipts</CardTitle>
               <CardDescription>
-                Upload your receipt images and let AI extract all the details automatically
+                Upload your receipt images or PDFs - PDFs will be automatically converted to images
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -120,7 +166,7 @@ const Upload = () => {
                     Click to upload or drag and drop
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    PNG or JPG images only (MAX. 10MB)
+                    PNG, JPG, or PDF (MAX. 10MB)
                   </p>
                 </div>
                 <input 
@@ -128,7 +174,7 @@ const Upload = () => {
                   type="file" 
                   className="hidden" 
                   multiple 
-                  accept="image/png,image/jpeg,image/jpg"
+                  accept="image/png,image/jpeg,image/jpg,application/pdf"
                   onChange={handleFileUpload}
                   disabled={uploading}
                 />
@@ -137,7 +183,7 @@ const Upload = () => {
               {uploading && (
                 <div className="mt-4 flex flex-col items-center justify-center gap-4">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                  <p className="text-sm text-muted-foreground">Uploading and parsing receipt...</p>
+                  <p className="text-sm text-muted-foreground">Processing receipt (converting PDF if needed)...</p>
                 </div>
               )}
             </CardContent>
