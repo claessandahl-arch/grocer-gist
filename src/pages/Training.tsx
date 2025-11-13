@@ -181,11 +181,15 @@ export default function Training() {
 
   const updateStorePattern = async (storeName: string, data: any) => {
     // Fetch existing pattern or create new one
-    const { data: existingPattern } = await supabase
+    const { data: existingPattern, error } = await supabase
       .from('store_patterns')
       .select('*')
       .eq('store_name', storeName)
-      .single();
+      .maybeSingle();
+    
+    if (error) {
+      console.error('Error fetching store pattern:', error);
+    }
 
     const patternData = {
       item_patterns: data.items.map((item: ReceiptItem) => ({
