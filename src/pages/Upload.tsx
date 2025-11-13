@@ -127,6 +127,8 @@ const Upload = () => {
     if (!session || previewFiles.length === 0) return;
 
     setUploading(true);
+    let duplicateCount = 0;
+    let successCount = 0;
     
     try {
       const uploadPromises = previewFiles.map(async (previewFile, index) => {
@@ -158,6 +160,22 @@ const Upload = () => {
 
         console.log('Receipt parsed:', parsedData);
 
+        // Check for duplicates before inserting
+        const { data: existingReceipts } = await supabase
+          .from('receipts')
+          .select('id')
+          .eq('user_id', session.user.id)
+          .eq('store_name', parsedData.store_name)
+          .eq('receipt_date', parsedData.receipt_date)
+          .eq('total_amount', parsedData.total_amount)
+          .limit(1);
+
+        if (existingReceipts && existingReceipts.length > 0) {
+          console.log('Duplicate receipt detected, skipping:', parsedData);
+          duplicateCount++;
+          return null; // Skip this receipt
+        }
+
         const { error: dbError } = await supabase
           .from('receipts')
           .insert({
@@ -174,13 +192,23 @@ const Upload = () => {
           throw dbError;
         }
 
+        successCount++;
         return previewFile.name;
       });
 
-      const fileNames = await Promise.all(uploadPromises);
+      const results = await Promise.all(uploadPromises);
+      const fileNames = results.filter((name): name is string => name !== null);
       setUploadedFiles(prev => [...prev, ...fileNames]);
       setPreviewFiles([]);
-      toast.success(`Successfully processed ${fileNames.length} receipt${fileNames.length > 1 ? 's' : ''}!`);
+      
+      // Show appropriate message based on results
+      if (successCount > 0 && duplicateCount > 0) {
+        toast.success(`Processed ${successCount} receipt${successCount > 1 ? 's' : ''}. ${duplicateCount} duplicate${duplicateCount > 1 ? 's' : ''} ignored.`);
+      } else if (successCount > 0) {
+        toast.success(`Successfully processed ${successCount} receipt${successCount > 1 ? 's' : ''}!`);
+      } else if (duplicateCount > 0) {
+        toast.info(`${duplicateCount} duplicate receipt${duplicateCount > 1 ? 's' : ''} ignored - already uploaded.`);
+      }
     } catch (error) {
       console.error('Upload error:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to process receipt');
