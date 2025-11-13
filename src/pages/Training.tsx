@@ -212,6 +212,43 @@ export default function Training() {
     }
   };
 
+  const deleteReceipt = async (receipt: Receipt) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      toast.error('Du måste vara inloggad');
+      return;
+    }
+
+    // Delete the receipt from database
+    const { error: deleteError } = await supabase
+      .from('receipts')
+      .delete()
+      .eq('id', receipt.id)
+      .eq('user_id', user.id);
+
+    if (deleteError) {
+      toast.error('Kunde inte ta bort kvittot');
+      console.error(deleteError);
+      return;
+    }
+
+    // Delete the image from storage
+    if (receipt.image_url) {
+      const imagePath = receipt.image_url.split('/receipts/')[1];
+      if (imagePath) {
+        await supabase.storage.from('receipts').remove([imagePath]);
+      }
+    }
+
+    toast.success('Kvitto borttaget');
+    fetchReceipts();
+    if (selectedReceipt?.id === receipt.id) {
+      setSelectedReceipt(null);
+      setEditedData(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 p-6">
       <div className="max-w-7xl mx-auto">
@@ -238,17 +275,26 @@ export default function Training() {
                 <p className="text-sm text-muted-foreground">No receipts found</p>
               ) : (
                 receipts.map((receipt) => (
-                  <Button
-                    key={receipt.id}
-                    variant={selectedReceipt?.id === receipt.id ? "default" : "outline"}
-                    className="w-full justify-start"
-                    onClick={() => handleSelectReceipt(receipt)}
-                  >
-                    <div className="text-left">
-                      <div className="font-semibold">{receipt.store_name || 'Unknown Store'}</div>
-                      <div className="text-xs opacity-70">{receipt.receipt_date || 'No date'}</div>
-                    </div>
-                  </Button>
+                  <div key={receipt.id} className="flex gap-2">
+                    <Button
+                      variant={selectedReceipt?.id === receipt.id ? "default" : "outline"}
+                      className="flex-1 justify-start"
+                      onClick={() => handleSelectReceipt(receipt)}
+                    >
+                      <div className="text-left">
+                        <div className="font-semibold">{receipt.store_name || 'Unknown Store'}</div>
+                        <div className="text-xs opacity-70">{receipt.receipt_date || 'No date'}</div>
+                      </div>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => deleteReceipt(receipt)}
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 ))
               )}
             </CardContent>
