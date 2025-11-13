@@ -49,15 +49,29 @@ export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) =
     return date >= thisMonthStart && date <= thisMonthEnd;
   }) || [];
 
+  // Normalize product names to merge similar items
+  const normalizeProductName = (name: string): string => {
+    return name
+      .toLowerCase()
+      .replace(/\s+/g, ' ') // normalize whitespace
+      .replace(/\d+p\b/gi, '') // remove pack sizes like "4p", "6p"
+      .replace(/\bz\b/gi, 'zero') // normalize "z" to "zero"
+      .replace(/\bzero\b/gi, 'zero') // normalize all zero variants
+      .replace(/\bbrygg\s*kaffe\b/gi, 'bryggkaffe') // normalize brewed coffee
+      .replace(/\s+/g, ' ') // clean up double spaces
+      .trim();
+  };
+
   // Calculate category totals
   const categoryTotals: Record<string, number> = {};
-  const itemsByCategory: Record<string, Record<string, { total: number; quantity: number }>> = {};
+  const itemsByCategory: Record<string, Record<string, { total: number; quantity: number; originalNames: Set<string> }>> = {};
   
   thisMonthReceipts.forEach(receipt => {
     const items = receipt.items as any[] || [];
     items.forEach(item => {
       const category = item.category || 'other';
       const itemName = item.name || 'Okänd produkt';
+      const normalizedName = normalizeProductName(itemName);
       const price = Number(item.price || 0);
       
       categoryTotals[category] = (categoryTotals[category] || 0) + price;
@@ -65,11 +79,12 @@ export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) =
       if (!itemsByCategory[category]) {
         itemsByCategory[category] = {};
       }
-      if (!itemsByCategory[category][itemName]) {
-        itemsByCategory[category][itemName] = { total: 0, quantity: 0 };
+      if (!itemsByCategory[category][normalizedName]) {
+        itemsByCategory[category][normalizedName] = { total: 0, quantity: 0, originalNames: new Set() };
       }
-      itemsByCategory[category][itemName].total += price;
-      itemsByCategory[category][itemName].quantity += Number(item.quantity || 1);
+      itemsByCategory[category][normalizedName].total += price;
+      itemsByCategory[category][normalizedName].quantity += Number(item.quantity || 1);
+      itemsByCategory[category][normalizedName].originalNames.add(itemName);
     });
   });
 
@@ -86,11 +101,19 @@ export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) =
   const getItemDetails = (categoryKey: string) => {
     const items = itemsByCategory[categoryKey] || {};
     return Object.entries(items)
-      .map(([name, data]) => ({
-        name,
-        total: Math.round(data.total),
-        quantity: data.quantity,
-      }))
+      .map(([normalizedName, data]) => {
+        // Get the most common original name or the first one
+        const originalNamesArray = Array.from(data.originalNames);
+        const displayName = originalNamesArray.length === 1 
+          ? originalNamesArray[0] 
+          : originalNamesArray.sort((a, b) => a.length - b.length)[0]; // Use shortest name as display name
+        
+        return {
+          name: displayName,
+          total: Math.round(data.total),
+          quantity: data.quantity,
+        };
+      })
       .sort((a, b) => b.total - a.total);
   };
 
