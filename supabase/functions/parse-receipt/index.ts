@@ -137,7 +137,7 @@ Example 3 - Duplicate name discount:
 ❌ WRONG: Two items
 ✅ CORRECT: { name: "Kycklingfärs", price: 64, quantity: 1, discount: 11.90 }
 
-Categories (one of: frukt_och_gront, mejeri, kott_fagel_chark, fisk_skaldjur, brod_bageri, skafferi, frysvaror, drycker, sotsaker_snacks, fardigmat, hushall_hygien, pant, other):
+Categories (one of: frukt_och_gront, mejeri, kott_fagel_chark, fisk_skaldjur, brod_bageri, skafferi, frysvaror, drycker, sotsaker_snacks, fardigmat, delikatess, hushall_hygien, pant, other):
 - frukt_och_gront: Färska frukter, grönsaker, sallader, örter och rotfrukter
 - mejeri: Mjölk, grädde, fil, yoghurt, smör, margarin och ost
 - kott_fagel_chark: Färskt kött, fågel, charkuterier, korv och bacon
@@ -148,6 +148,7 @@ Categories (one of: frukt_och_gront, mejeri, kott_fagel_chark, fisk_skaldjur, br
 - drycker: Vatten, läsk, juice, kaffe, te och alkoholfria drycker
 - sotsaker_snacks: Godis, chips, choklad och andra snacks
 - fardigmat: Salladsbarer, färdiglagade rätter, smörgåsar, oliver och specialostar
+- delikatess: Delikatesser, lyxvaror, exklusiva produkter och finkost
 - hushall_hygien: Rengöringsmedel, tvättmedel, toalettpapper, personliga hygienprodukter (schampo, tvål) och blöjor
 - pant: Avgift på flask- och burk drycker
 
@@ -186,7 +187,7 @@ Return only valid JSON with no markdown formatting.`
                         quantity: { type: 'number' },
                         category: {
                           type: 'string',
-                          enum: ['frukt_och_gront', 'mejeri', 'kott_fagel_chark', 'fisk_skaldjur', 'brod_bageri', 'skafferi', 'frysvaror', 'drycker', 'sotsaker_snacks', 'fardigmat', 'hushall_hygien', 'pant', 'other']
+                          enum: ['frukt_och_gront', 'mejeri', 'kott_fagel_chark', 'fisk_skaldjur', 'brod_bageri', 'skafferi', 'frysvaror', 'drycker', 'sotsaker_snacks', 'fardigmat', 'delikatess', 'hushall_hygien', 'pant', 'other']
                         },
                         discount: { type: 'number', description: 'Discount amount as positive number, if any discount was applied to this item' }
                       },
