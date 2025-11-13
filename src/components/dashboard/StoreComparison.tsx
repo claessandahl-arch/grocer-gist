@@ -36,16 +36,16 @@ export const StoreComparison = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingDown className="h-5 w-5 text-accent" />
-            Price Comparison Insights
+            Prisjämförelse
           </CardTitle>
           <CardDescription>
-            Save money by shopping at the right stores for each product
+            Spara pengar genom att handla på rätt butiker för varje produkt
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-2xl font-bold text-accent">Save up to $42.18/month</p>
+          <p className="text-2xl font-bold text-accent">Spara upp till 422 kr/månad</p>
           <p className="text-sm text-muted-foreground mt-1">
-            By purchasing items at the stores with the lowest prices
+            Genom att köpa varor i butikerna med lägst priser
           </p>
         </CardContent>
       </Card>
@@ -67,17 +67,17 @@ export const StoreComparison = () => {
                     {store.badge === "lowest" && (
                       <Badge variant="default" className="bg-accent">
                         <TrendingDown className="h-3 w-3 mr-1" />
-                        Best Price
+                        Bästa pris
                       </Badge>
                     )}
                     {store.badge === "highest" && (
                       <Badge variant="destructive">
                         <TrendingUp className="h-3 w-3 mr-1" />
-                        Highest
+                        Högst
                       </Badge>
                     )}
                   </div>
-                  <span className="text-lg font-bold">${store.price.toFixed(2)}</span>
+                  <span className="text-lg font-bold">{store.price.toFixed(2)} kr</span>
                 </div>
               ))}
             </div>

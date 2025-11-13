@@ -3,28 +3,28 @@ import { ArrowUpRight, ArrowDownRight, Calendar } from "lucide-react";
 
 const monthlyData = [
   {
-    month: "June 2024",
-    total: 847.32,
+    month: "Juni 2024",
+    total: 8473.2,
     change: 12,
     receipts: 15,
-    topCategory: "Produce",
-    avgPerTrip: 56.49,
+    topCategory: "Frukt och grönt",
+    avgPerTrip: 564.9,
   },
   {
-    month: "May 2024",
-    total: 756.15,
+    month: "Maj 2024",
+    total: 7561.5,
     change: -8,
     receipts: 14,
-    topCategory: "Dairy",
-    avgPerTrip: 54.01,
+    topCategory: "Mejeri",
+    avgPerTrip: 540.1,
   },
   {
     month: "April 2024",
-    total: 823.47,
+    total: 8234.7,
     change: 5,
     receipts: 16,
-    topCategory: "Meat",
-    avgPerTrip: 51.47,
+    topCategory: "Kött, fågel, chark",
+    avgPerTrip: 514.7,
   },
 ];
 
@@ -41,11 +41,11 @@ export const MonthlySummary = () => {
                   {month.month}
                 </CardTitle>
                 <CardDescription className="mt-1">
-                  {month.receipts} receipts uploaded
+                  {month.receipts} kvitton uppladdade
                 </CardDescription>
               </div>
               <div className="text-right">
-                <div className="text-3xl font-bold">${month.total.toFixed(2)}</div>
+                <div className="text-3xl font-bold">{month.total.toLocaleString('sv-SE')} kr</div>
                 <div className={`flex items-center justify-end gap-1 text-sm ${
                   month.change >= 0 ? 'text-destructive' : 'text-accent'
                 }`}>
@@ -54,7 +54,7 @@ export const MonthlySummary = () => {
                   ) : (
                     <ArrowDownRight className="h-4 w-4" />
                   )}
-                  {Math.abs(month.change)}% vs previous month
+                  {Math.abs(month.change)}% jämfört med förra månaden
                 </div>
               </div>
             </div>
@@ -62,12 +62,12 @@ export const MonthlySummary = () => {
           <CardContent>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Top Category</p>
+                <p className="text-sm text-muted-foreground">Topkategori</p>
                 <p className="text-lg font-semibold">{month.topCategory}</p>
               </div>
               <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Average per Trip</p>
-                <p className="text-lg font-semibold">${month.avgPerTrip.toFixed(2)}</p>
+                <p className="text-sm text-muted-foreground">Snitt per handla</p>
+                <p className="text-lg font-semibold">{month.avgPerTrip.toLocaleString('sv-SE')} kr</p>
               </div>
             </div>
           </CardContent>

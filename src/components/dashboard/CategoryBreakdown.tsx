@@ -14,8 +14,8 @@ export const CategoryBreakdown = () => {
   return (
     <Card className="shadow-card">
       <CardHeader>
-        <CardTitle>Category Breakdown</CardTitle>
-        <CardDescription>Spending by product category this month</CardDescription>
+        <CardTitle>Kategorier</CardTitle>
+        <CardDescription>Utgifter per produktkategori denna månad</CardDescription>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
