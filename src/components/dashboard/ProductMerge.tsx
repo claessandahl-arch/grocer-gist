@@ -9,6 +9,22 @@ import { toast } from "sonner";
 import { Trash2, Plus, Sparkles } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+
+const categoryOptions = [
+  { value: 'frukt_gront', label: 'Frukt och grönt' },
+  { value: 'mejeri', label: 'Mejeri' },
+  { value: 'kott_fagel_chark', label: 'Kött, fågel, chark' },
+  { value: 'brod_bageri', label: 'Bröd och bageri' },
+  { value: 'drycker', label: 'Drycker' },
+  { value: 'sotsaker_snacks', label: 'Sötsaker och snacks' },
+  { value: 'fardigmat', label: 'Färdigmat' },
+  { value: 'hushall_hygien', label: 'Hushåll och hygien' },
+  { value: 'delikatess', label: 'Delikatess' },
+  { value: 'pant', label: 'Pant' },
+  { value: 'other', label: 'Övrigt' },
+];
 
 // Calculate similarity score between two strings (0-1)
 const calculateSimilarity = (str1: string, str2: string): number => {
@@ -78,6 +94,7 @@ type SuggestedMerge = {
 export const ProductMerge = () => {
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [mergedName, setMergedName] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [groupMergeName, setGroupMergeName] = useState("");
   const queryClient = useQueryClient();
@@ -171,6 +188,7 @@ export const ProductMerge = () => {
         user_id: user.id,
         original_name: product,
         mapped_name: mergedName,
+        category: selectedCategory || null,
       }));
 
       const { error } = await supabase
@@ -183,6 +201,7 @@ export const ProductMerge = () => {
       queryClient.invalidateQueries({ queryKey: ['product-mappings'] });
       setSelectedProducts([]);
       setMergedName("");
+      setSelectedCategory("");
       toast.success("Produkter sammanslagna!");
     },
     onError: (error) => {
@@ -226,6 +245,10 @@ export const ProductMerge = () => {
       toast.error("Ange ett namn för den sammanslagna produkten");
       return;
     }
+    if (!selectedCategory) {
+      toast.error("Välj en kategori för produkten");
+      return;
+    }
     createMapping.mutate(selectedProducts);
   };
 
@@ -238,6 +261,7 @@ export const ProductMerge = () => {
         user_id: user.id,
         original_name: product,
         mapped_name: suggestion.suggestedName,
+        category: null, // Will need to be set manually later
       }));
 
       const { error } = await supabase
@@ -425,9 +449,9 @@ export const ProductMerge = () => {
           )}
 
           <div className="space-y-2">
-            <label htmlFor="merged-name" className="text-sm font-medium">
+            <Label htmlFor="merged-name">
               Namn för sammanslagna produkten:
-            </label>
+            </Label>
             <Input
               id="merged-name"
               placeholder="T.ex. Coca-Cola"
@@ -436,9 +460,27 @@ export const ProductMerge = () => {
             />
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="category">
+              Kategori:
+            </Label>
+            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+              <SelectTrigger id="category">
+                <SelectValue placeholder="Välj kategori" />
+              </SelectTrigger>
+              <SelectContent>
+                {categoryOptions.map(cat => (
+                  <SelectItem key={cat.value} value={cat.value}>
+                    {cat.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <Button
             onClick={handleMerge}
-            disabled={selectedProducts.length < 2 || !mergedName.trim() || createMapping.isPending}
+            disabled={selectedProducts.length < 2 || !mergedName.trim() || !selectedCategory || createMapping.isPending}
             className="w-full"
           >
             <Plus className="h-4 w-4 mr-2" />

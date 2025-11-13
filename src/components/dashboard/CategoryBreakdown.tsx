@@ -67,23 +67,28 @@ export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) =
   }) || [];
 
   // Normalize product names to merge similar items
-  const normalizeProductName = (name: string): string => {
+  const normalizeProductName = (name: string): { normalizedName: string; category?: string } => {
     // First check if there's a manual mapping
     const manualMapping = productMappings?.find(m => m.original_name === name);
     if (manualMapping) {
-      return manualMapping.mapped_name.toLowerCase();
+      return {
+        normalizedName: manualMapping.mapped_name.toLowerCase(),
+        category: manualMapping.category || undefined
+      };
     }
 
     // Otherwise use automatic normalization
-    return name
-      .toLowerCase()
-      .replace(/\s+/g, ' ') // normalize whitespace
-      .replace(/\d+p\b/gi, '') // remove pack sizes like "4p", "6p"
-      .replace(/\bz\b/gi, 'zero') // normalize "z" to "zero"
-      .replace(/\bzero\b/gi, 'zero') // normalize all zero variants
-      .replace(/\bbrygg\s*kaffe\b/gi, 'bryggkaffe') // normalize brewed coffee
-      .replace(/\s+/g, ' ') // clean up double spaces
-      .trim();
+    return {
+      normalizedName: name
+        .toLowerCase()
+        .replace(/\s+/g, ' ') // normalize whitespace
+        .replace(/\d+p\b/gi, '') // remove pack sizes like "4p", "6p"
+        .replace(/\bz\b/gi, 'zero') // normalize "z" to "zero"
+        .replace(/\bzero\b/gi, 'zero') // normalize all zero variants
+        .replace(/\bbrygg\s*kaffe\b/gi, 'bryggkaffe') // normalize brewed coffee
+        .replace(/\s+/g, ' ') // clean up double spaces
+        .trim()
+    };
   };
 
   // Calculate category totals
@@ -93,9 +98,12 @@ export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) =
   thisMonthReceipts.forEach(receipt => {
     const items = receipt.items as any[] || [];
     items.forEach(item => {
-      const category = item.category || 'other';
       const itemName = item.name || 'Okänd produkt';
-      const normalizedName = normalizeProductName(itemName);
+      const normalizedData = normalizeProductName(itemName);
+      const normalizedName = normalizedData.normalizedName;
+      
+      // Use category from mapping if available, otherwise use item category
+      const category = normalizedData.category || item.category || 'other';
       const price = Number(item.price || 0);
       
       categoryTotals[category] = (categoryTotals[category] || 0) + price;
