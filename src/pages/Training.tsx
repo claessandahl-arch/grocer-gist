@@ -116,6 +116,8 @@ export default function Training() {
 
   const saveCorrection = async () => {
     if (!selectedReceipt || !editedData) return;
+    
+    console.log('Saving correction with data:', editedData);
 
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
