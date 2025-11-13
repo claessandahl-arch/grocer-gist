@@ -39,6 +39,7 @@ const categories = [
   'sotsaker_snacks',
   'fardigmat',
   'hushall_hygien',
+  'delikatess',
   'pant',
   'other'
 ];
