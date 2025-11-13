@@ -69,8 +69,22 @@ serve(async (req) => {
             content: [
               {
                 type: 'text',
-                text: `Parse this grocery receipt and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), and category (one of: produce, dairy, meat, bakery, beverages, snacks, household, other). 
-                
+                text: `Parse this grocery receipt and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), and category (one of: frukt_och_gront, mejeri, kott_fagel_chark, fisk_skaldjur, brod_bageri, skafferi, frysvaror, drycker, sotsaker_snacks, fardigmat, hushall_hygien, pant, other).
+
+Category descriptions:
+- frukt_och_gront: Färska frukter, grönsaker, sallader, örter och rotfrukter
+- mejeri: Mjölk, fil, yoghurt, grädde, smör, margarin, ost och ägg
+- kott_fagel_chark: Färskt kött (nöt, fläsk, lamm), kyckling, kalkon, korv, pålägg, bacon och leverpastej
+- fisk_skaldjur: Färska, frysta och konserverade produkter (t.ex. lax, torsk, räkor, sill)
+- brod_bageri: Färskt bröd, bullar, kakor, kex och skorpor
+- skafferi: Pasta, ris, gryn, mjöl, socker, konserver (bönor, tomater, soppor), oljor, vinäger och kryddor
+- frysvaror: Frysta grönsaker, färdigrätter, glass, bär, bröd och pizzor
+- drycker: Läsk, juice, vatten, kaffe, te, öl och cider
+- sotsaker_snacks: Godis, choklad, chips, nötter och energibars
+- fardigmat: Salladsbarer, färdiglagade rätter, smörgåsar, oliver och specialostar
+- hushall_hygien: Rengöringsmedel, tvättmedel, toalettpapper, personliga hygienprodukter (schampo, tvål) och blöjor
+- pant: Avgift på flask- och burk drycker
+
 Look for savings, discounts, and weight information on items if available. Be precise with item names and prices.${storeContext}
 
 Return only valid JSON with no markdown formatting.`
@@ -106,7 +120,7 @@ Return only valid JSON with no markdown formatting.`
                         quantity: { type: 'number' },
                         category: {
                           type: 'string',
-                          enum: ['produce', 'dairy', 'meat', 'bakery', 'beverages', 'snacks', 'household', 'other']
+                          enum: ['frukt_och_gront', 'mejeri', 'kott_fagel_chark', 'fisk_skaldjur', 'brod_bageri', 'skafferi', 'frysvaror', 'drycker', 'sotsaker_snacks', 'fardigmat', 'hushall_hygien', 'pant', 'other']
                         }
                       },
                       required: ['name', 'price', 'quantity', 'category']
