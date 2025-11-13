@@ -26,7 +26,21 @@ interface ReceiptItem {
   category: string;
 }
 
-const categories = ['produce', 'dairy', 'meat', 'bakery', 'beverages', 'snacks', 'household', 'other'];
+const categories = [
+  'frukt_och_gront',
+  'mejeri', 
+  'kott_fagel_chark',
+  'fisk_skaldjur',
+  'brod_bageri',
+  'skafferi',
+  'frysvaror',
+  'drycker',
+  'sotsaker_snacks',
+  'fardigmat',
+  'hushall_hygien',
+  'pant',
+  'other'
+];
 
 export default function Training() {
   const navigate = useNavigate();

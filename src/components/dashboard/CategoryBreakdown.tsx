@@ -2,12 +2,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 const data = [
-  { category: "Produce", amount: 234.5 },
-  { category: "Dairy", amount: 167.8 },
-  { category: "Meat", amount: 189.3 },
-  { category: "Bakery", amount: 98.2 },
-  { category: "Snacks", amount: 87.5 },
-  { category: "Beverages", amount: 70.0 },
+  { category: "Frukt och grönt", amount: 234.5 },
+  { category: "Mejeri", amount: 167.8 },
+  { category: "Kött, fågel, chark", amount: 189.3 },
+  { category: "Bröd och bageri", amount: 98.2 },
+  { category: "Sötsaker och snacks", amount: 87.5 },
+  { category: "Drycker", amount: 70.0 },
 ];
 
 export const CategoryBreakdown = () => {
