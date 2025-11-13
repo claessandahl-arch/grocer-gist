@@ -24,11 +24,10 @@ const Index = () => {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button 
               size="lg" 
-              onClick={() => navigate("/upload")}
+              onClick={() => navigate("/auth")}
               className="gap-2 shadow-soft"
             >
-              <Upload className="h-5 w-5" />
-              Upload Receipt
+              Get Started
             </Button>
             <Button 
               size="lg" 
@@ -94,10 +93,9 @@ const Index = () => {
           <CardContent className="flex justify-center">
             <Button 
               size="lg" 
-              onClick={() => navigate("/upload")}
+              onClick={() => navigate("/auth")}
               className="gap-2"
             >
-              <Upload className="h-5 w-5" />
               Get Started Now
             </Button>
           </CardContent>
