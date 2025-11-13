@@ -79,27 +79,43 @@ serve(async (req) => {
                 type: 'text',
                 text: `Parse this grocery receipt and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), category, and discount (as number, optional).
 
-🚨 ABSOLUTE RULES FOR DISCOUNT HANDLING - FOLLOW THESE EXACTLY:
+🚨 CRITICAL DISCOUNT RULES - MUST FOLLOW EXACTLY:
 
-1. NEVER EVER create items with NEGATIVE prices
-2. NEVER create items containing "rabatt", "special", "2för", "2f", or discount keywords in the name
-3. When you see a line with negative amount (like "STor&special -25KR" or "Kycklingfärs 2f -11,90"):
-   - This is NOT a separate product - it's a discount on the product ABOVE it
-   - Find the product item above it and apply the discount there
-   - DO NOT create a new item for this discount line
+1. ❌ NEVER create items with NEGATIVE prices (e.g., -25.00)
+2. ❌ NEVER create separate items for discount lines containing keywords: "rabatt", "special", "2för", "2f", "-KR", "-kr", "kampanj"
+3. ✅ When you see a negative amount line (like "STor&special -25KR", "Kycklingfärs 2f -11,90", "rabatt -15,00"):
+   - This line represents a DISCOUNT on the PREVIOUS product line
+   - The previous product is the one being discounted
+   - DO NOT create a separate item for the discount line
    
-4. How to apply discounts correctly:
-   - Original product price = the price shown on the product line
-   - Discount amount = absolute value of the negative amount (make it positive)
-   - Final price = original price - discount amount
-   - Store: name=product name (without discount text), price=final price, discount=discount amount
+4. ✅ How to correctly handle discounts:
+   - Look at the product line ABOVE the discount line
+   - Original price = the total price shown on the product line
+   - Discount = absolute value of the negative amount (convert to positive number)
+   - Final price = original price - discount
+   - Create ONE item with: name=(product name), price=(final price), discount=(discount amount as positive number)
    
-5. Examples:
-   ❌ WRONG: Create "*Fus Base" (264) and "STor&special -25KR" (-25) as two items
-   ✅ CORRECT: Create ONE item: name="*Fus Base", price=239, discount=25
+5. 🔍 Pattern recognition for discounts:
+   - Lines starting with "*" or "-" followed by discount keywords
+   - Lines with negative amounts (numbers with "-" prefix)
+   - Lines mentioning "special", "rabatt", "kampanj", "erbjudande"
+   - These ALL mean: apply discount to the product ABOVE
    
-   ❌ WRONG: Create "Kycklingfärs" (115.90) and "Kycklingfärs rabatt" (-11.90) as two items  
-   ✅ CORRECT: Create ONE item: name="Kycklingfärs", quantity=2, price=104.00, discount=11.90
+📋 REAL EXAMPLES - CORRECT PARSING:
+
+Example Receipt Line Format:
+  *Fus Base          8006540989197    264,00    1.00 st    289.00
+  STor&special -25KR                                        -25,00
+
+❌ WRONG: { name: "*Fus Base", price: 289 }, { name: "STor&special -25KR", price: -25 }
+✅ CORRECT: { name: "Fus Base", price: 264, quantity: 1, discount: 25 }
+
+Example 2:
+  Kycklingfärs                        64,00     1 st       75.90
+  Kycklingfärs 2f                                         -11.90
+
+❌ WRONG: Two items
+✅ CORRECT: { name: "Kycklingfärs", price: 64, quantity: 1, discount: 11.90 }
 
 Categories (one of: frukt_och_gront, mejeri, kott_fagel_chark, fisk_skaldjur, brod_bageri, skafferi, frysvaror, drycker, sotsaker_snacks, fardigmat, hushall_hygien, pant, other):
 - frukt_och_gront: Färska frukter, grönsaker, sallader, örter och rotfrukter
