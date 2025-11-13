@@ -267,6 +267,22 @@ export default function Training() {
                 <p className="text-muted-foreground">Select a receipt to start reviewing</p>
               ) : (
                 <div className="space-y-6">
+                  {/* Total Savings */}
+                  {editedData?.items && editedData.items.length > 0 && (
+                    <Card className="bg-primary/5 border-primary/20">
+                      <CardContent className="pt-6">
+                        <div className="flex justify-between items-center">
+                          <span className="text-lg font-semibold">Totala besparingar:</span>
+                          <span className="text-2xl font-bold text-primary">
+                            {editedData.items
+                              .reduce((sum: number, item: ReceiptItem) => sum + (item.discount || 0), 0)
+                              .toFixed(2)} kr
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
                   {/* Receipt Image */}
                   <div>
                     <Label>Receipt Image</Label>

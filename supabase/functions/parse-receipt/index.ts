@@ -79,11 +79,16 @@ serve(async (req) => {
                 type: 'text',
                 text: `Parse this grocery receipt and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), category, and discount (as number, optional).
 
-CRITICAL DISCOUNT HANDLING RULES:
-1. When a discount line appears after a product (negative amount), DO NOT create a separate item for the discount
-2. Instead, subtract the discount from the product's price to get the net price
-3. Store the discount amount (as positive number) in the "discount" field of that product
-4. Example: "Kycklingfärs 115,90" followed by "Kycklingfärs 2f -11,90" should become ONE item with price=104.00 and discount=11.90
+CRITICAL DISCOUNT HANDLING RULES - THIS IS EXTREMELY IMPORTANT:
+1. NEVER create separate items for discounts (lines with negative amounts like "Kycklingfärs rabatt -11,90")
+2. When you see a discount line (negative amount), find the corresponding product item above it
+3. Calculate the final price by subtracting the discount: final_price = original_price - discount_amount
+4. Store the discount as a POSITIVE number in the "discount" field
+5. Only create ONE item per product, with the final calculated price
+6. Example: 
+   - Receipt shows: "Kycklingfärs 115,90" and "Kycklingfärs 2f -11,90"
+   - You should create: ONE item with name="Kycklingfärs", quantity=2, price=104.00, discount=11.90
+   - DO NOT create two items, DO NOT include "rabatt" in the item name
 
 Categories (one of: frukt_och_gront, mejeri, kott_fagel_chark, fisk_skaldjur, brod_bageri, skafferi, frysvaror, drycker, sotsaker_snacks, fardigmat, hushall_hygien, pant, other):
 - frukt_och_gront: Färska frukter, grönsaker, sallader, örter och rotfrukter
