@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Upload as UploadIcon, ArrowLeft, FileText, CheckCircle2, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
-import type { Session } from "@supabase/supabase-js";
 import * as pdfjsLib from 'pdfjs-dist';
 
 interface PreviewFile {
@@ -17,7 +16,7 @@ interface PreviewFile {
 
 const Upload = () => {
   const navigate = useNavigate();
-  const [session, setSession] = useState<Session | null>(null);
+  const DEFAULT_USER_ID = 'c7498548-9f65-4540-96ab-0068afb6d5fc';
   const [uploading, setUploading] = useState(false);
   const [converting, setConverting] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
@@ -40,26 +39,6 @@ const Upload = () => {
   useEffect(() => {
     pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
   }, []);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        navigate("/auth");
-      } else {
-        setSession(session);
-      }
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!session) {
-        navigate("/auth");
-      } else {
-        setSession(session);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [navigate]);
 
   const convertPdfToJpg = async (file: File): Promise<Array<{ blob: Blob; preview: string }>> => {
     console.log('Converting PDF to JPG...');
@@ -111,7 +90,7 @@ const Upload = () => {
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files || !session) return;
+    if (!files) return;
 
     setConverting(true);
     const newPreviews: PreviewFile[] = [];
@@ -157,7 +136,7 @@ const Upload = () => {
   };
 
   const handleUpload = async () => {
-    if (!session || previewFiles.length === 0) return;
+    if (previewFiles.length === 0) return;
 
     setUploading(true);
 
@@ -187,7 +166,7 @@ const Upload = () => {
           const imageUrls = await Promise.all(
             sortedFiles.map(async (file, pageIndex) => {
               const sanitizedFilename = sanitizeFilename(baseFilename);
-              const fileName = `${session.user.id}/${Date.now()}_${sanitizedFilename}_page${pageIndex}.jpg`;
+              const fileName = `${DEFAULT_USER_ID}/${Date.now()}_${sanitizedFilename}_page${pageIndex}.jpg`;
               
               console.log(`Uploading: ${fileName}`);
               const { error: uploadError } = await supabase.storage
@@ -225,7 +204,7 @@ const Upload = () => {
           const { data: existingReceipts } = await supabase
             .from('receipts')
             .select('id, store_name')
-            .eq('user_id', session.user.id)
+            .eq('user_id', DEFAULT_USER_ID)
             .eq('receipt_date', parsedData.receipt_date)
             .eq('total_amount', parsedData.total_amount);
 
@@ -246,7 +225,7 @@ const Upload = () => {
 
           // Insert one receipt with multiple image URLs
           const { error: insertError } = await supabase.from('receipts').insert({
-            user_id: session.user.id,
+            user_id: DEFAULT_USER_ID,
             image_url: imageUrls[0],
             image_urls: imageUrls,
             store_name: parsedData.store_name,
