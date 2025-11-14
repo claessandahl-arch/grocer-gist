@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -539,15 +539,25 @@ export const ProductMerge = () => {
                       <TableBody>
                         {items.map(item => (
                           <TableRow key={item.id}>
-                            <TableCell>{item.original_name}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                {item.original_name}
+                                {item.isGlobal && (
+                                  <Badge variant="outline" className="text-xs">
+                                    Global
+                                  </Badge>
+                                )}
+                              </div>
+                            </TableCell>
                             <TableCell>
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => deleteMapping.mutate(item.id)}
-                                disabled={deleteMapping.isPending}
+                                onClick={() => deleteMapping.mutate(item)}
+                                disabled={deleteMapping.isPending || item.isGlobal}
+                                title={item.isGlobal ? "Kan inte ta bort globala mappningar" : "Ta bort mappning"}
                               >
-                                <Trash2 className="h-4 w-4" />
+                                <Trash2 className={`h-4 w-4 ${item.isGlobal ? 'opacity-50' : ''}`} />
                               </Button>
                             </TableCell>
                           </TableRow>
