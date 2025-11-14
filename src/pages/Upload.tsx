@@ -108,29 +108,35 @@ const Upload = () => {
         
         if (file.type === 'application/pdf') {
           const pages = await convertPdfToJpg(file);
+          const baseName = file.name.replace(/\.(pdf)$/i, '');
           pages.forEach((pageData, index) => {
             newPreviews.push({
-              name: `${file.name}${pages.length > 1 ? ` - Page ${index + 1}` : ''}`,
+              name: `${baseName}${pages.length > 1 ? `_page${index + 1}` : ''}`,
               preview: pageData.preview,
               blob: pageData.blob,
-              pageNumber: pages.length > 1 ? index + 1 : undefined
+              pageNumber: index + 1
             });
           });
-        } else {
-          const preview = URL.createObjectURL(file);
-          newPreviews.push({
-            name: file.name,
-            preview,
-            blob: file
+        } else if (file.type.startsWith('image/')) {
+          const reader = new FileReader();
+          await new Promise<void>((resolve) => {
+            reader.onload = (e) => {
+              newPreviews.push({
+                name: file.name,
+                preview: e.target?.result as string,
+                blob: file
+              });
+              resolve();
+            };
+            reader.readAsDataURL(file);
           });
         }
       }
-      
-      setPreviewFiles(newPreviews);
-      toast.success(`${newPreviews.length} file(s) ready for upload`);
+
+      setPreviewFiles(prev => [...prev, ...newPreviews]);
     } catch (error) {
-      console.error('Preview generation failed:', error);
-      toast.error('Failed to process files');
+      console.error('Error processing file:', error);
+      toast.error("Misslyckades med att bearbeta filen");
     } finally {
       setConverting(false);
     }
@@ -140,98 +146,95 @@ const Upload = () => {
     if (!session || previewFiles.length === 0) return;
 
     setUploading(true);
-    let duplicateCount = 0;
-    let successCount = 0;
-    
+
     try {
-      const uploadPromises = previewFiles.map(async (previewFile, index) => {
-        const fileName = `${session.user.id}/${Date.now()}_${index}.jpg`;
-        
-        // Preserve original filename for date extraction
-        const originalFilename = previewFile.name.replace(/\.(pdf|jpg|jpeg|png)$/i, '');
-        
-        console.log('Uploading:', fileName);
-        const { error: uploadError } = await supabase.storage
-          .from('receipts')
-          .upload(fileName, previewFile.blob);
-
-        if (uploadError) {
-          console.error('Upload error:', uploadError);
-          throw uploadError;
+      // Group preview files by original filename (remove _pageX suffix)
+      const groupedBySource = previewFiles.reduce((acc, file) => {
+        const baseFilename = file.name.replace(/_page\d+/, '');
+        if (!acc[baseFilename]) {
+          acc[baseFilename] = [];
         }
+        acc[baseFilename].push(file);
+        return acc;
+      }, {} as Record<string, PreviewFile[]>);
 
-        const { data: { publicUrl } } = supabase.storage
-          .from('receipts')
-          .getPublicUrl(fileName);
+      console.log('Grouped files:', Object.keys(groupedBySource).map(k => `${k}: ${groupedBySource[k].length} pages`));
 
-        console.log('Parsing with AI:', publicUrl);
-        console.log('Original filename:', originalFilename);
-        const { data: parsedData, error: parseError } = await supabase.functions.invoke('parse-receipt', {
-          body: { 
-            imageUrl: publicUrl,
-            originalFilename: originalFilename 
+      const uploadPromises = Object.entries(groupedBySource).map(async ([baseFilename, files]) => {
+        try {
+          // Sort files by page number to maintain correct order
+          const sortedFiles = files.sort((a, b) => (a.pageNumber || 0) - (b.pageNumber || 0));
+          
+          // Upload all pages for this receipt
+          const imageUrls = await Promise.all(
+            sortedFiles.map(async (file, pageIndex) => {
+              const fileName = `${session.user.id}/${Date.now()}_${baseFilename}_page${pageIndex}.jpg`;
+              const { error: uploadError } = await supabase.storage
+                .from('receipts')
+                .upload(fileName, file.blob);
+
+              if (uploadError) throw uploadError;
+
+              const { data: { publicUrl } } = supabase.storage
+                .from('receipts')
+                .getPublicUrl(fileName);
+
+              return publicUrl;
+            })
+          );
+
+          // Call AI once with all image URLs
+          const { data: parsedData, error: functionError } = await supabase.functions.invoke('parse-receipt', {
+            body: { imageUrls: imageUrls, originalFilename: baseFilename }
+          });
+
+          if (functionError || !parsedData) {
+            toast.error(`Misslyckades: ${baseFilename}`);
+            return;
           }
-        });
 
-        if (parseError) {
-          console.error('Parse error:', parseError);
-          throw new Error(`AI parsing failed: ${parseError.message}`);
-        }
+          // Check for duplicates
+          const { data: existingReceipts } = await supabase
+            .from('receipts')
+            .select('id')
+            .eq('user_id', session.user.id)
+            .eq('store_name', parsedData.store_name)
+            .eq('receipt_date', parsedData.receipt_date)
+            .eq('total_amount', parsedData.total_amount);
 
-        console.log('Receipt parsed:', parsedData);
+          if (existingReceipts && existingReceipts.length > 0) {
+            toast.warning(`Duplikat: ${parsedData.store_name}`);
+            return;
+          }
 
-        // Check for duplicates before inserting
-        const { data: existingReceipts } = await supabase
-          .from('receipts')
-          .select('id')
-          .eq('user_id', session.user.id)
-          .eq('store_name', parsedData.store_name)
-          .eq('receipt_date', parsedData.receipt_date)
-          .eq('total_amount', parsedData.total_amount)
-          .limit(1);
-
-        if (existingReceipts && existingReceipts.length > 0) {
-          console.log('Duplicate receipt detected, skipping:', parsedData);
-          duplicateCount++;
-          return null; // Skip this receipt
-        }
-
-        const { error: dbError } = await supabase
-          .from('receipts')
-          .insert({
+          // Insert one receipt with multiple image URLs
+          const { error: insertError } = await supabase.from('receipts').insert({
             user_id: session.user.id,
-            image_url: publicUrl,
+            image_url: imageUrls[0],
+            image_urls: imageUrls,
             store_name: parsedData.store_name,
             total_amount: parsedData.total_amount,
             receipt_date: parsedData.receipt_date,
             items: parsedData.items
           });
 
-        if (dbError) {
-          console.error('Database error:', dbError);
-          throw dbError;
+          if (insertError) {
+            toast.error(`Misslyckades spara: ${baseFilename}`);
+            return;
+          }
+        } catch (error) {
+          toast.error(`Fel: ${baseFilename}`);
         }
-
-        successCount++;
-        return previewFile.name;
       });
 
-      const results = await Promise.all(uploadPromises);
-      const fileNames = results.filter((name): name is string => name !== null);
-      setUploadedFiles(prev => [...prev, ...fileNames]);
+      await Promise.all(uploadPromises);
+      const receiptCount = Object.keys(groupedBySource).length;
+      setUploadedFiles(Object.keys(groupedBySource));
       setPreviewFiles([]);
-      
-      // Show appropriate message based on results
-      if (successCount > 0 && duplicateCount > 0) {
-        toast.success(`Processed ${successCount} receipt${successCount > 1 ? 's' : ''}. ${duplicateCount} duplicate${duplicateCount > 1 ? 's' : ''} ignored.`);
-      } else if (successCount > 0) {
-        toast.success(`Successfully processed ${successCount} receipt${successCount > 1 ? 's' : ''}!`);
-      } else if (duplicateCount > 0) {
-        toast.info(`${duplicateCount} duplicate receipt${duplicateCount > 1 ? 's' : ''} ignored - already uploaded.`);
-      }
+      toast.success(`${receiptCount} kvitto${receiptCount > 1 ? 'n' : ''} uppladdade!`);
     } catch (error) {
       console.error('Upload error:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to process receipt');
+      toast.error("Något gick fel vid uppladdning");
     } finally {
       setUploading(false);
     }

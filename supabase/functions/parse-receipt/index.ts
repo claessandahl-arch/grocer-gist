@@ -11,16 +11,19 @@ serve(async (req) => {
   }
 
   try {
-    const { imageUrl, originalFilename } = await req.json();
+    const { imageUrl, imageUrls, originalFilename } = await req.json();
     
-    if (!imageUrl) {
+    // Support both single image (legacy) and multiple images (new)
+    const imagesToProcess = imageUrls || (imageUrl ? [imageUrl] : []);
+    
+    if (imagesToProcess.length === 0) {
       return new Response(
-        JSON.stringify({ error: 'Image URL is required' }),
+        JSON.stringify({ error: 'At least one image URL is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('Parsing receipt image:', imageUrl);
+    console.log(`Parsing receipt with ${imagesToProcess.length} image(s)`);
     if (originalFilename) {
       console.log('Original filename:', originalFilename);
     }
@@ -63,25 +66,7 @@ serve(async (req) => {
       console.log('Could not fetch store patterns:', e);
     }
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a receipt parser. Extract structured data from receipt images including store name, total amount, date, and itemized list with prices and categories. Return valid JSON only.'
-          },
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: `Parse this grocery receipt and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), category, and discount (as number, optional).
+    const promptText = `Parse this ${imagesToProcess.length > 1 ? imagesToProcess.length + '-page ' : ''}grocery receipt${imagesToProcess.length > 1 ? '. Combine information from ALL pages into a single receipt. The images are in page order.' : ''} and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), category, and discount (as number, optional).
 
 🏪 STORE NAME RULE:
 - Extract the BRAND/CHAIN NAME (e.g., "Willys", "ICA", "Coop", "Hemköp")
@@ -135,83 +120,113 @@ Example 1 - Multi-line product name:
 ✅ CORRECT: { name: "Juicy Melba Nocco", price: 17.05, quantity: 1, discount: 5.90 }
 
 Example 2 - Discount keyword:
-  *Fus Base          8006540989197    264,00    1.00 st    289.00
-  STor&special -25KR                                        -25,00
-
-❌ WRONG: { name: "*Fus Base", price: 289 }, { name: "STor&special -25KR", price: -25 }
-✅ CORRECT: { name: "Fus Base", price: 264, quantity: 1, discount: 25 }
-
-Example 3 - Duplicate name discount:
-  Kycklingfärs                        64,00     1 st       75.90
-  Kycklingfärs 2f                                         -11.90
+  Nocco BCAA Dr Pepper           69.95
+  2för90 rabatt                  -25.00
 
 ❌ WRONG: Two items
-✅ CORRECT: { name: "Kycklingfärs", price: 64, quantity: 1, discount: 11.90 }
+✅ CORRECT: { name: "Nocco BCAA Dr Pepper", price: 44.95, quantity: 1, discount: 25.00 }
 
-Categories (one of: frukt_och_gront, mejeri, kott_fagel_chark, fisk_skaldjur, brod_bageri, skafferi, frysvaror, drycker, sotsaker_snacks, fardigmat, delikatess, hushall_hygien, pant, other):
-- frukt_och_gront: Färska frukter, grönsaker, sallader, örter och rotfrukter
-- mejeri: Mjölk, grädde, fil, yoghurt, smör, margarin och ost
-- kott_fagel_chark: Färskt kött, fågel, charkuterier, korv och bacon
-- fisk_skaldjur: Färsk fisk, skaldjur, gravad lax och rökt fisk
-- brod_bageri: Bröd, bullar, kakor och bakverk
-- skafferi: Konserver, torra varor, pasta, ris, mjöl, såser, kryddor och konserver
-- frysvaror: Frysta produkter som glass, frysta grönsaker och färdigrätter
-- drycker: Vatten, läsk, juice, kaffe, te och alkoholfria drycker
-- sotsaker_snacks: Godis, chips, choklad och andra snacks
-- fardigmat: Salladsbarer, färdiglagade rätter, smörgåsar, oliver och specialostar
-- delikatess: Delikatesser, lyxvaror, exklusiva produkter och finkost
-- hushall_hygien: Rengöringsmedel, tvättmedel, toalettpapper, personliga hygienprodukter (schampo, tvål) och blöjor
-- pant: Avgift på flask- och burk drycker
+Example 3 - Standalone discount line:
+  Lätta 70% 500g                 40.00
+  -KR 10.00                      -10.00
 
-Look for weight information on items if available. Be precise with item names and net prices after discounts.${storeContext}
+❌ WRONG: Two items with one having negative price
+✅ CORRECT: { name: "Lätta 70% 500g", price: 30.00, quantity: 1, discount: 10.00 }
 
-Return only valid JSON with no markdown formatting.`
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: imageUrl
-                }
-              }
-            ]
+5. CATEGORY MAPPING:
+   Categorize each item into ONE of these Swedish categories:
+   - frukt_gront (Fruit, vegetables, salad)
+   - mejeri (Milk, cheese, yogurt, butter)
+   - kott_fagel_chark (Meat, chicken, deli meats)
+   - brod_bageri (Bread, pastries, baked goods)
+   - drycker (Drinks, juice, soda)
+   - sotsaker_snacks (Candy, chips, snacks)
+   - fardigmat (Ready meals, frozen food)
+   - hushall_hygien (Household products, cleaning, hygiene)
+   - delikatess (Delicatessen, specialty items)
+   - pant (Bottle deposit/return)
+   - other (Anything else)
+
+${storeContext}
+
+🎯 OUTPUT FORMAT:
+Return ONLY the function call with properly formatted JSON. No additional text or explanation. Make sure all numbers are actual numbers, not strings.`;
+
+    // Build content for AI request
+    const userContent = [
+      {
+        type: "text",
+        text: promptText
+      },
+      ...imagesToProcess.map((url: string) => ({
+        type: "image_url",
+        image_url: { url }
+      }))
+    ];
+
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a receipt parser. Extract structured data from receipt images including store name, total amount, date, and itemized list with prices and categories. For multi-page receipts, combine all items into a single receipt. Return valid JSON only.'
+          },
+          {
+            role: 'user',
+            content: userContent
           }
         ],
         tools: [
           {
-            type: 'function',
+            type: "function",
             function: {
-              name: 'extract_receipt_data',
-              description: 'Extract structured data from a grocery receipt',
+              name: "parse_receipt",
+              description: "Parse receipt and extract structured data",
               parameters: {
-                type: 'object',
+                type: "object",
                 properties: {
-                  store_name: { type: 'string' },
-                  total_amount: { type: 'number' },
-                  receipt_date: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+                  store_name: {
+                    type: "string",
+                    description: "Name of the store (brand/chain name, not location)"
+                  },
+                  total_amount: {
+                    type: "number",
+                    description: "Total amount on receipt"
+                  },
+                  receipt_date: {
+                    type: "string",
+                    description: "Date in YYYY-MM-DD format"
+                  },
                   items: {
-                    type: 'array',
+                    type: "array",
                     items: {
-                      type: 'object',
+                      type: "object",
                       properties: {
-                        name: { type: 'string' },
-                        price: { type: 'number', description: 'Net price after any discounts have been subtracted' },
-                        quantity: { type: 'number' },
-                        category: {
-                          type: 'string',
-                          enum: ['frukt_och_gront', 'mejeri', 'kott_fagel_chark', 'fisk_skaldjur', 'brod_bageri', 'skafferi', 'frysvaror', 'drycker', 'sotsaker_snacks', 'fardigmat', 'delikatess', 'hushall_hygien', 'pant', 'other']
-                        },
-                        discount: { type: 'number', description: 'Discount amount as positive number, if any discount was applied to this item' }
+                        name: { type: "string" },
+                        price: { type: "number" },
+                        quantity: { type: "number" },
+                        category: { type: "string" },
+                        discount: { type: "number" }
                       },
-                      required: ['name', 'price', 'quantity', 'category']
+                      required: ["name", "price", "quantity", "category"]
                     }
                   }
                 },
-                required: ['store_name', 'total_amount', 'receipt_date', 'items']
+                required: ["store_name", "total_amount", "receipt_date", "items"]
               }
             }
           }
         ],
-        tool_choice: { type: 'function', function: { name: 'extract_receipt_data' } }
+        tool_choice: {
+          type: "function",
+          function: { name: "parse_receipt" }
+        }
       }),
     });
 
@@ -221,34 +236,31 @@ Return only valid JSON with no markdown formatting.`
       
       if (response.status === 429) {
         return new Response(
-          JSON.stringify({ error: 'Rate limits exceeded, please try again later.' }),
+          JSON.stringify({ error: 'Rate limit exceeded. Please try again in a moment.' }),
           { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+      
       if (response.status === 402) {
         return new Response(
-          JSON.stringify({ error: 'Payment required, please add credits to your Lovable AI workspace.' }),
+          JSON.stringify({ error: 'AI credits depleted. Please add credits in your workspace settings.' }),
           { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       
-      return new Response(
-        JSON.stringify({ error: `AI gateway error: ${errorText}` }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      throw new Error(`AI gateway returned ${response.status}: ${errorText}`);
     }
 
     const data = await response.json();
-    console.log('AI response received successfully');
+    console.log('AI response:', JSON.stringify(data, null, 2));
 
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall || !toolCall.function?.arguments) {
-      console.error('No valid tool call in response:', JSON.stringify(data));
-      throw new Error('No valid tool call in AI response');
+    const functionCall = data.choices?.[0]?.message?.tool_calls?.[0]?.function;
+    if (!functionCall) {
+      throw new Error('No function call in AI response');
     }
 
-    const parsedData = JSON.parse(toolCall.function.arguments);
-    console.log('Parsed receipt data successfully');
+    const parsedData = JSON.parse(functionCall.arguments);
+    console.log('Parsed receipt data:', JSON.stringify(parsedData, null, 2));
 
     return new Response(
       JSON.stringify(parsedData),
@@ -258,7 +270,7 @@ Return only valid JSON with no markdown formatting.`
   } catch (error) {
     console.error('Error in parse-receipt function:', error);
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
+      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error occurred' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
