@@ -23,6 +23,20 @@ const Upload = () => {
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
   const [previewFiles, setPreviewFiles] = useState<PreviewFile[]>([]);
 
+  // Sanitize filename to remove special characters that cause storage issues
+  const sanitizeFilename = (filename: string): string => {
+    return filename
+      .replace(/å/g, 'a')
+      .replace(/ä/g, 'a')
+      .replace(/ö/g, 'o')
+      .replace(/Å/g, 'A')
+      .replace(/Ä/g, 'A')
+      .replace(/Ö/g, 'O')
+      .replace(/\s+/g, '_')
+      .replace(/[^a-zA-Z0-9_.-]/g, '_')
+      .replace(/_{2,}/g, '_');
+  };
+
   useEffect(() => {
     pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
   }, []);
@@ -172,12 +186,18 @@ const Upload = () => {
           // Upload all pages for this receipt
           const imageUrls = await Promise.all(
             sortedFiles.map(async (file, pageIndex) => {
-              const fileName = `${session.user.id}/${Date.now()}_${baseFilename}_page${pageIndex}.jpg`;
+              const sanitizedFilename = sanitizeFilename(baseFilename);
+              const fileName = `${session.user.id}/${Date.now()}_${sanitizedFilename}_page${pageIndex}.jpg`;
+              
+              console.log(`Uploading: ${fileName}`);
               const { error: uploadError } = await supabase.storage
                 .from('receipts')
                 .upload(fileName, file.blob);
 
-              if (uploadError) throw uploadError;
+              if (uploadError) {
+                console.error('Storage upload error:', uploadError);
+                throw uploadError;
+              }
 
               const { data: { publicUrl } } = supabase.storage
                 .from('receipts')
@@ -233,6 +253,7 @@ const Upload = () => {
           successCount++;
         } catch (error) {
           errorCount++;
+          console.error('Upload error for', baseFilename, ':', error);
           toast.error(`Fel: ${baseFilename}`);
         }
       });
