@@ -332,6 +332,10 @@ export const ProductMerge = () => {
     return acc;
   }, {} as Record<string, Array<typeof mappings[number]>>);
 
+  // Debug log to check how many groups we have
+  console.log('Total mappings:', mappings?.length);
+  console.log('Grouped mappings:', Object.keys(groupedMappings || {}).length, 'groups');
+
   // Calculate spending stats for each group
   const groupStats = Object.entries(groupedMappings || {}).reduce((acc, [mappedName, items]) => {
     const originalNames = new Set((items as any[]).map(item => item.original_name));
