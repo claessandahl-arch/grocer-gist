@@ -160,6 +160,10 @@ const Upload = () => {
 
       console.log('Grouped files:', Object.keys(groupedBySource).map(k => `${k}: ${groupedBySource[k].length} pages`));
 
+      let successCount = 0;
+      let duplicateCount = 0;
+      let errorCount = 0;
+
       const uploadPromises = Object.entries(groupedBySource).map(async ([baseFilename, files]) => {
         try {
           // Sort files by page number to maintain correct order
@@ -189,6 +193,7 @@ const Upload = () => {
           });
 
           if (functionError || !parsedData) {
+            errorCount++;
             toast.error(`Misslyckades: ${baseFilename}`);
             return;
           }
@@ -203,7 +208,8 @@ const Upload = () => {
             .eq('total_amount', parsedData.total_amount);
 
           if (existingReceipts && existingReceipts.length > 0) {
-            toast.warning(`Duplikat: ${parsedData.store_name}`);
+            duplicateCount++;
+            toast.warning(`Duplikat: ${parsedData.store_name} ${parsedData.receipt_date}`);
             return;
           }
 
@@ -219,19 +225,33 @@ const Upload = () => {
           });
 
           if (insertError) {
+            errorCount++;
             toast.error(`Misslyckades spara: ${baseFilename}`);
             return;
           }
+
+          successCount++;
         } catch (error) {
+          errorCount++;
           toast.error(`Fel: ${baseFilename}`);
         }
       });
 
       await Promise.all(uploadPromises);
-      const receiptCount = Object.keys(groupedBySource).length;
-      setUploadedFiles(Object.keys(groupedBySource));
+      
       setPreviewFiles([]);
-      toast.success(`${receiptCount} kvitto${receiptCount > 1 ? 'n' : ''} uppladdade!`);
+      
+      // Show summary message
+      if (successCount > 0) {
+        toast.success(`${successCount} kvitto${successCount > 1 ? 'n' : ''} uppladdade!`);
+        setUploadedFiles(prev => [...prev, ...Object.keys(groupedBySource).slice(0, successCount)]);
+      }
+      if (duplicateCount > 0) {
+        toast.info(`${duplicateCount} duplikat hoppades över`);
+      }
+      if (errorCount > 0 && successCount === 0) {
+        toast.error(`${errorCount} kvitton misslyckades`);
+      }
     } catch (error) {
       console.error('Upload error:', error);
       toast.error("Något gick fel vid uppladdning");
