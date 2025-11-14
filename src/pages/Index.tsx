@@ -24,7 +24,7 @@ const Index = () => {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button 
               size="lg" 
-              onClick={() => navigate("/auth")}
+              onClick={() => navigate("/upload")}
               className="gap-2 shadow-soft"
             >
               Get Started
@@ -32,9 +32,9 @@ const Index = () => {
             <Button 
               size="lg" 
               variant="outline"
-              onClick={() => navigate("/dashboard")}
+              onClick={() => navigate("/")}
             >
-              View Demo Dashboard
+              View Dashboard
             </Button>
           </div>
         </div>
@@ -93,7 +93,7 @@ const Index = () => {
           <CardContent className="flex justify-center">
             <Button 
               size="lg" 
-              onClick={() => navigate("/auth")}
+              onClick={() => navigate("/upload")}
               className="gap-2"
             >
               Get Started Now
