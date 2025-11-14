@@ -11,6 +11,7 @@ import { ArrowLeft, Save, Trash2, RefreshCw } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProductMerge } from "@/components/dashboard/ProductMerge";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 interface Receipt {
   id: string;
@@ -237,6 +238,39 @@ export default function Training() {
     }
   };
 
+  const groupReceiptsByMonth = (receipts: Receipt[]) => {
+    const grouped: Record<string, Receipt[]> = {};
+    
+    receipts.forEach(receipt => {
+      const date = new Date(receipt.receipt_date);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      
+      if (!grouped[monthKey]) {
+        grouped[monthKey] = [];
+      }
+      grouped[monthKey].push(receipt);
+    });
+    
+    // Sort receipts within each month
+    Object.keys(grouped).forEach(key => {
+      grouped[key].sort((a, b) => 
+        new Date(b.receipt_date).getTime() - new Date(a.receipt_date).getTime()
+      );
+    });
+    
+    return grouped;
+  };
+
+  const formatMonthYear = (monthKey: string) => {
+    const [year, month] = monthKey.split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1);
+    return date.toLocaleDateString('sv-SE', { year: 'numeric', month: 'long' });
+  };
+
+  const calculateMonthTotal = (receipts: Receipt[]) => {
+    return receipts.reduce((sum, receipt) => sum + (receipt.total_amount || 0), 0);
+  };
+
   const deleteReceipt = async (receipt: Receipt) => {
     const { data: { user } } = await supabase.auth.getUser();
     
@@ -274,6 +308,9 @@ export default function Training() {
     }
   };
 
+  const groupedReceipts = groupReceiptsByMonth(receipts);
+  const sortedMonthKeys = Object.keys(groupedReceipts).sort((a, b) => b.localeCompare(a));
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 p-6">
       <div className="max-w-7xl mx-auto">
@@ -306,28 +343,56 @@ export default function Training() {
               ) : receipts.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No receipts found</p>
               ) : (
-                receipts.map((receipt) => (
-                  <div key={receipt.id} className="flex gap-2">
-                    <Button
-                      variant={selectedReceipt?.id === receipt.id ? "default" : "outline"}
-                      className="flex-1 justify-start"
-                      onClick={() => handleSelectReceipt(receipt)}
-                    >
-                      <div className="text-left">
-                        <div className="font-semibold">{receipt.store_name || 'Unknown Store'}</div>
-                        <div className="text-xs opacity-70">{receipt.receipt_date || 'No date'}</div>
-                      </div>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => deleteReceipt(receipt)}
-                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))
+                <Accordion type="multiple" defaultValue={[sortedMonthKeys[0]]} className="w-full">
+                  {sortedMonthKeys.map((monthKey) => {
+                    const monthReceipts = groupedReceipts[monthKey];
+                    const monthTotal = calculateMonthTotal(monthReceipts);
+                    
+                    return (
+                      <AccordionItem key={monthKey} value={monthKey}>
+                        <AccordionTrigger className="hover:no-underline">
+                          <div className="flex justify-between items-center w-full pr-4">
+                            <span className="font-semibold capitalize">
+                              {formatMonthYear(monthKey)}
+                            </span>
+                            <span className="text-sm text-muted-foreground">
+                              {monthReceipts.length} kvitton • {monthTotal.toFixed(2)} kr
+                            </span>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <div className="space-y-2 pt-2">
+                            {monthReceipts.map((receipt) => (
+                              <div key={receipt.id} className="flex gap-2">
+                                <Button
+                                  variant={selectedReceipt?.id === receipt.id ? "default" : "outline"}
+                                  className="flex-1 justify-start"
+                                  onClick={() => handleSelectReceipt(receipt)}
+                                >
+                                  <div className="text-left w-full">
+                                    <div className="font-semibold">{receipt.store_name || 'Unknown Store'}</div>
+                                    <div className="text-xs opacity-70 flex justify-between">
+                                      <span>{receipt.receipt_date || 'No date'}</span>
+                                      <span>{receipt.total_amount?.toFixed(2)} kr</span>
+                                    </div>
+                                  </div>
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => deleteReceipt(receipt)}
+                                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    );
+                  })}
+                </Accordion>
               )}
             </CardContent>
           </Card>
