@@ -218,16 +218,27 @@ const Upload = () => {
             return;
           }
 
-          // Check for duplicates
+          // Check for duplicates with fuzzy store name matching
+          // Normalize store names to handle variations like "ICA" vs "ICA Nära"
+          const normalizedStoreName = parsedData.store_name.toLowerCase().trim();
+          
           const { data: existingReceipts } = await supabase
             .from('receipts')
-            .select('id')
+            .select('id, store_name')
             .eq('user_id', session.user.id)
-            .eq('store_name', parsedData.store_name)
             .eq('receipt_date', parsedData.receipt_date)
             .eq('total_amount', parsedData.total_amount);
 
-          if (existingReceipts && existingReceipts.length > 0) {
+          // Check if any existing receipt has a similar store name
+          const isDuplicate = existingReceipts && existingReceipts.length > 0 && existingReceipts.some(receipt => {
+            const existingStoreName = receipt.store_name?.toLowerCase().trim() || '';
+            // Check if store names match or if one contains the other
+            return existingStoreName === normalizedStoreName ||
+                   existingStoreName.includes(normalizedStoreName) ||
+                   normalizedStoreName.includes(existingStoreName);
+          });
+
+          if (isDuplicate) {
             duplicateCount++;
             toast.warning(`Duplikat: ${parsedData.store_name} ${parsedData.receipt_date}`);
             return;
