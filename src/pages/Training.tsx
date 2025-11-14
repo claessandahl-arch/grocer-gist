@@ -12,6 +12,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProductMerge } from "@/components/dashboard/ProductMerge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface Receipt {
   id: string;
@@ -55,6 +65,8 @@ export default function Training() {
   const [correctionNotes, setCorrectionNotes] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [monthToDelete, setMonthToDelete] = useState<{ key: string; receipts: Receipt[] } | null>(null);
+  const [isDeletingMonth, setIsDeletingMonth] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -308,6 +320,64 @@ export default function Training() {
     }
   };
 
+  const deleteAllReceiptsForMonth = async (receipts: Receipt[]) => {
+    setIsDeletingMonth(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      toast.error('Du måste vara inloggad');
+      setIsDeletingMonth(false);
+      return;
+    }
+
+    let successCount = 0;
+    let failCount = 0;
+
+    // Delete each receipt
+    for (const receipt of receipts) {
+      // Delete from database
+      const { error: deleteError } = await supabase
+        .from('receipts')
+        .delete()
+        .eq('id', receipt.id)
+        .eq('user_id', user.id);
+
+      if (deleteError) {
+        console.error('Failed to delete receipt:', receipt.id, deleteError);
+        failCount++;
+        continue;
+      }
+
+      // Delete image from storage
+      if (receipt.image_url) {
+        const imagePath = receipt.image_url.split('/receipts/')[1];
+        if (imagePath) {
+          await supabase.storage.from('receipts').remove([imagePath]);
+        }
+      }
+
+      successCount++;
+    }
+
+    // Show results
+    if (successCount > 0) {
+      toast.success(`${successCount} kvitton borttagna`);
+    }
+    if (failCount > 0) {
+      toast.error(`${failCount} kvitton kunde inte tas bort`);
+    }
+
+    // Refresh and cleanup
+    fetchReceipts();
+    if (selectedReceipt && receipts.some(r => r.id === selectedReceipt.id)) {
+      setSelectedReceipt(null);
+      setEditedData(null);
+    }
+    
+    setMonthToDelete(null);
+    setIsDeletingMonth(false);
+  };
+
   const groupedReceipts = groupReceiptsByMonth(receipts);
   const sortedMonthKeys = Object.keys(groupedReceipts).sort((a, b) => b.localeCompare(a));
 
@@ -352,9 +422,23 @@ export default function Training() {
                       <AccordionItem key={monthKey} value={monthKey}>
                         <AccordionTrigger className="hover:no-underline">
                           <div className="flex justify-between items-center w-full pr-4">
-                            <span className="font-semibold capitalize">
-                              {formatMonthYear(monthKey)}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold capitalize">
+                                {formatMonthYear(monthKey)}
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setMonthToDelete({ key: monthKey, receipts: monthReceipts });
+                                }}
+                                className="text-destructive hover:text-destructive hover:bg-destructive/10 h-7 px-2"
+                              >
+                                <Trash2 className="h-4 w-4 mr-1" />
+                                Ta bort alla
+                              </Button>
+                            </div>
                             <span className="text-sm text-muted-foreground">
                               {monthReceipts.length} kvitton • {monthTotal.toFixed(2)} kr
                             </span>
@@ -587,6 +671,32 @@ export default function Training() {
             <ProductMerge />
           </TabsContent>
         </Tabs>
+
+        <AlertDialog open={!!monthToDelete} onOpenChange={() => setMonthToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Är du säker?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Detta kommer permanent ta bort alla {monthToDelete?.receipts.length} kvitton från{' '}
+                {monthToDelete && formatMonthYear(monthToDelete.key)}.
+                <br /><br />
+                Totalt belopp: {monthToDelete && calculateMonthTotal(monthToDelete.receipts).toFixed(2)} kr
+                <br /><br />
+                <strong>Denna åtgärd kan inte ångras.</strong>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeletingMonth}>Avbryt</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => monthToDelete && deleteAllReceiptsForMonth(monthToDelete.receipts)}
+                disabled={isDeletingMonth}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {isDeletingMonth ? 'Tar bort...' : 'Ta bort alla'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );
