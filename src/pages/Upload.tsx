@@ -12,6 +12,7 @@ interface PreviewFile {
   name: string;
   preview: string;
   blob: Blob;
+  pageNumber?: number;
 }
 
 const Upload = () => {
@@ -46,43 +47,52 @@ const Upload = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const convertPdfToJpg = async (file: File): Promise<{ blob: Blob; preview: string }> => {
+  const convertPdfToJpg = async (file: File): Promise<Array<{ blob: Blob; preview: string }>> => {
     console.log('Converting PDF to JPG...');
     
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    const page = await pdf.getPage(1);
+    const totalPages = pdf.numPages;
+    console.log(`PDF has ${totalPages} page(s)`);
     
-    const scale = 2.0;
-    const viewport = page.getViewport({ scale });
+    const results = [];
     
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    if (!context) throw new Error('Could not get canvas context');
-    
-    canvas.height = viewport.height;
-    canvas.width = viewport.width;
-    
-    await page.render({
-      canvasContext: context,
-      viewport: viewport,
-    } as any).promise;
-    
-    const blob = await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob(
-        (blob) => {
-          if (blob) resolve(blob);
-          else reject(new Error('Failed to convert canvas to blob'));
-        },
-        'image/jpeg',
-        0.95
-      );
-    });
+    for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+      console.log(`Converting page ${pageNum} of ${totalPages}...`);
+      const page = await pdf.getPage(pageNum);
+      
+      const scale = 2.0;
+      const viewport = page.getViewport({ scale });
+      
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Could not get canvas context');
+      
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+      
+      await page.render({
+        canvasContext: context,
+        viewport: viewport,
+      } as any).promise;
+      
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob(
+          (blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error('Failed to convert canvas to blob'));
+          },
+          'image/jpeg',
+          0.95
+        );
+      });
 
-    const preview = canvas.toDataURL('image/jpeg', 0.95);
-    console.log('PDF converted to JPG successfully');
+      const preview = canvas.toDataURL('image/jpeg', 0.95);
+      results.push({ blob, preview });
+    }
     
-    return { blob, preview };
+    console.log(`All ${totalPages} page(s) converted successfully`);
+    return results;
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -97,11 +107,14 @@ const Upload = () => {
         console.log('Processing file:', file.name, 'Type:', file.type);
         
         if (file.type === 'application/pdf') {
-          const { blob, preview } = await convertPdfToJpg(file);
-          newPreviews.push({
-            name: file.name,
-            preview,
-            blob
+          const pages = await convertPdfToJpg(file);
+          pages.forEach((pageData, index) => {
+            newPreviews.push({
+              name: `${file.name}${pages.length > 1 ? ` - Page ${index + 1}` : ''}`,
+              preview: pageData.preview,
+              blob: pageData.blob,
+              pageNumber: pages.length > 1 ? index + 1 : undefined
+            });
           });
         } else {
           const preview = URL.createObjectURL(file);
