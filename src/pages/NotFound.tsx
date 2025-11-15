@@ -1,5 +1,4 @@
 import { useLocation } from "react-router-dom";
-import { logger } from "@/lib/logger";
 import { useEffect } from "react";
 import { logger } from "@/lib/logger";
 
