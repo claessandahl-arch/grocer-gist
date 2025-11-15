@@ -605,7 +605,7 @@ export default function Training() {
                                 </SelectTrigger>
                                 <SelectContent>
                                   {categories.map((cat) => (
-                                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                    <SelectItem key={cat} value={cat}>{categoryNames[cat]}</SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
