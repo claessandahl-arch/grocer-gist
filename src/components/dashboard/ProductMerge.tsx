@@ -561,13 +561,16 @@ export const ProductMerge = React.memo(() => {
 
       // Update global mappings if any exist
       if (globalMappings.length > 0) {
-        const { error: globalError } = await supabase
+        const { data, error: globalError } = await supabase
           .from('global_product_mappings')
           .update({ mapped_name: newName })
-          .eq('mapped_name', oldName);
+          .eq('mapped_name', oldName)
+          .select();
 
         if (globalError) {
           errors.push(`Globala mappningar: ${globalError.message}`);
+        } else if (!data || data.length === 0) {
+          errors.push(`Globala mappningar: Ingen behörighet att uppdatera (RLS blockerade)`);
         } else {
           globalUpdateSuccess = true;
         }
@@ -612,20 +615,48 @@ export const ProductMerge = React.memo(() => {
       // Get all items in this group
       const groupItems = groupedMappings?.[mappedName] || [];
       const userMappings = groupItems.filter((item: any) => !item.isGlobal);
+      const globalMappings = groupItems.filter((item: any) => item.isGlobal);
       
-      if (userMappings.length === 0) {
-        toast.error("Kan inte uppdatera kategori för globala mappningar");
-        return;
+      const errors: string[] = [];
+      let userUpdateSuccess = false;
+      let globalUpdateSuccess = false;
+
+      // Update user mappings if any exist
+      if (userMappings.length > 0) {
+        const { error: userError } = await supabase
+          .from('product_mappings')
+          .update({ category: newCategory })
+          .eq('user_id', user.id)
+          .eq('mapped_name', mappedName);
+
+        if (userError) {
+          errors.push(`Användarmappningar: ${userError.message}`);
+        } else {
+          userUpdateSuccess = true;
+        }
       }
 
-      // Update category for all user mappings with this mapped_name
-      const { error } = await supabase
-        .from('product_mappings')
-        .update({ category: newCategory })
-        .eq('user_id', user.id)
-        .eq('mapped_name', mappedName);
+      // Update global mappings if any exist
+      if (globalMappings.length > 0) {
+        const { data, error: globalError } = await supabase
+          .from('global_product_mappings')
+          .update({ category: newCategory })
+          .eq('mapped_name', mappedName)
+          .select();
 
-      if (error) throw error;
+        if (globalError) {
+          errors.push(`Globala mappningar: ${globalError.message}`);
+        } else if (!data || data.length === 0) {
+          errors.push(`Globala mappningar: Ingen behörighet att uppdatera (RLS blockerade)`);
+        } else {
+          globalUpdateSuccess = true;
+        }
+      }
+
+      // If we had errors, throw them
+      if (errors.length > 0) {
+        throw new Error(errors.join('; '));
+      }
 
       await queryClient.invalidateQueries({ queryKey: ['product-mappings'] });
       
@@ -636,8 +667,16 @@ export const ProductMerge = React.memo(() => {
         return next;
       });
       
-      toast.success(`Kategori uppdaterad för ${mappedName}`);
-      logger.debug('Category updated:', { mappedName, newCategory });
+      // Show appropriate success message
+      if (userUpdateSuccess && globalUpdateSuccess) {
+        toast.success(`Kategori uppdaterad! (${userMappings.length} användar + ${globalMappings.length} globala)`);
+      } else if (userUpdateSuccess) {
+        toast.success(`Kategori uppdaterad för användar-mappningar! (${userMappings.length})`);
+      } else if (globalUpdateSuccess) {
+        toast.success(`Kategori uppdaterad för globala mappningar! (${globalMappings.length})`);
+      }
+      
+      logger.debug('Category updated:', { mappedName, newCategory, userCount: userMappings.length, globalCount: globalMappings.length });
     } catch (error) {
       toast.error("Kunde inte uppdatera kategori: " + (error as Error).message);
     }
