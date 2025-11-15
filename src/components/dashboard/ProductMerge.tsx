@@ -85,6 +85,9 @@ export const ProductMerge = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [groupMergeName, setGroupMergeName] = useState("");
+  const [editingSuggestion, setEditingSuggestion] = useState<Record<number, string>>({});
+  const [addToExisting, setAddToExisting] = useState<Record<number, string>>({});
+  const [editingMergeGroup, setEditingMergeGroup] = useState<Record<string, string>>({});
   const queryClient = useQueryClient();
 
   // Fetch all unique products from receipts
@@ -261,16 +264,19 @@ export const ProductMerge = () => {
     createMapping.mutate(selectedProducts);
   };
 
-  const handleAcceptSuggestion = async (suggestion: SuggestedMerge) => {
+  const handleAcceptSuggestion = async (suggestion: SuggestedMerge, idx: number) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
+      const finalName = editingSuggestion[idx] || suggestion.suggestedName;
+      const existingGroup = addToExisting[idx];
+
       const mappingsToCreate = suggestion.products.map(product => ({
         user_id: user.id,
         original_name: product,
-        mapped_name: suggestion.suggestedName,
-        category: null, // Will need to be set manually later
+        mapped_name: existingGroup || finalName,
+        category: null,
       }));
 
       const { error } = await supabase
@@ -279,10 +285,58 @@ export const ProductMerge = () => {
 
       if (error) throw error;
 
+      // Clear the editing states for this suggestion
+      setEditingSuggestion(prev => {
+        const next = { ...prev };
+        delete next[idx];
+        return next;
+      });
+      setAddToExisting(prev => {
+        const next = { ...prev };
+        delete next[idx];
+        return next;
+      });
+
       queryClient.invalidateQueries({ queryKey: ['product-mappings'] });
-      toast.success("Produkter sammanslagna!");
+      toast.success(existingGroup ? "Produkter tillagda till grupp!" : "Produkter sammanslagna!");
     } catch (error) {
       toast.error("Kunde inte slå ihop produkter: " + (error as Error).message);
+    }
+  };
+
+  const handleRenameMergeGroup = async (oldName: string, newName: string) => {
+    if (!newName.trim() || newName === oldName) {
+      setEditingMergeGroup(prev => {
+        const next = { ...prev };
+        delete next[oldName];
+        return next;
+      });
+      return;
+    }
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      // Update all mappings with this mapped_name (only user-specific ones)
+      const { error } = await supabase
+        .from('product_mappings')
+        .update({ mapped_name: newName })
+        .eq('user_id', user.id)
+        .eq('mapped_name', oldName);
+
+      if (error) throw error;
+
+      setEditingMergeGroup(prev => {
+        const next = { ...prev };
+        delete next[oldName];
+        return next;
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['product-mappings'] });
+      toast.success("Gruppnamn uppdaterat!");
+    } catch (error) {
+      toast.error("Kunde inte uppdatera gruppnamn: " + (error as Error).message);
     }
   };
 
@@ -383,38 +437,79 @@ export const ProductMerge = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {suggestedMerges.map((suggestion, idx) => (
-                <div key={idx} className="border rounded-lg p-4 space-y-3">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary">
-                          {Math.round(suggestion.score * 100)}% match
-                        </Badge>
-                        <span className="text-sm font-medium">
-                          {suggestion.products.length} produkter
-                        </span>
+              {suggestedMerges.map((suggestion, idx) => {
+                const isEditing = idx in editingSuggestion;
+                const currentName = editingSuggestion[idx] ?? suggestion.suggestedName;
+                const existingMergeGroup = addToExisting[idx];
+                
+                return (
+                  <div key={idx} className="border rounded-lg p-4 space-y-3">
+                    <div className="flex items-start gap-4">
+                      <div className="flex-1 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary">
+                            {Math.round(suggestion.score * 100)}% match
+                          </Badge>
+                          <span className="text-sm font-medium">
+                            {suggestion.products.length} produkter
+                          </span>
+                        </div>
+                        <div className="text-sm text-muted-foreground space-y-1">
+                          {suggestion.products.map((product, i) => (
+                            <div key={i}>• {product}</div>
+                          ))}
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor={`suggestion-name-${idx}`} className="text-sm font-medium">
+                            Produktnamn:
+                          </Label>
+                          <Input
+                            id={`suggestion-name-${idx}`}
+                            value={currentName}
+                            onChange={(e) => setEditingSuggestion(prev => ({ ...prev, [idx]: e.target.value }))}
+                            placeholder="Ange produktnamn"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor={`add-to-existing-${idx}`} className="text-sm font-medium">
+                            Lägg till i befintlig grupp (valfritt):
+                          </Label>
+                          <Select
+                            value={existingMergeGroup || "new"}
+                            onValueChange={(value) => setAddToExisting(prev => 
+                              value === "new" 
+                                ? { ...prev, [idx]: "" } 
+                                : { ...prev, [idx]: value }
+                            )}
+                          >
+                            <SelectTrigger id={`add-to-existing-${idx}`}>
+                              <SelectValue placeholder="Ny grupp" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="new">Skapa ny grupp</SelectItem>
+                              {Object.keys(groupedMappings || {}).map(groupName => (
+                                <SelectItem key={groupName} value={groupName}>
+                                  {groupName}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
-                      <div className="text-sm text-muted-foreground space-y-1">
-                        {suggestion.products.map((product, i) => (
-                          <div key={i}>• {product}</div>
-                        ))}
-                      </div>
-                      <div className="text-sm">
-                        <span className="font-medium">Föreslaget namn: </span>
-                        <span className="text-muted-foreground">{suggestion.suggestedName}</span>
-                      </div>
+                      
+                      <Button
+                        size="sm"
+                        onClick={() => handleAcceptSuggestion(suggestion, idx)}
+                        disabled={createMapping.isPending || (!currentName.trim() && !existingMergeGroup)}
+                      >
+                        {existingMergeGroup ? "Lägg till" : "Acceptera"}
+                      </Button>
                     </div>
-                    <Button
-                      size="sm"
-                      onClick={() => handleAcceptSuggestion(suggestion)}
-                      disabled={createMapping.isPending}
-                    >
-                      Acceptera
-                    </Button>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </CardContent>
         </Card>
@@ -535,6 +630,8 @@ export const ProductMerge = () => {
                 <div className="space-y-4">
                 {Object.entries(groupedMappings).map(([mappedName, items]: [string, any[]]) => {
                   const stats = groupStats[mappedName] || { totalSpending: 0, productCount: 0 };
+                  const isEditingThis = mappedName in editingMergeGroup;
+                  const hasUserMappings = items.some((item: any) => !item.isGlobal);
                   
                   return (
                     <div key={mappedName} className="border rounded-md p-4">
@@ -545,9 +642,66 @@ export const ProductMerge = () => {
                           onCheckedChange={() => handleGroupToggle(mappedName)}
                         />
                         <div className="flex-1">
-                          <label htmlFor={`group-${mappedName}`} className="font-medium cursor-pointer">
-                            {mappedName}
-                          </label>
+                          {isEditingThis ? (
+                            <div className="flex items-center gap-2 mb-2">
+                              <Input
+                                value={editingMergeGroup[mappedName]}
+                                onChange={(e) => setEditingMergeGroup(prev => ({ 
+                                  ...prev, 
+                                  [mappedName]: e.target.value 
+                                }))}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleRenameMergeGroup(mappedName, editingMergeGroup[mappedName]);
+                                  } else if (e.key === 'Escape') {
+                                    setEditingMergeGroup(prev => {
+                                      const next = { ...prev };
+                                      delete next[mappedName];
+                                      return next;
+                                    });
+                                  }
+                                }}
+                                className="flex-1"
+                                autoFocus
+                              />
+                              <Button
+                                size="sm"
+                                onClick={() => handleRenameMergeGroup(mappedName, editingMergeGroup[mappedName])}
+                              >
+                                Spara
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setEditingMergeGroup(prev => {
+                                  const next = { ...prev };
+                                  delete next[mappedName];
+                                  return next;
+                                })}
+                              >
+                                Avbryt
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <label htmlFor={`group-${mappedName}`} className="font-medium cursor-pointer">
+                                {mappedName}
+                              </label>
+                              {hasUserMappings && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => setEditingMergeGroup(prev => ({ 
+                                    ...prev, 
+                                    [mappedName]: mappedName 
+                                  }))}
+                                  className="h-6 px-2"
+                                >
+                                  Byt namn
+                                </Button>
+                              )}
+                            </div>
+                          )}
                           <div className="flex gap-4 text-sm text-muted-foreground mt-1">
                             <span>{items.length} {items.length === 1 ? 'variant' : 'varianter'}</span>
                             <span>•</span>
