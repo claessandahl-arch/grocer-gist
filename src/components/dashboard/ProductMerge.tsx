@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useTransition, useDeferredValue } from "react";
 import { ProductListItem } from "./ProductListItem";
 import { logger } from "@/lib/logger";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { categoryOptions, categoryNames } from "@/lib/categoryConstants";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useDebouncedCallback } from "use-debounce";
 
 // Calculate similarity score between two strings (0-1)
 const calculateSimilarity = (str1: string, str2: string): number => {
@@ -127,6 +128,10 @@ export const ProductMerge = React.memo(() => {
   const [selectedSuggestionCategory, setSelectedSuggestionCategory] = useState<Record<number, string>>({});
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [receiptLimit, setReceiptLimit] = useState(100); // Pagination limit
+
+  // Use transition for non-urgent updates to prevent blocking UI
+  const [isPending, startTransition] = useTransition();
+
   const queryClient = useQueryClient();
 
   // Fetch ignored suggestions from database
@@ -234,6 +239,9 @@ export const ProductMerge = React.memo(() => {
     return productList.filter(p => !mappedOriginalNames.has(p));
   }, [productList, mappings]);
 
+  // Defer expensive calculations to prevent blocking UI updates
+  const deferredUnmappedProducts = useDeferredValue(unmappedProducts);
+
   // Generate suggested merges based on similarity (memoized with cache - expensive!)
   const suggestedMerges = useMemo(() => {
     // Don't calculate suggestions until ignored list is loaded
@@ -242,7 +250,8 @@ export const ProductMerge = React.memo(() => {
     }
 
     // Limit similarity calculations for performance - only process first 100 unmapped products
-    const productsToProcess = unmappedProducts.slice(0, 100);
+    // Use deferred value to prevent blocking UI on state updates
+    const productsToProcess = deferredUnmappedProducts.slice(0, 100);
 
     const merges: SuggestedMerge[] = [];
     const processed = new Set<string>();
@@ -292,7 +301,7 @@ export const ProductMerge = React.memo(() => {
       const key = merge.products.sort().join('|');
       return !ignoredSuggestions.has(key);
     });
-  }, [unmappedProducts, ignoredSuggestions, ignoredSuggestionsLoading]);
+  }, [deferredUnmappedProducts, ignoredSuggestions, ignoredSuggestionsLoading]);
 
   // Create mapping mutation
   const createMapping = useMutation({
@@ -363,13 +372,43 @@ export const ProductMerge = React.memo(() => {
     },
   });
 
+  // Optimized checkbox toggle with transition to prevent blocking UI
   const handleProductToggle = useCallback((product: string) => {
-    setSelectedProducts(prev =>
-      prev.includes(product)
-        ? prev.filter(p => p !== product)
-        : [...prev, product]
-    );
-  }, []);
+    // Update selection state immediately for instant UI feedback
+    startTransition(() => {
+      setSelectedProducts(prev =>
+        prev.includes(product)
+          ? prev.filter(p => p !== product)
+          : [...prev, product]
+      );
+    });
+  }, [startTransition]);
+
+  // Optimized text input handlers using transitions to prevent blocking
+  const handleMergedNameChange = useCallback((value: string) => {
+    // Use transition to defer expensive re-calculations
+    startTransition(() => {
+      setMergedName(value);
+    });
+  }, [startTransition]);
+
+  const handleGroupMergeNameChange = useCallback((value: string) => {
+    startTransition(() => {
+      setGroupMergeName(value);
+    });
+  }, [startTransition]);
+
+  const handleEditingSuggestionChange = useCallback((idx: number, value: string) => {
+    startTransition(() => {
+      setEditingSuggestion(prev => ({ ...prev, [idx]: value }));
+    });
+  }, [startTransition]);
+
+  const handleEditingMergeGroupChange = useCallback((key: string, value: string) => {
+    startTransition(() => {
+      setEditingMergeGroup(prev => ({ ...prev, [key]: value }));
+    });
+  }, [startTransition]);
 
   const handleAddToExistingGroup = useCallback((product: string, mappedName: string, category: string) => {
     createMapping.mutate(
@@ -794,7 +833,7 @@ export const ProductMerge = React.memo(() => {
                           <Input
                             id={`suggestion-name-${idx}`}
                             value={currentName}
-                            onChange={(e) => setEditingSuggestion(prev => ({ ...prev, [idx]: e.target.value }))}
+                            onChange={(e) => handleEditingSuggestionChange(idx, e.target.value)}
                             placeholder="Ange produktnamn"
                           />
                         </div>
@@ -928,7 +967,7 @@ export const ProductMerge = React.memo(() => {
               id="merged-name"
               placeholder="T.ex. Coca-Cola"
               value={mergedName}
-              onChange={(e) => setMergedName(e.target.value)}
+              onChange={(e) => handleMergedNameChange(e.target.value)}
             />
           </div>
 
@@ -1023,13 +1062,7 @@ export const ProductMerge = React.memo(() => {
                             <div className="flex items-center gap-2 mb-2">
                               <Input
                                 value={editingMergeGroup[mappedName]}
-                                onChange={(e) => {
-                                  const value = e.target.value;
-                                  setEditingMergeGroup(prev => ({ 
-                                    ...prev, 
-                                    [mappedName]: value 
-                                  }));
-                                }}
+                                onChange={(e) => handleEditingMergeGroupChange(mappedName, e.target.value)}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') {
                                     e.preventDefault();
@@ -1284,7 +1317,7 @@ export const ProductMerge = React.memo(() => {
                     id="group-merge-name"
                     placeholder="T.ex. Coca-Cola"
                     value={groupMergeName}
-                    onChange={(e) => setGroupMergeName(e.target.value)}
+                    onChange={(e) => handleGroupMergeNameChange(e.target.value)}
                   />
                 </div>
 
