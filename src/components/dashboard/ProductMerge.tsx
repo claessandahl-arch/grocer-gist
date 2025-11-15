@@ -101,21 +101,38 @@ export const ProductMerge = () => {
     },
   });
 
-  // Fetch existing mappings
+  // Fetch existing mappings (both user-specific and global)
   const { data: mappings, isLoading: mappingsLoading } = useQuery({
     queryKey: ['product-mappings'],
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      const { data, error } = await supabase
+      // Fetch user-specific mappings
+      const { data: userMappings, error: userError } = await supabase
         .from('product_mappings')
         .select('*')
-        .eq('user_id', user.id)
-        .order('mapped_name');
-      
-      if (error) throw error;
-      return data;
+        .eq('user_id', user.id);
+
+      if (userError) throw userError;
+
+      // Fetch global mappings
+      const { data: globalMappings, error: globalError } = await supabase
+        .from('global_product_mappings')
+        .select('*');
+
+      if (globalError) throw globalError;
+
+      // Combine and mark global mappings
+      const combined = [
+        ...(userMappings || []).map(m => ({ ...m, isGlobal: false })),
+        ...(globalMappings || []).map(m => ({ ...m, isGlobal: true, user_id: null })),
+      ];
+
+      // Sort by mapped_name
+      combined.sort((a, b) => a.mapped_name.localeCompare(b.mapped_name));
+
+      return combined;
     },
   });
 
