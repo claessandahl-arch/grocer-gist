@@ -326,25 +326,72 @@ export const ProductMerge = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      // Update all mappings with this mapped_name (only user-specific ones)
-      const { error } = await supabase
-        .from('product_mappings')
-        .update({ mapped_name: newName })
-        .eq('user_id', user.id)
-        .eq('mapped_name', oldName);
+      // Get all items in this group to determine what needs updating
+      const groupItems = groupedMappings?.[oldName] || [];
+      const userMappings = groupItems.filter((item: any) => !item.isGlobal);
+      const globalMappings = groupItems.filter((item: any) => item.isGlobal);
 
-      if (error) throw error;
+      let userUpdateSuccess = false;
+      let globalUpdateSuccess = false;
+      let errors: string[] = [];
 
+      // Update user-specific mappings if any exist
+      if (userMappings.length > 0) {
+        const { error: userError } = await supabase
+          .from('product_mappings')
+          .update({ mapped_name: newName })
+          .eq('user_id', user.id)
+          .eq('mapped_name', oldName);
+
+        if (userError) {
+          errors.push(`Användar-mappningar: ${userError.message}`);
+        } else {
+          userUpdateSuccess = true;
+        }
+      }
+
+      // Update global mappings if any exist
+      if (globalMappings.length > 0) {
+        const { error: globalError } = await supabase
+          .from('global_product_mappings')
+          .update({ mapped_name: newName })
+          .eq('mapped_name', oldName);
+
+        if (globalError) {
+          errors.push(`Globala mappningar: ${globalError.message}`);
+        } else {
+          globalUpdateSuccess = true;
+        }
+      }
+
+      // If we had errors, throw them
+      if (errors.length > 0) {
+        throw new Error(errors.join('; '));
+      }
+
+      // Clear editing state
       setEditingMergeGroup(prev => {
         const next = { ...prev };
         delete next[oldName];
         return next;
       });
 
+      // Invalidate queries to refresh the UI
       queryClient.invalidateQueries({ queryKey: ['product-mappings'] });
-      toast.success("Gruppnamn uppdaterat!");
+
+      // Show appropriate success message
+      if (userUpdateSuccess && globalUpdateSuccess) {
+        toast.success(`Gruppnamn uppdaterat! (${userMappings.length} användar + ${globalMappings.length} globala)`);
+      } else if (userUpdateSuccess) {
+        toast.success(`Användar-gruppnamn uppdaterat! (${userMappings.length} mappningar)`);
+      } else if (globalUpdateSuccess) {
+        toast.success(`Globalt gruppnamn uppdaterat! (${globalMappings.length} mappningar)`);
+      }
+
+      logger.debug('Rename complete:', { oldName, newName, userCount: userMappings.length, globalCount: globalMappings.length });
     } catch (error) {
       toast.error("Kunde inte uppdatera gruppnamn: " + (error as Error).message);
+      logger.error('Rename failed:', error);
     }
   };
 
