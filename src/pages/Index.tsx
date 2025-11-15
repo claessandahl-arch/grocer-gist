@@ -32,7 +32,7 @@ const Index = () => {
             <Button 
               size="lg" 
               variant="outline"
-              onClick={() => navigate("/")}
+              onClick={() => navigate("/dashboard")}
             >
               View Dashboard
             </Button>

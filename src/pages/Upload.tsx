@@ -87,6 +87,7 @@ const Upload = () => {
       await page.render({
         canvasContext: context,
         viewport: viewport,
+        canvas: canvas
       }).promise;
       
       const blob = await new Promise<Blob>((resolve, reject) => {
