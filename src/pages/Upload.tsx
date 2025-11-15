@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Upload as UploadIcon, ArrowLeft, FileText, CheckCircle2, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import * as pdfjsLib from 'pdfjs-dist';
+import { logger } from "@/lib/logger";
 
 interface PreviewFile {
   name: string;
@@ -61,17 +62,17 @@ const Upload = () => {
   }, [navigate]);
 
   const convertPdfToJpg = async (file: File): Promise<Array<{ blob: Blob; preview: string }>> => {
-    console.log('Converting PDF to JPG...');
-    
+    logger.debug('Converting PDF to JPG...');
+
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     const totalPages = pdf.numPages;
-    console.log(`PDF has ${totalPages} page(s)`);
+    logger.debug(`PDF has ${totalPages} page(s)`);
     
     const results = [];
     
     for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-      console.log(`Converting page ${pageNum} of ${totalPages}...`);
+      logger.debug(`Converting page ${pageNum} of ${totalPages}...`);
       const page = await pdf.getPage(pageNum);
       
       const scale = 2.0;
@@ -104,7 +105,7 @@ const Upload = () => {
       results.push({ blob, preview });
     }
     
-    console.log(`All ${totalPages} page(s) converted successfully`);
+    logger.debug(`All ${totalPages} page(s) converted successfully`);
     return results;
   };
 
@@ -117,7 +118,7 @@ const Upload = () => {
 
     try {
       for (const file of Array.from(files)) {
-        console.log('Processing file:', file.name, 'Type:', file.type);
+        logger.debug('Processing file:', file.name, 'Type:', file.type);
         
         if (file.type === 'application/pdf') {
           const pages = await convertPdfToJpg(file);
@@ -148,7 +149,7 @@ const Upload = () => {
 
       setPreviewFiles(prev => [...prev, ...newPreviews]);
     } catch (error) {
-      console.error('Error processing file:', error);
+      logger.error('Error processing file:', error);
       toast.error("Misslyckades med att bearbeta filen");
     } finally {
       setConverting(false);
@@ -177,7 +178,7 @@ const Upload = () => {
         return acc;
       }, {} as Record<string, PreviewFile[]>);
 
-      console.log('Grouped files:', Object.keys(groupedBySource).map(k => `${k}: ${groupedBySource[k].length} pages`));
+      logger.debug('Grouped files:', Object.keys(groupedBySource).map(k => `${k}: ${groupedBySource[k].length} pages`));
 
       let successCount = 0;
       let duplicateCount = 0;
@@ -194,13 +195,13 @@ const Upload = () => {
               const sanitizedFilename = sanitizeFilename(baseFilename);
               const fileName = `${userId}/${Date.now()}_${sanitizedFilename}_page${pageIndex}.jpg`;
               
-              console.log(`Uploading: ${fileName}`);
+              logger.debug(`Uploading: ${fileName}`);
               const { error: uploadError } = await supabase.storage
                 .from('receipts')
                 .upload(fileName, file.blob);
 
               if (uploadError) {
-                console.error('Storage upload error:', uploadError);
+                logger.error('Storage upload error:', uploadError);
                 throw uploadError;
               }
 
@@ -269,7 +270,7 @@ const Upload = () => {
           successCount++;
         } catch (error) {
           errorCount++;
-          console.error('Upload error for', baseFilename, ':', error);
+          logger.error('Upload error for', baseFilename, ':', error);
           toast.error(`Fel: ${baseFilename}`);
         }
       });
@@ -290,7 +291,7 @@ const Upload = () => {
         toast.error(`${errorCount} kvitton misslyckades`);
       }
     } catch (error) {
-      console.error('Upload error:', error);
+      logger.error('Upload error:', error);
       toast.error("Något gick fel vid uppladdning");
     } finally {
       setUploading(false);

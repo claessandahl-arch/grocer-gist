@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { logger } from "@/lib/logger";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -320,8 +321,8 @@ export const ProductMerge = () => {
   }, {} as Record<string, Array<typeof mappings[number]>>);
 
   // Debug log to check how many groups we have
-  console.log('Total mappings:', mappings?.length);
-  console.log('Grouped mappings:', Object.keys(groupedMappings || {}).length, 'groups');
+  logger.debug('Total mappings:', mappings?.length);
+  logger.debug('Grouped mappings:', Object.keys(groupedMappings || {}).length, 'groups');
 
   // Calculate spending stats for each group
   const groupStats = Object.entries(groupedMappings || {}).reduce((acc, [mappedName, items]) => {
