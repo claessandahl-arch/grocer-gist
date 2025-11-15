@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { logger } from "@/lib/logger";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -143,52 +143,60 @@ export const ProductMerge = () => {
     },
   });
 
-  // Get unique product names from all receipts
-  const uniqueProducts = new Set<string>();
-  receipts?.forEach(receipt => {
-    const items = receipt.items as any[] || [];
-    items.forEach(item => {
-      if (item.name) uniqueProducts.add(item.name);
-    });
-  });
-  const productList = Array.from(uniqueProducts).sort();
-
-  // Filter out products that are already mapped
-  const mappedOriginalNames = new Set(mappings?.map(m => m.original_name) || []);
-  const unmappedProducts = productList.filter(p => !mappedOriginalNames.has(p));
-
-  // Generate suggested merges based on similarity
-  const suggestedMerges: SuggestedMerge[] = [];
-  const processed = new Set<string>();
-  
-  unmappedProducts.forEach((product, i) => {
-    if (processed.has(product)) return;
-    
-    const similar: string[] = [product];
-    
-    for (let j = i + 1; j < unmappedProducts.length; j++) {
-      const other = unmappedProducts[j];
-      if (processed.has(other)) continue;
-      
-      const similarity = calculateSimilarity(product, other);
-      
-      if (similarity >= 0.6) {
-        similar.push(other);
-        processed.add(other);
-      }
-    }
-    
-    if (similar.length > 1) {
-      processed.add(product);
-      // Use the shortest name as suggested name
-      const suggestedName = similar.reduce((a, b) => a.length <= b.length ? a : b);
-      suggestedMerges.push({
-        products: similar,
-        score: similar.length > 2 ? 0.9 : 0.7,
-        suggestedName,
+  // Get unique product names from all receipts (memoized)
+  const productList = useMemo(() => {
+    const uniqueProducts = new Set<string>();
+    receipts?.forEach(receipt => {
+      const items = receipt.items as any[] || [];
+      items.forEach(item => {
+        if (item.name) uniqueProducts.add(item.name);
       });
-    }
-  });
+    });
+    return Array.from(uniqueProducts).sort();
+  }, [receipts]);
+
+  // Filter out products that are already mapped (memoized)
+  const unmappedProducts = useMemo(() => {
+    const mappedOriginalNames = new Set(mappings?.map(m => m.original_name) || []);
+    return productList.filter(p => !mappedOriginalNames.has(p));
+  }, [productList, mappings]);
+
+  // Generate suggested merges based on similarity (memoized - expensive!)
+  const suggestedMerges = useMemo(() => {
+    const merges: SuggestedMerge[] = [];
+    const processed = new Set<string>();
+
+    unmappedProducts.forEach((product, i) => {
+      if (processed.has(product)) return;
+
+      const similar: string[] = [product];
+
+      for (let j = i + 1; j < unmappedProducts.length; j++) {
+        const other = unmappedProducts[j];
+        if (processed.has(other)) continue;
+
+        const similarity = calculateSimilarity(product, other);
+
+        if (similarity >= 0.6) {
+          similar.push(other);
+          processed.add(other);
+        }
+      }
+
+      if (similar.length > 1) {
+        processed.add(product);
+        // Use the shortest name as suggested name
+        const suggestedName = similar.reduce((a, b) => a.length <= b.length ? a : b);
+        merges.push({
+          products: similar,
+          score: similar.length > 2 ? 0.9 : 0.7,
+          suggestedName,
+        });
+      }
+    });
+
+    return merges;
+  }, [unmappedProducts]);
 
   // Create mapping mutation
   const createMapping = useMutation({
@@ -386,14 +394,16 @@ export const ProductMerge = () => {
     mergeGroups.mutate();
   };
 
-  // Group mappings by mapped_name with stats
-  const groupedMappings = mappings?.reduce((acc, mapping) => {
-    if (!acc[mapping.mapped_name]) {
-      acc[mapping.mapped_name] = [];
-    }
-    acc[mapping.mapped_name].push(mapping);
-    return acc;
-  }, {} as Record<string, Array<typeof mappings[number]>>);
+  // Group mappings by mapped_name with stats (memoized)
+  const groupedMappings = useMemo(() => {
+    return mappings?.reduce((acc, mapping) => {
+      if (!acc[mapping.mapped_name]) {
+        acc[mapping.mapped_name] = [];
+      }
+      acc[mapping.mapped_name].push(mapping);
+      return acc;
+    }, {} as Record<string, Array<typeof mappings[number]>>);
+  }, [mappings]);
 
   // Debug log to check how many groups we have
   logger.debug('Total mappings:', mappings?.length);
@@ -401,25 +411,27 @@ export const ProductMerge = () => {
   logger.debug('Global mappings:', mappings?.filter(m => m.isGlobal).length);
   logger.debug('Grouped mappings:', Object.keys(groupedMappings || {}).length, 'groups');
 
-  // Calculate spending stats for each group
-  const groupStats = Object.entries(groupedMappings || {}).reduce((acc, [mappedName, items]) => {
-    const originalNames = new Set((items as any[]).map(item => item.original_name));
-    let totalSpending = 0;
-    let productCount = 0;
+  // Calculate spending stats for each group (memoized - very expensive!)
+  const groupStats = useMemo(() => {
+    return Object.entries(groupedMappings || {}).reduce((acc, [mappedName, items]) => {
+      const originalNames = new Set((items as any[]).map(item => item.original_name));
+      let totalSpending = 0;
+      let productCount = 0;
 
-    receipts?.forEach(receipt => {
-      const receiptItems = receipt.items as any[] || [];
-      receiptItems.forEach(item => {
-        if (originalNames.has(item.name)) {
-          totalSpending += Number(item.price) || 0;
-          productCount++;
-        }
+      receipts?.forEach(receipt => {
+        const receiptItems = receipt.items as any[] || [];
+        receiptItems.forEach(item => {
+          if (originalNames.has(item.name)) {
+            totalSpending += Number(item.price) || 0;
+            productCount++;
+          }
+        });
       });
-    });
 
-    acc[mappedName] = { totalSpending, productCount };
-    return acc;
-  }, {} as Record<string, { totalSpending: number; productCount: number }>);
+      acc[mappedName] = { totalSpending, productCount };
+      return acc;
+    }, {} as Record<string, { totalSpending: number; productCount: number }>);
+  }, [groupedMappings, receipts]);
 
   return (
     <div className="space-y-6">
