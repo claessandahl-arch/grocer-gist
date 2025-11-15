@@ -23,29 +23,22 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { categories, categoryNames } from "@/lib/categoryConstants";
+import type { ReceiptItem, ParsedReceiptData } from "@/types/receipt";
 
 interface Receipt {
   id: string;
   store_name: string;
   total_amount: number;
   receipt_date: string;
-  items: any;
+  items: ReceiptItem[];
   image_url: string;
-}
-
-interface ReceiptItem {
-  name: string;
-  price: number;
-  quantity: number;
-  category: string;
-  discount?: number;
 }
 
 export default function Training() {
   const navigate = useNavigate();
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
-  const [editedData, setEditedData] = useState<any>(null);
+  const [editedData, setEditedData] = useState<ParsedReceiptData | null>(null);
   const [correctionNotes, setCorrectionNotes] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -96,13 +89,15 @@ export default function Training() {
     setCorrectionNotes("");
   };
 
-  const updateItem = (index: number, field: string, value: any) => {
+  const updateItem = (index: number, field: keyof ReceiptItem, value: string | number) => {
+    if (!editedData) return;
     const newItems = [...editedData.items];
     newItems[index] = { ...newItems[index], [field]: value };
     setEditedData({ ...editedData, items: newItems });
   };
 
   const addItem = () => {
+    if (!editedData) return;
     setEditedData({
       ...editedData,
       items: [...editedData.items, { name: '', price: 0, quantity: 1, category: 'other', discount: 0 }]
@@ -110,7 +105,8 @@ export default function Training() {
   };
 
   const removeItem = (index: number) => {
-    const newItems = editedData.items.filter((_: any, i: number) => i !== index);
+    if (!editedData) return;
+    const newItems = editedData.items.filter((_item, i) => i !== index);
     setEditedData({ ...editedData, items: newItems });
   };
 
@@ -179,7 +175,7 @@ export default function Training() {
     setEditedData(null);
   };
 
-  const updateStorePattern = async (storeName: string, data: any) => {
+  const updateStorePattern = async (storeName: string, data: ParsedReceiptData) => {
     // Fetch existing pattern or create new one
     const { data: existingPattern, error } = await supabase
       .from('store_patterns')
