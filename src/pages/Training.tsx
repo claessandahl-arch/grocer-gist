@@ -73,7 +73,10 @@ export default function Training() {
       toast.error('Failed to load receipts');
       console.error(error);
     } else {
-      setReceipts(data || []);
+      setReceipts((data || []).map(r => ({
+        ...r,
+        items: (r.items as unknown as ReceiptItem[]) || []
+      })));
     }
     setLoading(false);
   };
@@ -135,8 +138,8 @@ export default function Training() {
           total_amount: selectedReceipt.total_amount,
           receipt_date: selectedReceipt.receipt_date,
           items: selectedReceipt.items
-        },
-        corrected_data: editedData,
+        } as any,
+        corrected_data: editedData as any,
         correction_notes: correctionNotes
       });
 
@@ -154,7 +157,7 @@ export default function Training() {
         store_name: editedData.store_name,
         total_amount: editedData.total_amount,
         receipt_date: editedData.receipt_date,
-        items: editedData.items
+        items: editedData.items as any
       })
       .eq('id', selectedReceipt.id);
 
