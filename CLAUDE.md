@@ -13,9 +13,8 @@ This is a grocery receipt tracking application that uses AI to parse receipt ima
 1. **Never commit directly to `main`** - Always create a separate branch for changes
 2. **Create pull requests** - All changes must go through PR workflow
 3. **Never force push** - Avoid `git push --force` or `git push -f` at all times
-4. **Always create new branches for changes
-5. **Pull latest changes before staring to work
-6. **This repo is also used by Lovable.ai
+4. **Pull latest changes** - Always run `git pull` before starting work
+5. **Sync frequently** - Keep your local repository in sync with remote
 
 Example workflow:
 ```bash

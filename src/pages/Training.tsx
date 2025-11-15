@@ -23,6 +23,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { categories, categoryNames } from "@/lib/categoryConstants";
+import type { ReceiptItem, ParsedReceiptData } from "@/types/receipt";
 import { logger } from "@/lib/logger";
 
 interface Receipt {
@@ -30,23 +31,15 @@ interface Receipt {
   store_name: string;
   total_amount: number;
   receipt_date: string;
-  items: any;
+  items: ReceiptItem[];
   image_url: string;
-}
-
-interface ReceiptItem {
-  name: string;
-  price: number;
-  quantity: number;
-  category: string;
-  discount?: number;
 }
 
 export default function Training() {
   const navigate = useNavigate();
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
-  const [editedData, setEditedData] = useState<any>(null);
+  const [editedData, setEditedData] = useState<ParsedReceiptData | null>(null);
   const [correctionNotes, setCorrectionNotes] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -81,7 +74,10 @@ export default function Training() {
       toast.error('Failed to load receipts');
       logger.error(error);
     } else {
-      setReceipts(data || []);
+      setReceipts((data || []).map(r => ({
+        ...r,
+        items: (r.items as unknown as ReceiptItem[]) || []
+      })));
     }
     setLoading(false);
   };
@@ -97,13 +93,15 @@ export default function Training() {
     setCorrectionNotes("");
   };
 
-  const updateItem = (index: number, field: string, value: any) => {
+  const updateItem = (index: number, field: keyof ReceiptItem, value: string | number) => {
+    if (!editedData) return;
     const newItems = [...editedData.items];
     newItems[index] = { ...newItems[index], [field]: value };
     setEditedData({ ...editedData, items: newItems });
   };
 
   const addItem = () => {
+    if (!editedData) return;
     setEditedData({
       ...editedData,
       items: [...editedData.items, { name: '', price: 0, quantity: 1, category: 'other', discount: 0 }]
@@ -111,7 +109,8 @@ export default function Training() {
   };
 
   const removeItem = (index: number) => {
-    const newItems = editedData.items.filter((_: any, i: number) => i !== index);
+    if (!editedData) return;
+    const newItems = editedData.items.filter((_item, i) => i !== index);
     setEditedData({ ...editedData, items: newItems });
   };
 
@@ -140,8 +139,8 @@ export default function Training() {
           total_amount: selectedReceipt.total_amount,
           receipt_date: selectedReceipt.receipt_date,
           items: selectedReceipt.items
-        },
-        corrected_data: editedData,
+        } as any,
+        corrected_data: editedData as any,
         correction_notes: correctionNotes
       });
 
@@ -159,7 +158,7 @@ export default function Training() {
         store_name: editedData.store_name,
         total_amount: editedData.total_amount,
         receipt_date: editedData.receipt_date,
-        items: editedData.items
+        items: editedData.items as any
       })
       .eq('id', selectedReceipt.id);
 
@@ -180,7 +179,7 @@ export default function Training() {
     setEditedData(null);
   };
 
-  const updateStorePattern = async (storeName: string, data: any) => {
+  const updateStorePattern = async (storeName: string, data: ParsedReceiptData) => {
     // Fetch existing pattern or create new one
     const { data: existingPattern, error } = await supabase
       .from('store_patterns')
