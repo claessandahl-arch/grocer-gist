@@ -73,6 +73,37 @@ const levenshteinDistance = (str1: string, str2: string): number => {
   return matrix[str2.length][str1.length];
 };
 
+// Get categories for products from receipts
+const getProductCategories = (productNames: string[], receipts: any[] | undefined): { 
+  commonCategory: string | null; 
+  uniqueCategories: string[]; 
+} => {
+  if (!receipts) return { commonCategory: null, uniqueCategories: [] };
+  
+  const categories = new Set<string>();
+  
+  receipts.forEach(receipt => {
+    if (!receipt.items) return;
+    
+    receipt.items.forEach((item: any) => {
+      if (productNames.some(p => p.toLowerCase() === item.name?.toLowerCase())) {
+        if (item.category) {
+          categories.add(item.category);
+        }
+      }
+    });
+  });
+  
+  const uniqueCategories = Array.from(categories);
+  
+  // If all products have the same category, return it
+  if (uniqueCategories.length === 1) {
+    return { commonCategory: uniqueCategories[0], uniqueCategories };
+  }
+  
+  return { commonCategory: null, uniqueCategories };
+};
+
 type SuggestedMerge = {
   products: string[];
   score: number;
@@ -89,6 +120,7 @@ export const ProductMerge = () => {
   const [addToExisting, setAddToExisting] = useState<Record<number, string>>({});
   const [editingMergeGroup, setEditingMergeGroup] = useState<Record<string, string>>({});
   const [editingCategory, setEditingCategory] = useState<Record<string, string>>({});
+  const [selectedSuggestionCategory, setSelectedSuggestionCategory] = useState<Record<number, string>>({});
   const [ignoredSuggestions, setIgnoredSuggestions] = useState<Set<string>>(new Set());
   const queryClient = useQueryClient();
 
@@ -285,12 +317,16 @@ export const ProductMerge = () => {
 
       const finalName = editingSuggestion[idx] || suggestion.suggestedName;
       const existingGroup = addToExisting[idx];
+      
+      // Get category - use selected category if manually chosen, otherwise use common category
+      const { commonCategory } = getProductCategories(suggestion.products, receipts);
+      const finalCategory = selectedSuggestionCategory[idx] || commonCategory || null;
 
       const mappingsToCreate = suggestion.products.map(product => ({
         user_id: user.id,
         original_name: product,
         mapped_name: existingGroup || finalName,
-        category: null,
+        category: finalCategory,
       }));
 
       const { error } = await supabase
@@ -306,6 +342,11 @@ export const ProductMerge = () => {
         return next;
       });
       setAddToExisting(prev => {
+        const next = { ...prev };
+        delete next[idx];
+        return next;
+      });
+      setSelectedSuggestionCategory(prev => {
         const next = { ...prev };
         delete next[idx];
         return next;
@@ -551,18 +592,31 @@ export const ProductMerge = () => {
                 const isEditing = idx in editingSuggestion;
                 const currentName = editingSuggestion[idx] ?? suggestion.suggestedName;
                 const existingMergeGroup = addToExisting[idx];
+                const { commonCategory, uniqueCategories } = getProductCategories(suggestion.products, receipts);
+                const hasMixedCategories = uniqueCategories.length > 1;
+                const selectedCategory = selectedSuggestionCategory[idx];
                 
                 return (
                   <div key={idx} className="border rounded-lg p-4 space-y-3">
                     <div className="flex items-start gap-4">
                       <div className="flex-1 space-y-3">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <Badge variant="secondary">
                             {Math.round(suggestion.score * 100)}% match
                           </Badge>
                           <span className="text-sm font-medium">
                             {suggestion.products.length} produkter
                           </span>
+                          {commonCategory && (
+                            <Badge variant="default" className="bg-green-600">
+                              {categoryNames[commonCategory] || commonCategory}
+                            </Badge>
+                          )}
+                          {hasMixedCategories && (
+                            <Badge variant="outline" className="text-orange-600 border-orange-600">
+                              Blandade kategorier: {uniqueCategories.map(cat => categoryNames[cat] || cat).join(', ')}
+                            </Badge>
+                          )}
                         </div>
                         <div className="text-sm text-muted-foreground space-y-1">
                           {suggestion.products.map((product, i) => (
@@ -581,6 +635,29 @@ export const ProductMerge = () => {
                             placeholder="Ange produktnamn"
                           />
                         </div>
+
+                        {hasMixedCategories && (
+                          <div className="space-y-2">
+                            <Label htmlFor={`category-${idx}`} className="text-sm font-medium">
+                              Välj kategori: <span className="text-red-500">*</span>
+                            </Label>
+                            <Select
+                              value={selectedCategory || ""}
+                              onValueChange={(value) => setSelectedSuggestionCategory(prev => ({ ...prev, [idx]: value }))}
+                            >
+                              <SelectTrigger id={`category-${idx}`}>
+                                <SelectValue placeholder="Välj kategori" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {categoryOptions.map(option => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
 
                         <div className="space-y-2">
                           <Label htmlFor={`add-to-existing-${idx}`} className="text-sm font-medium">
@@ -613,7 +690,11 @@ export const ProductMerge = () => {
                         <Button
                           size="sm"
                           onClick={() => handleAcceptSuggestion(suggestion, idx)}
-                          disabled={createMapping.isPending || (!currentName.trim() && !existingMergeGroup)}
+                          disabled={
+                            createMapping.isPending || 
+                            (!currentName.trim() && !existingMergeGroup) ||
+                            (hasMixedCategories && !selectedCategory)
+                          }
                         >
                           {existingMergeGroup ? "Lägg till" : "Acceptera"}
                         </Button>
