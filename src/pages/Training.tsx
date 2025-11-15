@@ -22,6 +22,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { categories, categoryNames } from "@/lib/categoryConstants";
 
 interface Receipt {
   id: string;
@@ -39,23 +40,6 @@ interface ReceiptItem {
   category: string;
   discount?: number;
 }
-
-const categories = [
-  'frukt_och_gront',
-  'mejeri', 
-  'kott_fagel_chark',
-  'fisk_skaldjur',
-  'brod_bageri',
-  'skafferi',
-  'frysvaror',
-  'drycker',
-  'sotsaker_snacks',
-  'fardigmat',
-  'hushall_hygien',
-  'delikatess',
-  'pant',
-  'other'
-];
 
 export default function Training() {
   const navigate = useNavigate();
