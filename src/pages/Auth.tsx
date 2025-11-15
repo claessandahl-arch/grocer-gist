@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { logger } from "@/lib/logger";
 
 export default function Auth() {
   const [email, setEmail] = useState("");
@@ -56,7 +57,7 @@ export default function Auth() {
       }
     } catch (error) {
       toast.error("An unexpected error occurred");
-      console.error("Sign up error:", error);
+      logger.error("Sign up error:", error);
     } finally {
       setLoading(false);
     }
@@ -79,7 +80,7 @@ export default function Auth() {
       }
     } catch (error) {
       toast.error("An unexpected error occurred");
-      console.error("Sign in error:", error);
+      logger.error("Sign in error:", error);
     } finally {
       setLoading(false);
     }

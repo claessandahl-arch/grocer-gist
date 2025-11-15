@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { categories, categoryNames } from "@/lib/categoryConstants";
 import type { ReceiptItem, ParsedReceiptData } from "@/types/receipt";
+import { logger } from "@/lib/logger";
 
 interface Receipt {
   id: string;
@@ -71,7 +72,7 @@ export default function Training() {
 
     if (error) {
       toast.error('Failed to load receipts');
-      console.error(error);
+      logger.error(error);
     } else {
       setReceipts((data || []).map(r => ({
         ...r,
@@ -116,7 +117,7 @@ export default function Training() {
   const saveCorrection = async () => {
     if (!selectedReceipt || !editedData) return;
     
-    console.log('Saving correction with data:', editedData);
+    logger.debug('Saving correction with data:', editedData);
 
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
@@ -145,7 +146,7 @@ export default function Training() {
 
     if (correctionError) {
       toast.error('Failed to save correction');
-      console.error(correctionError);
+      logger.error(correctionError);
       setSaving(false);
       return;
     }
@@ -163,7 +164,7 @@ export default function Training() {
 
     if (updateError) {
       toast.error('Failed to update receipt');
-      console.error(updateError);
+      logger.error(updateError);
       setSaving(false);
       return;
     }
@@ -187,7 +188,7 @@ export default function Training() {
       .maybeSingle();
     
     if (error) {
-      console.error('Error fetching store pattern:', error);
+      logger.error('Error fetching store pattern:', error);
     }
 
     const patternData = {
@@ -199,7 +200,7 @@ export default function Training() {
     };
 
     if (existingPattern) {
-      console.log('Updating existing pattern for:', storeName);
+      logger.debug('Updating existing pattern for:', storeName);
       const { error: updateError } = await supabase
         .from('store_patterns')
         .update({
@@ -209,13 +210,13 @@ export default function Training() {
         .eq('store_name', storeName);
       
       if (updateError) {
-        console.error('Error updating store pattern:', updateError);
+        logger.error('Error updating store pattern:', updateError);
         toast.error('Kunde inte uppdatera inlärningsmönster');
       } else {
-        console.log('Store pattern updated successfully');
+        logger.debug('Store pattern updated successfully');
       }
     } else {
-      console.log('Creating new pattern for:', storeName);
+      logger.debug('Creating new pattern for:', storeName);
       const { error: insertError } = await supabase
         .from('store_patterns')
         .insert({
@@ -225,10 +226,10 @@ export default function Training() {
         });
       
       if (insertError) {
-        console.error('Error inserting store pattern:', insertError);
+        logger.error('Error inserting store pattern:', insertError);
         toast.error('Kunde inte spara inlärningsmönster');
       } else {
-        console.log('Store pattern created successfully');
+        logger.debug('Store pattern created successfully');
       }
     }
   };
@@ -283,7 +284,7 @@ export default function Training() {
 
     if (deleteError) {
       toast.error('Kunde inte ta bort kvittot');
-      console.error(deleteError);
+      logger.error(deleteError);
       return;
     }
 
@@ -326,7 +327,7 @@ export default function Training() {
         .eq('user_id', user.id);
 
       if (deleteError) {
-        console.error('Failed to delete receipt:', receipt.id, deleteError);
+        logger.error('Failed to delete receipt:', receipt.id, deleteError);
         failCount++;
         continue;
       }
