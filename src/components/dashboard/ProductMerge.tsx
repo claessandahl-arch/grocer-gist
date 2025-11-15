@@ -121,8 +121,34 @@ export const ProductMerge = () => {
   const [editingMergeGroup, setEditingMergeGroup] = useState<Record<string, string>>({});
   const [editingCategory, setEditingCategory] = useState<Record<string, string>>({});
   const [selectedSuggestionCategory, setSelectedSuggestionCategory] = useState<Record<number, string>>({});
-  const [ignoredSuggestions, setIgnoredSuggestions] = useState<Set<string>>(new Set());
   const queryClient = useQueryClient();
+
+  // Fetch ignored suggestions from database
+  const { data: ignoredSuggestionsData } = useQuery({
+    queryKey: ['ignored-merge-suggestions'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const { data, error } = await supabase
+        .from('ignored_merge_suggestions')
+        .select('products')
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Convert ignored suggestions to Set for fast lookup
+  const ignoredSuggestions = useMemo(() => {
+    const ignored = new Set<string>();
+    ignoredSuggestionsData?.forEach(item => {
+      const key = item.products.sort().join('|');
+      ignored.add(key);
+    });
+    return ignored;
+  }, [ignoredSuggestionsData]);
 
   // Fetch all unique products from receipts
   const { data: receipts } = useQuery({
@@ -359,10 +385,32 @@ export const ProductMerge = () => {
     }
   };
 
-  const handleIgnoreSuggestion = (suggestion: SuggestedMerge) => {
-    const key = suggestion.products.sort().join('|');
-    setIgnoredSuggestions(prev => new Set([...prev, key]));
-    logger.debug('Ignored suggestion:', { key, products: suggestion.products });
+  const handleIgnoreSuggestion = async (suggestion: SuggestedMerge) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const { error } = await supabase
+        .from('ignored_merge_suggestions')
+        .insert({
+          user_id: user.id,
+          products: suggestion.products.sort(),
+        });
+
+      if (error) {
+        // If already exists (UNIQUE constraint), just ignore silently
+        if (error.code === '23505') {
+          logger.debug('Suggestion already ignored:', { products: suggestion.products });
+          return;
+        }
+        throw error;
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['ignored-merge-suggestions'] });
+      logger.debug('Ignored suggestion:', { products: suggestion.products });
+    } catch (error) {
+      toast.error("Kunde inte ignorera förslag: " + (error as Error).message);
+    }
   };
 
   const handleRenameMergeGroup = async (oldName: string, newName: string) => {
