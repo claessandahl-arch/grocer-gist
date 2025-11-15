@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { categoryOptions } from "@/lib/categoryConstants";
+import { categoryOptions, categoryNames } from "@/lib/categoryConstants";
 
 // Calculate similarity score between two strings (0-1)
 const calculateSimilarity = (str1: string, str2: string): number => {
@@ -762,32 +762,39 @@ export const ProductMerge = () => {
                               </Button>
                             </div>
                           ) : (
-                            <div className="flex items-center gap-2">
-                              <label htmlFor={`group-${mappedName}`} className="font-medium cursor-pointer">
-                                {mappedName}
-                              </label>
-                              {hasUserMappings && (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => setEditingMergeGroup(prev => ({ 
-                                    ...prev, 
-                                    [mappedName]: mappedName 
-                                  }))}
-                                  className="h-6 px-2"
-                                >
-                                  Byt namn
-                                </Button>
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <label htmlFor={`group-${mappedName}`} className="font-medium cursor-pointer">
+                                  {mappedName}
+                                </label>
+                                {hasUserMappings && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => setEditingMergeGroup(prev => ({ 
+                                      ...prev, 
+                                      [mappedName]: mappedName 
+                                    }))}
+                                    className="h-6 px-2"
+                                  >
+                                    Byt namn
+                                  </Button>
+                                )}
+                              </div>
+                              {items[0]?.category && (
+                                <div className="text-sm text-muted-foreground">
+                                  {categoryNames[items[0].category] || items[0].category}
+                                </div>
                               )}
+                              <div className="flex gap-4 text-sm text-muted-foreground">
+                                <span>{items.length} {items.length === 1 ? 'variant' : 'varianter'}</span>
+                                <span>•</span>
+                                <span>{stats.productCount} köp</span>
+                                <span>•</span>
+                                <span className="font-medium">{stats.totalSpending.toFixed(0)} kr totalt</span>
+                              </div>
                             </div>
                           )}
-                          <div className="flex gap-4 text-sm text-muted-foreground mt-1">
-                            <span>{items.length} {items.length === 1 ? 'variant' : 'varianter'}</span>
-                            <span>•</span>
-                            <span>{stats.productCount} köp</span>
-                            <span>•</span>
-                            <span className="font-medium">{stats.totalSpending.toFixed(0)} kr totalt</span>
-                          </div>
                         </div>
                       </div>
                     <Table>
