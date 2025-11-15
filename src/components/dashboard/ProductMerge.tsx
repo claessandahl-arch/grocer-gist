@@ -121,7 +121,11 @@ export const ProductMerge = () => {
         .from('global_product_mappings')
         .select('*');
 
-      if (globalError) throw globalError;
+      // Log if there's an error fetching global mappings (might not exist yet)
+      if (globalError) {
+        logger.error('Error fetching global mappings:', globalError);
+        // Don't throw - global mappings table might not exist yet
+      }
 
       // Combine and mark global mappings
       const combined = [
@@ -339,6 +343,8 @@ export const ProductMerge = () => {
 
   // Debug log to check how many groups we have
   logger.debug('Total mappings:', mappings?.length);
+  logger.debug('User mappings:', mappings?.filter(m => !m.isGlobal).length);
+  logger.debug('Global mappings:', mappings?.filter(m => m.isGlobal).length);
   logger.debug('Grouped mappings:', Object.keys(groupedMappings || {}).length, 'groups');
 
   // Calculate spending stats for each group
@@ -497,6 +503,23 @@ export const ProductMerge = () => {
           </Button>
         </CardContent>
       </Card>
+
+      {/* Show message if no mappings exist */}
+      {!mappingsLoading && (!mappings || mappings.length === 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Aktiva sammanslagningar</CardTitle>
+            <CardDescription>
+              Inga sammanslagningar ännu
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground text-center py-8">
+              Du har inte slagit ihop några produkter ännu. Använd formuläret ovan för att börja slå ihop liknande produkter.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Show existing mappings with merge option */}
       {!mappingsLoading && groupedMappings && Object.keys(groupedMappings).length > 0 && (
