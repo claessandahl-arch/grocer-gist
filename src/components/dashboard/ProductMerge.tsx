@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useCallback, useTransition, useDeferredValue } from "react";
-import * as ReactWindow from "react-window";
 import { ProductListItem } from "./ProductListItem";
 import { logger } from "@/lib/logger";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -113,27 +112,6 @@ type SuggestedMerge = {
   score: number;
   suggestedName: string;
 };
-
-// Virtualized row component for product list (renders only visible items)
-const VirtualProductRow = React.memo(({ index, style, data }: any) => {
-  const { products, selectedProducts, handleProductToggle, handleAddToExistingGroup, groupedMappings, isPending } = data;
-  const product = products[index];
-
-  return (
-    <div style={style} className="px-4">
-      <ProductListItem
-        product={product}
-        isSelected={selectedProducts.includes(product)}
-        onToggle={handleProductToggle}
-        onAddToGroup={handleAddToExistingGroup}
-        groupedMappings={groupedMappings}
-        isPending={isPending}
-      />
-    </div>
-  );
-});
-
-VirtualProductRow.displayName = "VirtualProductRow";
 
 export const ProductMerge = React.memo(() => {
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
@@ -721,16 +699,6 @@ export const ProductMerge = React.memo(() => {
     }, {} as Record<string, Array<typeof mappings[number]>>);
   }, [mappings]);
 
-  // Memoize virtual list data to prevent unnecessary re-renders
-  const virtualListData = useMemo(() => ({
-    products: unmappedProducts,
-    selectedProducts,
-    handleProductToggle,
-    handleAddToExistingGroup,
-    groupedMappings,
-    isPending: createMapping.isPending
-  }), [unmappedProducts, selectedProducts, handleProductToggle, handleAddToExistingGroup, groupedMappings, createMapping.isPending]);
-
   // Debug log to check how many groups we have (only in development)
   if (import.meta.env.DEV) {
     logger.debug('Total mappings:', mappings?.length);
@@ -959,21 +927,23 @@ export const ProductMerge = React.memo(() => {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <label className="text-sm font-medium">Välj produkter att slå ihop:</label>
-            <div className="border rounded-md">
+            <div className="max-h-64 overflow-y-auto border rounded-md p-4 space-y-2">
               {unmappedProducts.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">
                   Alla produkter är redan sammanslagna
                 </p>
               ) : (
-                <ReactWindow.FixedSizeList
-                  height={400}
-                  itemCount={unmappedProducts.length}
-                  itemSize={48}
-                  width="100%"
-                  itemData={virtualListData}
-                >
-                  {VirtualProductRow}
-                </ReactWindow.FixedSizeList>
+                unmappedProducts.map(product => (
+                  <ProductListItem
+                    key={product}
+                    product={product}
+                    isSelected={selectedProducts.includes(product)}
+                    onToggle={handleProductToggle}
+                    onAddToGroup={handleAddToExistingGroup}
+                    groupedMappings={groupedMappings}
+                    isPending={createMapping.isPending}
+                  />
+                ))
               )}
             </div>
           </div>
