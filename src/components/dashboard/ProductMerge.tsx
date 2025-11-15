@@ -115,6 +115,8 @@ export const ProductMerge = () => {
   const [mergedName, setMergedName] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
+  const [selectedUnmappedProducts, setSelectedUnmappedProducts] = useState<string[]>([]);
+  const [addToExistingGroup, setAddToExistingGroup] = useState<string>("");
   const [groupMergeName, setGroupMergeName] = useState("");
   const [editingSuggestion, setEditingSuggestion] = useState<Record<number, string>>({});
   const [addToExisting, setAddToExisting] = useState<Record<number, string>>({});
