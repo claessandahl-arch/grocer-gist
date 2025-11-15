@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { logger } from "@/lib/logger";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -140,6 +140,8 @@ export const ProductMerge = () => {
       if (error) throw error;
       return data || [];
     },
+    staleTime: 60 * 1000, // 1 minute
+    refetchOnWindowFocus: false,
   });
 
   // Convert ignored suggestions to Set for fast lookup
@@ -164,6 +166,8 @@ export const ProductMerge = () => {
       if (error) throw error;
       return data;
     },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    refetchOnWindowFocus: false,
   });
 
   // Fetch existing mappings (both user-specific and global)
@@ -203,6 +207,8 @@ export const ProductMerge = () => {
 
       return combined;
     },
+    staleTime: 30 * 1000, // 30 seconds
+    refetchOnWindowFocus: false,
   });
 
   // Get unique product names from all receipts (memoized)
@@ -333,13 +339,13 @@ export const ProductMerge = () => {
     },
   });
 
-  const handleProductToggle = (product: string) => {
+  const handleProductToggle = useCallback((product: string) => {
     setSelectedProducts(prev =>
       prev.includes(product)
         ? prev.filter(p => p !== product)
         : [...prev, product]
     );
-  };
+  }, []);
 
   const handleMerge = () => {
     if (selectedProducts.length < 2) {
@@ -582,13 +588,13 @@ export const ProductMerge = () => {
     },
   });
 
-  const handleGroupToggle = (groupName: string) => {
+  const handleGroupToggle = useCallback((groupName: string) => {
     setSelectedGroups(prev =>
       prev.includes(groupName)
         ? prev.filter(g => g !== groupName)
         : [...prev, groupName]
     );
-  };
+  }, []);
 
   const handleMergeGroups = () => {
     if (selectedGroups.length < 2) {
@@ -613,15 +619,25 @@ export const ProductMerge = () => {
     }, {} as Record<string, Array<typeof mappings[number]>>);
   }, [mappings]);
 
-  // Debug log to check how many groups we have
-  logger.debug('Total mappings:', mappings?.length);
-  logger.debug('User mappings:', mappings?.filter(m => !m.isGlobal).length);
-  logger.debug('Global mappings:', mappings?.filter(m => m.isGlobal).length);
-  logger.debug('Grouped mappings:', Object.keys(groupedMappings || {}).length, 'groups');
+  // Debug log to check how many groups we have (only in development)
+  if (import.meta.env.DEV) {
+    logger.debug('Total mappings:', mappings?.length);
+    logger.debug('User mappings:', mappings?.filter(m => !m.isGlobal).length);
+    logger.debug('Global mappings:', mappings?.filter(m => m.isGlobal).length);
+    logger.debug('Grouped mappings:', Object.keys(groupedMappings || {}).length, 'groups');
+  }
 
-  // Calculate spending stats for each group (memoized - very expensive!)
+  // Calculate spending stats and category info for each group (memoized - very expensive!)
   const groupStats = useMemo(() => {
-    return Object.entries(groupedMappings || {}).reduce((acc, [mappedName, items]) => {
+    const stats: Record<string, { 
+      totalSpending: number; 
+      productCount: number;
+      commonCategory: string | null;
+      uniqueCategories: string[];
+      hasMixedCategories: boolean;
+    }> = {};
+    
+    Object.entries(groupedMappings || {}).forEach(([mappedName, items]) => {
       const originalNames = new Set((items as any[]).map(item => item.original_name));
       let totalSpending = 0;
       let productCount = 0;
@@ -636,9 +652,20 @@ export const ProductMerge = () => {
         });
       });
 
-      acc[mappedName] = { totalSpending, productCount };
-      return acc;
-    }, {} as Record<string, { totalSpending: number; productCount: number }>);
+      // Calculate categories once for each group
+      const originalNamesArray = Array.from(originalNames);
+      const { commonCategory, uniqueCategories } = getProductCategories(originalNamesArray, receipts);
+
+      stats[mappedName] = { 
+        totalSpending, 
+        productCount,
+        commonCategory,
+        uniqueCategories,
+        hasMixedCategories: uniqueCategories.length > 1
+      };
+    });
+    
+    return stats;
   }, [groupedMappings, receipts]);
 
   return (
@@ -940,17 +967,22 @@ export const ProductMerge = () => {
             <CardContent>
                 <div className="space-y-4">
                 {Object.entries(groupedMappings).map(([mappedName, items]: [string, any[]]) => {
-                  const stats = groupStats[mappedName] || { totalSpending: 0, productCount: 0 };
+                  // Use pre-calculated stats including category info
+                  const stats = groupStats[mappedName] || { 
+                    totalSpending: 0, 
+                    productCount: 0,
+                    commonCategory: null,
+                    uniqueCategories: [],
+                    hasMixedCategories: false
+                  };
                   const isEditingThis = mappedName in editingMergeGroup;
                   const hasUserMappings = items.some((item: any) => !item.isGlobal);
-                  
-                  // Get categories from receipts for the original product names
-                  const originalNames = items.map((item: any) => item.original_name);
-                  const { commonCategory, uniqueCategories } = getProductCategories(originalNames, receipts);
-                  const hasMixedCategories = uniqueCategories.length > 1;
                   const savedCategory = items[0]?.category;
                   
-                  // Determine category status
+                  // Determine category status using pre-calculated values
+                  const commonCategory = stats.commonCategory;
+                  const uniqueCategories = stats.uniqueCategories;
+                  const hasMixedCategories = stats.hasMixedCategories;
                   const categoryMatch = savedCategory === commonCategory;
                   const hasCommonCategory = commonCategory !== null;
                   
@@ -967,14 +999,19 @@ export const ProductMerge = () => {
                             <div className="flex items-center gap-2 mb-2">
                               <Input
                                 value={editingMergeGroup[mappedName]}
-                                onChange={(e) => setEditingMergeGroup(prev => ({ 
-                                  ...prev, 
-                                  [mappedName]: e.target.value 
-                                }))}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+                                  setEditingMergeGroup(prev => ({ 
+                                    ...prev, 
+                                    [mappedName]: value 
+                                  }));
+                                }}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') {
+                                    e.preventDefault();
                                     handleRenameMergeGroup(mappedName, editingMergeGroup[mappedName]);
                                   } else if (e.key === 'Escape') {
+                                    e.preventDefault();
                                     setEditingMergeGroup(prev => {
                                       const next = { ...prev };
                                       delete next[mappedName];
