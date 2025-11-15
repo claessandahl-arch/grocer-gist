@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback } from "react";
+import { ProductListItem } from "./ProductListItem";
 import { logger } from "@/lib/logger";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -110,7 +111,7 @@ type SuggestedMerge = {
   suggestedName: string;
 };
 
-export const ProductMerge = () => {
+export const ProductMerge = React.memo(() => {
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [mergedName, setMergedName] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("");
@@ -346,6 +347,23 @@ export const ProductMerge = () => {
         : [...prev, product]
     );
   }, []);
+
+  const handleAddToExistingGroup = useCallback((product: string, mappedName: string, category: string) => {
+    createMapping.mutate(
+      {
+        original_name: product,
+        mapped_name: mappedName,
+        category: category,
+        user_id: null,
+      },
+      {
+        onSuccess: () => {
+          toast.success(`"${product}" har lagts till i gruppen "${mappedName}"`);
+          setSelectedProducts(prev => prev.filter(p => p !== product));
+        },
+      }
+    );
+  }, [createMapping]);
 
   const handleMerge = () => {
     if (selectedProducts.length < 2) {
@@ -828,58 +846,15 @@ export const ProductMerge = () => {
                 </p>
               ) : (
                 unmappedProducts.map(product => (
-                  <div key={product} className="flex items-center justify-between gap-2 py-1">
-                    <div className="flex items-center space-x-2 flex-1 min-w-0">
-                      <Checkbox
-                        id={product}
-                        checked={selectedProducts.includes(product)}
-                        onCheckedChange={() => handleProductToggle(product)}
-                      />
-                      <label htmlFor={product} className="text-sm cursor-pointer truncate">
-                        {product}
-                      </label>
-                    </div>
-                    
-                    {groupedMappings && Object.keys(groupedMappings).length > 0 && (
-                      <Select 
-                        value="" 
-                        onValueChange={(value) => {
-                          const targetGroup = groupedMappings[value];
-                          if (targetGroup && targetGroup.length > 0) {
-                            const mappedName = value;
-                            const category = targetGroup[0].category || "";
-                            
-                            createMapping.mutate(
-                              {
-                                original_name: product,
-                                mapped_name: mappedName,
-                                category: category,
-                                user_id: null,
-                              },
-                              {
-                                onSuccess: () => {
-                                  toast.success(`"${product}" har lagts till i gruppen "${mappedName}"`);
-                                  // Remove from selected products if it was selected
-                                  setSelectedProducts(prev => prev.filter(p => p !== product));
-                                },
-                              }
-                            );
-                          }
-                        }}
-                      >
-                        <SelectTrigger className="w-[180px] h-8 text-xs">
-                          <SelectValue placeholder="Lägg till i grupp..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.keys(groupedMappings).sort().map(groupName => (
-                            <SelectItem key={groupName} value={groupName}>
-                              {groupName}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </div>
+                  <ProductListItem
+                    key={product}
+                    product={product}
+                    isSelected={selectedProducts.includes(product)}
+                    onToggle={handleProductToggle}
+                    onAddToGroup={handleAddToExistingGroup}
+                    groupedMappings={groupedMappings}
+                    isPending={createMapping.isPending}
+                  />
                 ))
               )}
             </div>
@@ -1262,4 +1237,4 @@ export const ProductMerge = () => {
       )}
     </div>
   );
-};
+});
