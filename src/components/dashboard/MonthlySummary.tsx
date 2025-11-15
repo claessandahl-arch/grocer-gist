@@ -10,9 +10,13 @@ export const MonthlySummary = () => {
   const { data: receipts, isLoading } = useQuery({
     queryKey: ['receipts'],
     queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      
       const { data, error } = await supabase
         .from('receipts')
         .select('*')
+        .eq('user_id', user.id)
         .order('receipt_date', { ascending: false });
       
       if (error) throw error;
