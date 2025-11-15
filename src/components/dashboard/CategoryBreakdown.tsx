@@ -25,20 +25,41 @@ export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) =
     },
   });
 
-  // Fetch manual product mappings
+  // Fetch both user and global product mappings
   const { data: productMappings } = useQuery({
-    queryKey: ['product-mappings'],
+    queryKey: ['product-mappings', 'with-global'],
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return [];
-
-      const { data, error } = await supabase
+      
+      // Fetch user mappings
+      const { data: userMappings, error: userError } = await supabase
         .from('product_mappings')
         .select('*')
-        .eq('user_id', user.id);
+        .eq('user_id', user?.id || '');
       
-      if (error) throw error;
-      return data;
+      if (userError) throw userError;
+      
+      // Fetch global mappings
+      const { data: globalMappings, error: globalError } = await supabase
+        .from('global_product_mappings')
+        .select('*');
+      
+      if (globalError) throw globalError;
+      
+      // Combine both - user mappings take precedence
+      const userMappingNames = new Set((userMappings || []).map(m => m.original_name));
+      const combined = [
+        ...(userMappings || []),
+        ...(globalMappings || [])
+          .filter(gm => !userMappingNames.has(gm.original_name))
+          .map(gm => ({
+            ...gm,
+            user_id: null,
+            isGlobal: true
+          }))
+      ];
+      
+      return combined;
     },
   });
 
