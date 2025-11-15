@@ -6,8 +6,8 @@ interface ProductListItemProps {
   product: string;
   isSelected: boolean;
   onToggle: (product: string) => void;
-  onAddToGroup: (product: string, mappedName: string, category: string) => void;
-  groupedMappings: Record<string, any[]> | undefined;
+  onAddToGroup: (product: string, mappedName: string) => void;
+  groupNames: string[];
   isPending: boolean;
 }
 
@@ -16,7 +16,7 @@ export const ProductListItem = React.memo(({
   isSelected, 
   onToggle, 
   onAddToGroup, 
-  groupedMappings,
+  groupNames,
   isPending 
 }: ProductListItemProps) => {
   const handleCheckedChange = React.useCallback(() => {
@@ -24,12 +24,8 @@ export const ProductListItem = React.memo(({
   }, [onToggle, product]);
 
   const handleValueChange = React.useCallback((value: string) => {
-    const targetGroup = groupedMappings?.[value];
-    if (targetGroup && targetGroup.length > 0) {
-      const category = targetGroup[0].category || "";
-      onAddToGroup(product, value, category);
-    }
-  }, [groupedMappings, onAddToGroup, product]);
+    onAddToGroup(product, value);
+  }, [onAddToGroup, product]);
 
   return (
     <div className="flex items-center justify-between gap-2 py-1">
@@ -44,7 +40,7 @@ export const ProductListItem = React.memo(({
         </label>
       </div>
       
-      {groupedMappings && Object.keys(groupedMappings).length > 0 && (
+      {groupNames.length > 0 && (
         <Select 
           value="" 
           onValueChange={handleValueChange}
@@ -54,9 +50,9 @@ export const ProductListItem = React.memo(({
             <SelectValue placeholder="Lägg till i grupp..." />
           </SelectTrigger>
           <SelectContent>
-            {Object.entries(groupedMappings).map(([mappedName]) => (
-              <SelectItem key={mappedName} value={mappedName} className="text-xs">
-                {mappedName}
+            {groupNames.map((groupName) => (
+              <SelectItem key={groupName} value={groupName} className="text-xs">
+                {groupName}
               </SelectItem>
             ))}
           </SelectContent>

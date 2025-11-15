@@ -327,11 +327,24 @@ export const ProductMerge = React.memo(() => {
         }));
       } else {
         // Single mapping for adding to existing group
+        // Get category from existing mappings if not provided
+        let finalCategory = params.category;
+        if (!finalCategory) {
+          const { data: existingMappings } = await supabase
+            .from('product_mappings')
+            .select('category')
+            .eq('mapped_name', params.mapped_name)
+            .eq('user_id', user.id)
+            .limit(1);
+          
+          finalCategory = existingMappings?.[0]?.category || null;
+        }
+        
         mappingsToCreate = [{
           user_id: user.id,
           original_name: params.original_name,
           mapped_name: params.mapped_name,
-          category: params.category || null,
+          category: finalCategory,
         }];
       }
 
@@ -372,50 +385,38 @@ export const ProductMerge = React.memo(() => {
     },
   });
 
-  // Optimized checkbox toggle with transition to prevent blocking UI
+  // Optimized checkbox toggle - instant UI update with stable callback
   const handleProductToggle = useCallback((product: string) => {
-    // Update selection state immediately for instant UI feedback
-    startTransition(() => {
-      setSelectedProducts(prev =>
-        prev.includes(product)
-          ? prev.filter(p => p !== product)
-          : [...prev, product]
-      );
-    });
-  }, [startTransition]);
+    setSelectedProducts(prev =>
+      prev.includes(product)
+        ? prev.filter(p => p !== product)
+        : [...prev, product]
+    );
+  }, []);
 
-  // Optimized text input handlers using transitions to prevent blocking
-  const handleMergedNameChange = useCallback((value: string) => {
-    // Use transition to defer expensive re-calculations
-    startTransition(() => {
-      setMergedName(value);
-    });
-  }, [startTransition]);
+  // Debounced text input handlers to prevent excessive re-renders
+  const handleMergedNameChange = useDebouncedCallback((value: string) => {
+    setMergedName(value);
+  }, 150);
 
-  const handleGroupMergeNameChange = useCallback((value: string) => {
-    startTransition(() => {
-      setGroupMergeName(value);
-    });
-  }, [startTransition]);
+  const handleGroupMergeNameChange = useDebouncedCallback((value: string) => {
+    setGroupMergeName(value);
+  }, 150);
 
-  const handleEditingSuggestionChange = useCallback((idx: number, value: string) => {
-    startTransition(() => {
-      setEditingSuggestion(prev => ({ ...prev, [idx]: value }));
-    });
-  }, [startTransition]);
+  const handleEditingSuggestionChange = useDebouncedCallback((idx: number, value: string) => {
+    setEditingSuggestion(prev => ({ ...prev, [idx]: value }));
+  }, 200);
 
-  const handleEditingMergeGroupChange = useCallback((key: string, value: string) => {
-    startTransition(() => {
-      setEditingMergeGroup(prev => ({ ...prev, [key]: value }));
-    });
-  }, [startTransition]);
+  const handleEditingMergeGroupChange = useDebouncedCallback((key: string, value: string) => {
+    setEditingMergeGroup(prev => ({ ...prev, [key]: value }));
+  }, 200);
 
-  const handleAddToExistingGroup = useCallback((product: string, mappedName: string, category: string) => {
+  const handleAddToExistingGroup = useCallback((product: string, mappedName: string) => {
     createMapping.mutate(
       {
         original_name: product,
         mapped_name: mappedName,
-        category: category,
+        category: "", // Will be set from groupedMappings in the mutation
         user_id: null,
       },
       {
@@ -425,7 +426,7 @@ export const ProductMerge = React.memo(() => {
         },
       }
     );
-  }, [createMapping]);
+  }, []); // Stable callback
 
   const handleMerge = () => {
     if (selectedProducts.length < 2) {
@@ -699,6 +700,9 @@ export const ProductMerge = React.memo(() => {
     }, {} as Record<string, Array<typeof mappings[number]>>);
   }, [mappings]);
 
+  // Optimized: Pass only group names to ProductListItem instead of entire groupedMappings object
+  const groupNames = useMemo(() => Object.keys(groupedMappings || {}), [groupedMappings]);
+
   // Debug log to check how many groups we have (only in development)
   if (import.meta.env.DEV) {
     logger.debug('Total mappings:', mappings?.length);
@@ -940,7 +944,7 @@ export const ProductMerge = React.memo(() => {
                     isSelected={selectedProducts.includes(product)}
                     onToggle={handleProductToggle}
                     onAddToGroup={handleAddToExistingGroup}
-                    groupedMappings={groupedMappings}
+                    groupNames={groupNames}
                     isPending={createMapping.isPending}
                   />
                 ))
