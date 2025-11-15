@@ -128,6 +128,29 @@ interface ReceiptItem {
 - Matching `receipt_date` and `total_amount`
 - Fuzzy matching store names (handles variations like "ICA" vs "ICA Nära")
 
+## Database Migrations
+
+Location: `supabase/migrations/`
+
+This project uses Supabase migrations to manage database schema changes. Migrations are automatically applied when:
+- Deploying through Lovable.ai
+- Using Supabase CLI with `supabase db push` or `supabase db reset`
+
+### Recent Migrations
+
+**20251115000000_seed_global_product_mappings.sql**
+- Seeds the `global_product_mappings` table with 115+ common Swedish grocery products
+- Provides baseline product name standardization for all users
+- Includes products across all categories with realistic usage counts
+- This addresses the empty state issue where users couldn't see merged products
+
+To manually apply this migration to your Supabase project:
+1. Install Supabase CLI: `npm install -g supabase`
+2. Link to your project: `supabase link --project-ref mbxrezbotqxttjemwvqk`
+3. Apply migrations: `supabase db push`
+
+Alternatively, you can run the SQL directly in the Supabase Dashboard SQL Editor.
+
 ## Supabase Edge Functions
 
 Location: `supabase/functions/parse-receipt/`
