@@ -8,12 +8,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Trash2, Plus, Sparkles } from "lucide-react";
+import { Trash2, Plus, Sparkles, ChevronDown, ChevronRight } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { categoryOptions, categoryNames } from "@/lib/categoryConstants";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 // Calculate similarity score between two strings (0-1)
 const calculateSimilarity = (str1: string, str2: string): number => {
@@ -124,6 +125,7 @@ export const ProductMerge = React.memo(() => {
   const [editingMergeGroup, setEditingMergeGroup] = useState<Record<string, string>>({});
   const [editingCategory, setEditingCategory] = useState<Record<string, string>>({});
   const [selectedSuggestionCategory, setSelectedSuggestionCategory] = useState<Record<number, string>>({});
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const queryClient = useQueryClient();
 
   // Fetch ignored suggestions from database
@@ -985,8 +987,8 @@ export const ProductMerge = React.memo(() => {
                                   if (e.key === 'Enter') {
                                     e.preventDefault();
                                     handleRenameMergeGroup(mappedName, editingMergeGroup[mappedName]);
-                                  } else if (e.key === 'Escape') {
-                                    e.preventDefault();
+                                  }
+                                  if (e.key === 'Escape') {
                                     setEditingMergeGroup(prev => {
                                       const next = { ...prev };
                                       delete next[mappedName];
@@ -995,11 +997,13 @@ export const ProductMerge = React.memo(() => {
                                   }
                                 }}
                                 className="flex-1"
+                                placeholder="Nytt namn för gruppen"
                                 autoFocus
                               />
                               <Button
                                 size="sm"
                                 onClick={() => handleRenameMergeGroup(mappedName, editingMergeGroup[mappedName])}
+                                disabled={!editingMergeGroup[mappedName]?.trim()}
                               >
                                 Spara
                               </Button>
@@ -1016,11 +1020,9 @@ export const ProductMerge = React.memo(() => {
                               </Button>
                             </div>
                           ) : (
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-2">
-                                <label htmlFor={`group-${mappedName}`} className="font-medium cursor-pointer">
-                                  {mappedName}
-                                </label>
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <h4 className="font-medium text-base">{mappedName}</h4>
                                 {hasUserMappings && (
                                   <Button
                                     size="sm"
@@ -1029,7 +1031,7 @@ export const ProductMerge = React.memo(() => {
                                       ...prev, 
                                       [mappedName]: mappedName 
                                     }))}
-                                    className="h-6 px-2"
+                                    className="h-7 text-xs"
                                   >
                                     Byt namn
                                   </Button>
@@ -1107,13 +1109,13 @@ export const ProductMerge = React.memo(() => {
                                       [mappedName]: value 
                                     }))}
                                   >
-                                    <SelectTrigger className="h-8 text-sm">
+                                    <SelectTrigger className="w-[200px]">
                                       <SelectValue placeholder="Välj kategori" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                      {categoryOptions.map(cat => (
-                                        <SelectItem key={cat.value} value={cat.value}>
-                                          {cat.label}
+                                      {categoryOptions.map(({ value, label }) => (
+                                        <SelectItem key={value} value={value}>
+                                          {label}
                                         </SelectItem>
                                       ))}
                                     </SelectContent>
@@ -1149,7 +1151,22 @@ export const ProductMerge = React.memo(() => {
                           )}
                         </div>
                       </div>
-                    <Table>
+                    <Collapsible
+                      open={expandedGroups[mappedName] ?? false}
+                      onOpenChange={(open) => setExpandedGroups(prev => ({ ...prev, [mappedName]: open }))}
+                    >
+                      <CollapsibleTrigger asChild>
+                        <Button variant="ghost" size="sm" className="w-full justify-start gap-2 mt-2">
+                          {expandedGroups[mappedName] ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                          {expandedGroups[mappedName] ? 'Dölj' : 'Visa'} produkter
+                        </Button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <Table className="mt-2">
                       <TableHeader>
                         <TableRow>
                           <TableHead>Originalnamn</TableHead>
@@ -1184,6 +1201,8 @@ export const ProductMerge = React.memo(() => {
                         ))}
                       </TableBody>
                     </Table>
+                      </CollapsibleContent>
+                    </Collapsible>
                   </div>
                 );
                 })}
