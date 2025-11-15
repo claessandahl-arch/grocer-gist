@@ -16,7 +16,7 @@ interface PreviewFile {
 
 const Upload = () => {
   const navigate = useNavigate();
-  const DEFAULT_USER_ID = 'c7498548-9f65-4540-96ab-0068afb6d5fc';
+  const [userId, setUserId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [converting, setConverting] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
@@ -39,6 +39,26 @@ const Upload = () => {
   useEffect(() => {
     pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
   }, []);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        navigate('/auth');
+        return;
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        navigate('/auth');
+        return;
+      }
+
+      setUserId(user.id);
+    };
+
+    checkAuth();
+  }, [navigate]);
 
   const convertPdfToJpg = async (file: File): Promise<Array<{ blob: Blob; preview: string }>> => {
     console.log('Converting PDF to JPG...');
@@ -138,6 +158,12 @@ const Upload = () => {
   const handleUpload = async () => {
     if (previewFiles.length === 0) return;
 
+    if (!userId) {
+      toast.error("You must be logged in to upload receipts");
+      navigate('/auth');
+      return;
+    }
+
     setUploading(true);
 
     try {
@@ -166,7 +192,7 @@ const Upload = () => {
           const imageUrls = await Promise.all(
             sortedFiles.map(async (file, pageIndex) => {
               const sanitizedFilename = sanitizeFilename(baseFilename);
-              const fileName = `${DEFAULT_USER_ID}/${Date.now()}_${sanitizedFilename}_page${pageIndex}.jpg`;
+              const fileName = `${userId}/${Date.now()}_${sanitizedFilename}_page${pageIndex}.jpg`;
               
               console.log(`Uploading: ${fileName}`);
               const { error: uploadError } = await supabase.storage
@@ -204,7 +230,7 @@ const Upload = () => {
           const { data: existingReceipts } = await supabase
             .from('receipts')
             .select('id, store_name')
-            .eq('user_id', DEFAULT_USER_ID)
+            .eq('user_id', userId)
             .eq('receipt_date', parsedData.receipt_date)
             .eq('total_amount', parsedData.total_amount);
 
@@ -225,7 +251,7 @@ const Upload = () => {
 
           // Insert one receipt with multiple image URLs
           const { error: insertError } = await supabase.from('receipts').insert({
-            user_id: DEFAULT_USER_ID,
+            user_id: userId,
             image_url: imageUrls[0],
             image_urls: imageUrls,
             store_name: parsedData.store_name,
@@ -311,14 +337,14 @@ const Upload = () => {
                     PNG, JPG, or PDF (MAX. 10MB)
                   </p>
                 </div>
-                <input 
-                  id="file-upload" 
-                  type="file" 
-                  className="hidden" 
-                  multiple 
+                <input
+                  id="file-upload"
+                  type="file"
+                  className="hidden"
+                  multiple
                   accept="image/png,image/jpeg,image/jpg,application/pdf"
                   onChange={handleFileSelect}
-                  disabled={converting || uploading}
+                  disabled={converting || uploading || !userId}
                 />
               </label>
 
@@ -358,10 +384,10 @@ const Upload = () => {
                     </div>
                   ))}
                 </div>
-                <Button 
-                  onClick={handleUpload} 
+                <Button
+                  onClick={handleUpload}
                   className="w-full"
-                  disabled={uploading}
+                  disabled={uploading || !userId}
                 >
                   {uploading ? (
                     <>
