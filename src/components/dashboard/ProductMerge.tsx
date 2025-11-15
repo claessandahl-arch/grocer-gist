@@ -1027,20 +1027,37 @@ export const ProductMerge = React.memo(() => {
                           ) : (
                             <div className="space-y-2">
                               <div className="flex items-center justify-between">
-                                <h4 className="font-medium text-base">{mappedName}</h4>
-                                {hasUserMappings && (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => setEditingMergeGroup(prev => ({ 
-                                      ...prev, 
-                                      [mappedName]: mappedName 
-                                    }))}
-                                    className="h-7 text-xs"
-                                  >
-                                    Byt namn
-                                  </Button>
-                                )}
+                                <div className="flex items-center gap-2">
+                                  <h4 className="font-medium text-base">{mappedName}</h4>
+                                  {/* Group type badge */}
+                                  {items.every((item: any) => item.isGlobal) && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      Global
+                                    </Badge>
+                                  )}
+                                  {items.every((item: any) => !item.isGlobal) && (
+                                    <Badge variant="outline" className="text-xs">
+                                      Personlig
+                                    </Badge>
+                                  )}
+                                  {items.some((item: any) => item.isGlobal) && items.some((item: any) => !item.isGlobal) && (
+                                    <Badge variant="default" className="text-xs">
+                                      Mixad
+                                    </Badge>
+                                  )}
+                                </div>
+                                {/* Edit button now shown for ALL groups */}
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => setEditingMergeGroup(prev => ({
+                                    ...prev,
+                                    [mappedName]: mappedName
+                                  }))}
+                                  className="h-7 text-xs"
+                                >
+                                  Byt namn
+                                </Button>
                               </div>
                               <div className="flex items-center gap-2 flex-wrap">
                                 {savedCategory ? (
