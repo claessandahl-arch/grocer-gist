@@ -12,9 +12,10 @@ This is a grocery receipt tracking application that uses AI to parse receipt ima
 
 1. **Never commit directly to `main`** - Always create a separate branch for changes
 2. **Create pull requests** - All changes must go through PR workflow
-3. **Never force push** - Avoid `git push --force` or `git push -f` at all times
-4. **Pull latest changes** - Always run `git pull` before starting work
-5. **Sync frequently** - Keep your local repository in sync with remote
+3. **DO NOT auto-merge PRs** - Create the PR and STOP. Let the user review and merge manually
+4. **Never force push** - Avoid `git push --force` or `git push -f` at all times
+5. **Pull latest changes** - Always run `git pull` before starting work
+6. **Sync frequently** - Keep your local repository in sync with remote
 
 Example workflow:
 ```bash
@@ -30,6 +31,9 @@ git push -u origin feature/your-feature-name
 
 # Use gh CLI to create PR
 gh pr create --title "Your PR title" --body "Description"
+
+# STOP HERE - Do NOT run 'gh pr merge'
+# Let the user review and merge the PR manually
 ```
 
 ## Development Commands
