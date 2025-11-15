@@ -833,6 +833,16 @@ export const ProductMerge = () => {
                   const isEditingThis = mappedName in editingMergeGroup;
                   const hasUserMappings = items.some((item: any) => !item.isGlobal);
                   
+                  // Get categories from receipts for the original product names
+                  const originalNames = items.map((item: any) => item.original_name);
+                  const { commonCategory, uniqueCategories } = getProductCategories(originalNames, receipts);
+                  const hasMixedCategories = uniqueCategories.length > 1;
+                  const savedCategory = items[0]?.category;
+                  
+                  // Determine category status
+                  const categoryMatch = savedCategory === commonCategory;
+                  const hasCommonCategory = commonCategory !== null;
+                  
                   return (
                     <div key={mappedName} className="border rounded-md p-4">
                       <div className="flex items-start gap-3 mb-2">
@@ -902,19 +912,30 @@ export const ProductMerge = () => {
                                   </Button>
                                 )}
                               </div>
-                              <div className="flex items-center gap-2">
-                                {items[0]?.category ? (
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {savedCategory ? (
                                   <>
-                                    <div className="text-sm text-muted-foreground">
-                                      {categoryNames[items[0].category] || items[0].category}
-                                    </div>
+                                    <Badge variant={hasCommonCategory && categoryMatch ? "default" : "secondary"} 
+                                      className={hasCommonCategory && categoryMatch ? "bg-green-600" : ""}>
+                                      {categoryNames[savedCategory] || savedCategory}
+                                    </Badge>
+                                    {hasCommonCategory && !categoryMatch && (
+                                      <Badge variant="outline" className="text-orange-600 border-orange-600">
+                                        Produkter i kvitton: {categoryNames[commonCategory] || commonCategory}
+                                      </Badge>
+                                    )}
+                                    {hasMixedCategories && (
+                                      <Badge variant="outline" className="text-orange-600 border-orange-600">
+                                        Blandade kategorier: {uniqueCategories.map(cat => categoryNames[cat] || cat).join(', ')}
+                                      </Badge>
+                                    )}
                                     {hasUserMappings && (
                                       <Button
                                         size="sm"
                                         variant="ghost"
                                         onClick={() => setEditingCategory(prev => ({ 
                                           ...prev, 
-                                          [mappedName]: items[0].category || '' 
+                                          [mappedName]: savedCategory || '' 
                                         }))}
                                         className="h-6 px-2 text-xs"
                                       >
@@ -922,22 +943,36 @@ export const ProductMerge = () => {
                                       </Button>
                                     )}
                                   </>
-                                ) : hasUserMappings ? (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => setEditingCategory(prev => ({ 
-                                      ...prev, 
-                                      [mappedName]: '' 
-                                    }))}
-                                    className="h-7 text-xs"
-                                  >
-                                    + Lägg till kategori
-                                  </Button>
                                 ) : (
-                                  <div className="text-sm text-muted-foreground italic">
-                                    Ingen kategori
-                                  </div>
+                                  <>
+                                    {hasCommonCategory && (
+                                      <Badge variant="outline" className="text-blue-600 border-blue-600">
+                                        Förslag: {categoryNames[commonCategory] || commonCategory}
+                                      </Badge>
+                                    )}
+                                    {hasMixedCategories && (
+                                      <Badge variant="outline" className="text-orange-600 border-orange-600">
+                                        Blandade kategorier: {uniqueCategories.map(cat => categoryNames[cat] || cat).join(', ')}
+                                      </Badge>
+                                    )}
+                                    {hasUserMappings ? (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => setEditingCategory(prev => ({ 
+                                          ...prev, 
+                                          [mappedName]: commonCategory || '' 
+                                        }))}
+                                        className="h-7 text-xs"
+                                      >
+                                        + Lägg till kategori
+                                      </Button>
+                                    ) : (
+                                      <div className="text-sm text-muted-foreground italic">
+                                        Ingen kategori
+                                      </div>
+                                    )}
+                                  </>
                                 )}
                               </div>
                               {editingCategory[mappedName] !== undefined && (
