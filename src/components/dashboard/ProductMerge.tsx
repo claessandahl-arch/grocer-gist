@@ -11,20 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-
-const categoryOptions = [
-  { value: 'frukt_gront', label: 'Frukt och grönt' },
-  { value: 'mejeri', label: 'Mejeri' },
-  { value: 'kott_fagel_chark', label: 'Kött, fågel, chark' },
-  { value: 'brod_bageri', label: 'Bröd och bageri' },
-  { value: 'drycker', label: 'Drycker' },
-  { value: 'sotsaker_snacks', label: 'Sötsaker och snacks' },
-  { value: 'fardigmat', label: 'Färdigmat' },
-  { value: 'hushall_hygien', label: 'Hushåll och hygien' },
-  { value: 'delikatess', label: 'Delikatess' },
-  { value: 'pant', label: 'Pant' },
-  { value: 'other', label: 'Övrigt' },
-];
+import { categoryOptions } from "@/lib/categoryConstants";
 
 // Calculate similarity score between two strings (0-1)
 const calculateSimilarity = (str1: string, str2: string): number => {

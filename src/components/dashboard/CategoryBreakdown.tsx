@@ -7,20 +7,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-
-const categoryNames: Record<string, string> = {
-  frukt_gront: 'Frukt och grönt',
-  mejeri: 'Mejeri',
-  kott_fagel_chark: 'Kött, fågel, chark',
-  brod_bageri: 'Bröd och bageri',
-  drycker: 'Drycker',
-  sotsaker_snacks: 'Sötsaker och snacks',
-  fardigmat: 'Färdigmat',
-  hushall_hygien: 'Hushåll och hygien',
-  delikatess: 'Delikatess',
-  pant: 'Pant',
-  other: 'Övrigt',
-};
+import { categoryNames } from "@/lib/categoryConstants";
 
 export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) => {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);

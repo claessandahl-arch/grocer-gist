@@ -4,20 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { startOfMonth, endOfMonth, subMonths, format } from "date-fns";
 import { sv } from "date-fns/locale";
-
-const categoryNames: Record<string, string> = {
-  frukt_gront: 'Frukt och grönt',
-  mejeri: 'Mejeri',
-  kott_fagel_chark: 'Kött, fågel, chark',
-  brod_bageri: 'Bröd och bageri',
-  drycker: 'Drycker',
-  sotsaker_snacks: 'Sötsaker och snacks',
-  fardigmat: 'Färdigmat',
-  hushall_hygien: 'Hushåll och hygien',
-  delikatess: 'Delikatess',
-  pant: 'Pant',
-  other: 'Övrigt',
-};
+import { categoryNames } from "@/lib/categoryConstants";
 
 export const MonthlySummary = () => {
   const { data: receipts, isLoading } = useQuery({
