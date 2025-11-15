@@ -266,16 +266,35 @@ export const ProductMerge = () => {
 
   // Create mapping mutation
   const createMapping = useMutation({
-    mutationFn: async (products: string[]) => {
+    mutationFn: async (params: { 
+      original_name: string; 
+      mapped_name: string; 
+      category: string; 
+      user_id: string | null; 
+    } | string[]) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      const mappingsToCreate = products.map(product => ({
-        user_id: user.id,
-        original_name: product,
-        mapped_name: mergedName,
-        category: selectedCategory || null,
-      }));
+      // Handle both array of products and single mapping object
+      let mappingsToCreate;
+      
+      if (Array.isArray(params)) {
+        // Original behavior for batch create
+        mappingsToCreate = params.map(product => ({
+          user_id: user.id,
+          original_name: product,
+          mapped_name: mergedName,
+          category: selectedCategory || null,
+        }));
+      } else {
+        // Single mapping for adding to existing group
+        mappingsToCreate = [{
+          user_id: user.id,
+          original_name: params.original_name,
+          mapped_name: params.mapped_name,
+          category: params.category || null,
+        }];
+      }
 
       const { error } = await supabase
         .from('product_mappings')
@@ -782,15 +801,57 @@ export const ProductMerge = () => {
                 </p>
               ) : (
                 unmappedProducts.map(product => (
-                  <div key={product} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={product}
-                      checked={selectedProducts.includes(product)}
-                      onCheckedChange={() => handleProductToggle(product)}
-                    />
-                    <label htmlFor={product} className="text-sm cursor-pointer">
-                      {product}
-                    </label>
+                  <div key={product} className="flex items-center justify-between gap-2 py-1">
+                    <div className="flex items-center space-x-2 flex-1 min-w-0">
+                      <Checkbox
+                        id={product}
+                        checked={selectedProducts.includes(product)}
+                        onCheckedChange={() => handleProductToggle(product)}
+                      />
+                      <label htmlFor={product} className="text-sm cursor-pointer truncate">
+                        {product}
+                      </label>
+                    </div>
+                    
+                    {groupedMappings && Object.keys(groupedMappings).length > 0 && (
+                      <Select 
+                        value="" 
+                        onValueChange={(value) => {
+                          const targetGroup = groupedMappings[value];
+                          if (targetGroup && targetGroup.length > 0) {
+                            const mappedName = value;
+                            const category = targetGroup[0].category || "";
+                            
+                            createMapping.mutate(
+                              {
+                                original_name: product,
+                                mapped_name: mappedName,
+                                category: category,
+                                user_id: null,
+                              },
+                              {
+                                onSuccess: () => {
+                                  toast.success(`"${product}" har lagts till i gruppen "${mappedName}"`);
+                                  // Remove from selected products if it was selected
+                                  setSelectedProducts(prev => prev.filter(p => p !== product));
+                                },
+                              }
+                            );
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="w-[180px] h-8 text-xs">
+                          <SelectValue placeholder="Lägg till i grupp..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.keys(groupedMappings).sort().map(groupName => (
+                            <SelectItem key={groupName} value={groupName}>
+                              {groupName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                   </div>
                 ))
               )}
