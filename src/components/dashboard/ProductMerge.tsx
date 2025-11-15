@@ -126,6 +126,7 @@ export const ProductMerge = React.memo(() => {
   const [editingCategory, setEditingCategory] = useState<Record<string, string>>({});
   const [selectedSuggestionCategory, setSelectedSuggestionCategory] = useState<Record<number, string>>({});
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [receiptLimit, setReceiptLimit] = useState(100); // Pagination limit
   const queryClient = useQueryClient();
 
   // Fetch ignored suggestions from database
@@ -157,15 +158,16 @@ export const ProductMerge = React.memo(() => {
     return ignored;
   }, [ignoredSuggestionsData]);
 
-  // Fetch all unique products from receipts
+  // Fetch all unique products from receipts (with pagination for performance)
   const { data: receipts } = useQuery({
-    queryKey: ['receipts'],
+    queryKey: ['receipts', receiptLimit],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('receipts')
         .select('*')
-        .order('receipt_date', { ascending: false });
-      
+        .order('receipt_date', { ascending: false })
+        .limit(receiptLimit);
+
       if (error) throw error;
       return data;
     },
@@ -232,26 +234,40 @@ export const ProductMerge = React.memo(() => {
     return productList.filter(p => !mappedOriginalNames.has(p));
   }, [productList, mappings]);
 
-  // Generate suggested merges based on similarity (memoized - expensive!)
+  // Generate suggested merges based on similarity (memoized with cache - expensive!)
   const suggestedMerges = useMemo(() => {
     // Don't calculate suggestions until ignored list is loaded
     if (ignoredSuggestionsLoading) {
       return [];
     }
 
+    // Limit similarity calculations for performance - only process first 100 unmapped products
+    const productsToProcess = unmappedProducts.slice(0, 100);
+
     const merges: SuggestedMerge[] = [];
     const processed = new Set<string>();
 
-    unmappedProducts.forEach((product, i) => {
+    // Cache similarity scores to avoid recalculating
+    const similarityCache = new Map<string, number>();
+
+    const getCachedSimilarity = (str1: string, str2: string): number => {
+      const key = str1 < str2 ? `${str1}|${str2}` : `${str2}|${str1}`;
+      if (!similarityCache.has(key)) {
+        similarityCache.set(key, calculateSimilarity(str1, str2));
+      }
+      return similarityCache.get(key)!;
+    };
+
+    productsToProcess.forEach((product, i) => {
       if (processed.has(product)) return;
 
       const similar: string[] = [product];
 
-      for (let j = i + 1; j < unmappedProducts.length; j++) {
-        const other = unmappedProducts[j];
+      for (let j = i + 1; j < productsToProcess.length; j++) {
+        const other = productsToProcess[j];
         if (processed.has(other)) continue;
 
-        const similarity = calculateSimilarity(product, other);
+        const similarity = getCachedSimilarity(product, other);
 
         if (similarity >= 0.6) {
           similar.push(other);
@@ -652,44 +668,70 @@ export const ProductMerge = React.memo(() => {
     logger.debug('Grouped mappings:', Object.keys(groupedMappings || {}).length, 'groups');
   }
 
-  // Calculate spending stats and category info for each group (memoized - very expensive!)
+  // Calculate spending stats and category info for each group (optimized with indexing!)
   const groupStats = useMemo(() => {
-    const stats: Record<string, { 
-      totalSpending: number; 
+    // Build an index of product name -> { spending, count, categories } for O(1) lookups
+    const productIndex = new Map<string, { spending: number; count: number; categories: Set<string> }>();
+
+    // Single pass through all receipts to build the index
+    receipts?.forEach(receipt => {
+      const receiptItems = receipt.items as any[] || [];
+      receiptItems.forEach(item => {
+        if (!item.name) return;
+
+        const existing = productIndex.get(item.name) || {
+          spending: 0,
+          count: 0,
+          categories: new Set<string>()
+        };
+
+        existing.spending += Number(item.price) || 0;
+        existing.count++;
+
+        if (item.category) {
+          existing.categories.add(item.category);
+        }
+
+        productIndex.set(item.name, existing);
+      });
+    });
+
+    // Now calculate stats for each group using the index
+    const stats: Record<string, {
+      totalSpending: number;
       productCount: number;
       commonCategory: string | null;
       uniqueCategories: string[];
       hasMixedCategories: boolean;
     }> = {};
-    
+
     Object.entries(groupedMappings || {}).forEach(([mappedName, items]) => {
-      const originalNames = new Set((items as any[]).map(item => item.original_name));
       let totalSpending = 0;
       let productCount = 0;
+      const allCategories = new Set<string>();
 
-      receipts?.forEach(receipt => {
-        const receiptItems = receipt.items as any[] || [];
-        receiptItems.forEach(item => {
-          if (originalNames.has(item.name)) {
-            totalSpending += Number(item.price) || 0;
-            productCount++;
-          }
-        });
+      // Aggregate stats from the index (O(items in group) instead of O(all receipts × all items))
+      (items as any[]).forEach(item => {
+        const productData = productIndex.get(item.original_name);
+        if (productData) {
+          totalSpending += productData.spending;
+          productCount += productData.count;
+          productData.categories.forEach(cat => allCategories.add(cat));
+        }
       });
 
-      // Calculate categories once for each group
-      const originalNamesArray = Array.from(originalNames);
-      const { commonCategory, uniqueCategories } = getProductCategories(originalNamesArray, receipts);
+      const uniqueCategories = Array.from(allCategories);
+      const commonCategory = uniqueCategories.length === 1 ? uniqueCategories[0] : null;
 
-      stats[mappedName] = { 
-        totalSpending, 
+      stats[mappedName] = {
+        totalSpending,
         productCount,
         commonCategory,
         uniqueCategories,
         hasMixedCategories: uniqueCategories.length > 1
       };
     });
-    
+
     return stats;
   }, [groupedMappings, receipts]);
 
