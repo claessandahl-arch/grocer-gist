@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { startOfMonth, endOfMonth, format, addMonths, subMonths } from "date-fns";
 import { sv } from "date-fns/locale";
 import { useState } from "react";
+import type { ReceiptItem } from "@/types/receipt";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -52,7 +53,7 @@ const Dashboard = () => {
   // Get top category this month
   const categoryTotals: Record<string, number> = {};
   thisMonthReceipts.forEach(receipt => {
-    const items = receipt.items as any[] || [];
+    const items = (receipt.items as unknown as ReceiptItem[]) || [];
     items.forEach(item => {
       const category = item.category || 'other';
       categoryTotals[category] = (categoryTotals[category] || 0) + Number(item.price || 0);
