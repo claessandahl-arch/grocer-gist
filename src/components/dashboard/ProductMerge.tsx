@@ -88,6 +88,7 @@ export const ProductMerge = () => {
   const [editingSuggestion, setEditingSuggestion] = useState<Record<number, string>>({});
   const [addToExisting, setAddToExisting] = useState<Record<number, string>>({});
   const [editingMergeGroup, setEditingMergeGroup] = useState<Record<string, string>>({});
+  const [ignoredSuggestions, setIgnoredSuggestions] = useState<Set<string>>(new Set());
   const queryClient = useQueryClient();
 
   // Fetch all unique products from receipts
@@ -195,8 +196,12 @@ export const ProductMerge = () => {
       }
     });
 
-    return merges;
-  }, [unmappedProducts]);
+    // Filter out ignored suggestions
+    return merges.filter(merge => {
+      const key = merge.products.sort().join('|');
+      return !ignoredSuggestions.has(key);
+    });
+  }, [unmappedProducts, ignoredSuggestions]);
 
   // Create mapping mutation
   const createMapping = useMutation({
@@ -310,6 +315,12 @@ export const ProductMerge = () => {
     } catch (error) {
       toast.error("Kunde inte slå ihop produkter: " + (error as Error).message);
     }
+  };
+
+  const handleIgnoreSuggestion = (suggestion: SuggestedMerge) => {
+    const key = suggestion.products.sort().join('|');
+    setIgnoredSuggestions(prev => new Set([...prev, key]));
+    logger.debug('Ignored suggestion:', { key, products: suggestion.products });
   };
 
   const handleRenameMergeGroup = async (oldName: string, newName: string) => {
@@ -558,13 +569,22 @@ export const ProductMerge = () => {
                         </div>
                       </div>
                       
-                      <Button
-                        size="sm"
-                        onClick={() => handleAcceptSuggestion(suggestion, idx)}
-                        disabled={createMapping.isPending || (!currentName.trim() && !existingMergeGroup)}
-                      >
-                        {existingMergeGroup ? "Lägg till" : "Acceptera"}
-                      </Button>
+                      <div className="flex flex-col gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => handleAcceptSuggestion(suggestion, idx)}
+                          disabled={createMapping.isPending || (!currentName.trim() && !existingMergeGroup)}
+                        >
+                          {existingMergeGroup ? "Lägg till" : "Acceptera"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleIgnoreSuggestion(suggestion)}
+                        >
+                          Ignorera
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 );
