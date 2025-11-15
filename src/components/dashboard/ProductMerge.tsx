@@ -88,6 +88,7 @@ export const ProductMerge = () => {
   const [editingSuggestion, setEditingSuggestion] = useState<Record<number, string>>({});
   const [addToExisting, setAddToExisting] = useState<Record<number, string>>({});
   const [editingMergeGroup, setEditingMergeGroup] = useState<Record<string, string>>({});
+  const [editingCategory, setEditingCategory] = useState<Record<string, string>>({});
   const [ignoredSuggestions, setIgnoredSuggestions] = useState<Set<string>>(new Set());
   const queryClient = useQueryClient();
 
@@ -403,6 +404,45 @@ export const ProductMerge = () => {
     } catch (error) {
       toast.error("Kunde inte uppdatera gruppnamn: " + (error as Error).message);
       logger.error('Rename failed:', error);
+    }
+  };
+
+  const handleUpdateCategory = async (mappedName: string, newCategory: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Ingen användare inloggad");
+
+      // Get all items in this group
+      const groupItems = groupedMappings?.[mappedName] || [];
+      const userMappings = groupItems.filter((item: any) => !item.isGlobal);
+      
+      if (userMappings.length === 0) {
+        toast.error("Kan inte uppdatera kategori för globala mappningar");
+        return;
+      }
+
+      // Update category for all user mappings with this mapped_name
+      const { error } = await supabase
+        .from('product_mappings')
+        .update({ category: newCategory })
+        .eq('user_id', user.id)
+        .eq('mapped_name', mappedName);
+
+      if (error) throw error;
+
+      await queryClient.invalidateQueries({ queryKey: ['product-mappings'] });
+      
+      // Clear editing state
+      setEditingCategory(prev => {
+        const next = { ...prev };
+        delete next[mappedName];
+        return next;
+      });
+      
+      toast.success(`Kategori uppdaterad för ${mappedName}`);
+      logger.debug('Category updated:', { mappedName, newCategory });
+    } catch (error) {
+      toast.error("Kunde inte uppdatera kategori: " + (error as Error).message);
     }
   };
 
@@ -781,9 +821,82 @@ export const ProductMerge = () => {
                                   </Button>
                                 )}
                               </div>
-                              {items[0]?.category && (
-                                <div className="text-sm text-muted-foreground">
-                                  {categoryNames[items[0].category] || items[0].category}
+                              <div className="flex items-center gap-2">
+                                {items[0]?.category ? (
+                                  <>
+                                    <div className="text-sm text-muted-foreground">
+                                      {categoryNames[items[0].category] || items[0].category}
+                                    </div>
+                                    {hasUserMappings && (
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => setEditingCategory(prev => ({ 
+                                          ...prev, 
+                                          [mappedName]: items[0].category || '' 
+                                        }))}
+                                        className="h-6 px-2 text-xs"
+                                      >
+                                        Ändra kategori
+                                      </Button>
+                                    )}
+                                  </>
+                                ) : hasUserMappings ? (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setEditingCategory(prev => ({ 
+                                      ...prev, 
+                                      [mappedName]: '' 
+                                    }))}
+                                    className="h-7 text-xs"
+                                  >
+                                    + Lägg till kategori
+                                  </Button>
+                                ) : (
+                                  <div className="text-sm text-muted-foreground italic">
+                                    Ingen kategori
+                                  </div>
+                                )}
+                              </div>
+                              {editingCategory[mappedName] !== undefined && (
+                                <div className="flex items-center gap-2 mt-2">
+                                  <Select 
+                                    value={editingCategory[mappedName]} 
+                                    onValueChange={(value) => setEditingCategory(prev => ({ 
+                                      ...prev, 
+                                      [mappedName]: value 
+                                    }))}
+                                  >
+                                    <SelectTrigger className="h-8 text-sm">
+                                      <SelectValue placeholder="Välj kategori" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {categoryOptions.map(cat => (
+                                        <SelectItem key={cat.value} value={cat.value}>
+                                          {cat.label}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleUpdateCategory(mappedName, editingCategory[mappedName])}
+                                    disabled={!editingCategory[mappedName]}
+                                  >
+                                    Spara
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setEditingCategory(prev => {
+                                      const next = { ...prev };
+                                      delete next[mappedName];
+                                      return next;
+                                    })}
+                                  >
+                                    Avbryt
+                                  </Button>
                                 </div>
                               )}
                               <div className="flex gap-4 text-sm text-muted-foreground">
