@@ -129,7 +129,7 @@ export const ProductMerge = React.memo(() => {
   const queryClient = useQueryClient();
 
   // Fetch ignored suggestions from database
-  const { data: ignoredSuggestionsData } = useQuery({
+  const { data: ignoredSuggestionsData, isLoading: ignoredSuggestionsLoading } = useQuery({
     queryKey: ['ignored-merge-suggestions'],
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -234,6 +234,11 @@ export const ProductMerge = React.memo(() => {
 
   // Generate suggested merges based on similarity (memoized - expensive!)
   const suggestedMerges = useMemo(() => {
+    // Don't calculate suggestions until ignored list is loaded
+    if (ignoredSuggestionsLoading) {
+      return [];
+    }
+
     const merges: SuggestedMerge[] = [];
     const processed = new Set<string>();
 
@@ -271,7 +276,7 @@ export const ProductMerge = React.memo(() => {
       const key = merge.products.sort().join('|');
       return !ignoredSuggestions.has(key);
     });
-  }, [unmappedProducts, ignoredSuggestions]);
+  }, [unmappedProducts, ignoredSuggestions, ignoredSuggestionsLoading]);
 
   // Create mapping mutation
   const createMapping = useMutation({
