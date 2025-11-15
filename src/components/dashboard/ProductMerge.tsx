@@ -550,13 +550,13 @@ export const ProductMerge = () => {
                               </div>
                             </TableCell>
                             <TableCell>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => deleteMapping.mutate(item)}
-                                disabled={deleteMapping.isPending || item.isGlobal}
-                                title={item.isGlobal ? "Kan inte ta bort globala mappningar" : "Ta bort mappning"}
-                              >
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => deleteMapping.mutate(item.id)}
+                              disabled={deleteMapping.isPending || item.isGlobal}
+                              title={item.isGlobal ? "Kan inte ta bort globala mappningar" : "Ta bort mappning"}
+                            >
                                 <Trash2 className={`h-4 w-4 ${item.isGlobal ? 'opacity-50' : ''}`} />
                               </Button>
                             </TableCell>
