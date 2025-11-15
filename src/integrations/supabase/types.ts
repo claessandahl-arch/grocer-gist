@@ -44,6 +44,27 @@ export type Database = {
         }
         Relationships: []
       }
+      ignored_merge_suggestions: {
+        Row: {
+          created_at: string
+          id: string
+          products: string[]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          products: string[]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          products?: string[]
+          user_id?: string
+        }
+        Relationships: []
+      }
       product_mappings: {
         Row: {
           category: string | null
