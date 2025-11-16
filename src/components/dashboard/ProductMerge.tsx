@@ -1252,7 +1252,7 @@ export const ProductMerge = React.memo(() => {
       </Card>
 
       {/* Show message if no mappings exist */}
-      {!mappingsLoading && (!mappings || mappings.length === 0) && (
+      {!mappingsLoading && (!combinedMappings || combinedMappings.length === 0) && (
         <Card>
           <CardHeader>
             <CardTitle>Aktiva sammanslagningar</CardTitle>
