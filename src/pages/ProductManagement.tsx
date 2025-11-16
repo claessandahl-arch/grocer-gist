@@ -40,8 +40,11 @@ export default function ProductManagement() {
         .order('receipt_date', { ascending: false });
 
       if (error) throw error;
+      console.log('[ProductManagement] Fetched receipts:', data?.length || 0);
       return data || [];
     },
+    refetchOnMount: true, // Force fresh data
+    staleTime: 0, // Don't use cached data
   });
 
   // Fetch all user mappings
@@ -76,14 +79,17 @@ export default function ProductManagement() {
   // Get unique product names from all receipts
   const allProductNames = useMemo(() => {
     const uniqueNames = new Set<string>();
-    receipts.forEach(receipt => {
+    console.log('[ProductManagement] Processing receipts:', receipts.length);
+    receipts.forEach((receipt, idx) => {
       const items = (receipt.items as any[]) || [];
+      console.log(`[ProductManagement] Receipt ${idx + 1}/${receipts.length}: ${items.length} items from ${receipt.store_name || 'unknown store'}`);
       items.forEach(item => {
         if (item.name) uniqueNames.add(item.name);
       });
     });
     const result = Array.from(uniqueNames);
     console.log('[ProductManagement] Total unique products from receipts:', result.length);
+    console.log('[ProductManagement] First 10 products:', result.slice(0, 10));
     return result;
   }, [receipts]);
 
@@ -160,7 +166,7 @@ export default function ProductManagement() {
         group.products.push(mapping);
         if (mapping.category) group.categories.add(mapping.category);
         group.types.add(mapping.type);
-        group.totalPurchases += mapping.usage_count || 0;
+        group.totalPurchases += (mapping.type === 'global' ? mapping.usage_count : 0) || 0;
       });
 
     return Array.from(groupsMap.values());
