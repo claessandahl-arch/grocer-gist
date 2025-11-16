@@ -132,6 +132,45 @@ export default function DataManagement() {
     return allMappings.filter(m => !m.category || m.category === null);
   }, [allMappings]);
 
+  // Filter and sort uncategorized products (apply search and sort)
+  const filteredUncategorizedMappings = useMemo(() => {
+    let filtered = uncategorizedProducts;
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(m =>
+        m.original_name.toLowerCase().includes(query) ||
+        m.mapped_name.toLowerCase().includes(query)
+      );
+    }
+
+    // Apply type filter
+    if (typeFilter !== "all") {
+      filtered = filtered.filter(m => m.type === typeFilter);
+    }
+
+    // Apply sort
+    filtered = [...filtered].sort((a, b) => {
+      switch (sortBy) {
+        case "name-asc":
+          return a.original_name.localeCompare(b.original_name, 'sv');
+        case "name-desc":
+          return b.original_name.localeCompare(a.original_name, 'sv');
+        case "category":
+          return (a.category || 'zzz').localeCompare(b.category || 'zzz', 'sv');
+        case "usage":
+          return (b.usage_count || 0) - (a.usage_count || 0);
+        case "updated":
+          return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+        default:
+          return 0;
+      }
+    });
+
+    return filtered;
+  }, [uncategorizedProducts, searchQuery, typeFilter, sortBy]);
+
   // Update category mutation
   const updateCategory = useMutation({
     mutationFn: async ({ id, type, category }: { id: string; type: 'user' | 'global'; category: string }) => {
@@ -319,7 +358,7 @@ export default function DataManagement() {
 
           <TabsContent value="uncategorized">
             <ProductTable
-              mappings={uncategorizedProducts}
+              mappings={filteredUncategorizedMappings}
               selectedProducts={selectedProducts}
               onSelectionChange={setSelectedProducts}
               onCategoryUpdate={handleCategoryUpdate}
