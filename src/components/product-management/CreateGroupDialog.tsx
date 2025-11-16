@@ -87,31 +87,51 @@ export function CreateGroupDialog({
         throw new Error("Gruppnamn krävs");
       }
 
-      // Group products by type
-      const userProducts = selectedProducts.filter(p => p.type === 'user');
-      const globalProducts = selectedProducts.filter(p => p.type === 'global');
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      // Separate unmapped and mapped products
+      const unmappedProducts = selectedProducts.filter(p => p.id.startsWith('unmapped-'));
+      const mappedUserProducts = selectedProducts.filter(p => !p.id.startsWith('unmapped-') && p.type === 'user');
+      const mappedGlobalProducts = selectedProducts.filter(p => !p.id.startsWith('unmapped-') && p.type === 'global');
 
       const updates: any = { mapped_name: groupName.trim() };
       if (category !== "none") {
         updates.category = category;
       }
 
-      // Update user products
-      if (userProducts.length > 0) {
+      // Insert new mappings for unmapped products
+      if (unmappedProducts.length > 0) {
+        const newMappings = unmappedProducts.map(p => ({
+          user_id: user.id,
+          original_name: p.original_name,
+          mapped_name: groupName.trim(),
+          category: category !== "none" ? category : null,
+        }));
+
+        const { error: insertError } = await supabase
+          .from('product_mappings')
+          .insert(newMappings);
+
+        if (insertError) throw insertError;
+      }
+
+      // Update existing user products
+      if (mappedUserProducts.length > 0) {
         const { error: userError } = await supabase
           .from('product_mappings')
           .update(updates)
-          .in('id', userProducts.map(p => p.id));
+          .in('id', mappedUserProducts.map(p => p.id));
 
         if (userError) throw userError;
       }
 
-      // Update global products
-      if (globalProducts.length > 0) {
+      // Update existing global products
+      if (mappedGlobalProducts.length > 0) {
         const { error: globalError } = await supabase
           .from('global_product_mappings')
           .update(updates)
-          .in('id', globalProducts.map(p => p.id));
+          .in('id', mappedGlobalProducts.map(p => p.id));
 
         if (globalError) throw globalError;
       }

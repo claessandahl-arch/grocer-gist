@@ -39,14 +39,34 @@ export function AssignToGroupDropdown({
 
   const assignToGroup = useMutation({
     mutationFn: async (groupName: string) => {
-      const table = product.type === 'user' ? 'product_mappings' : 'global_product_mappings';
+      // Check if this is an unmapped product (temporary ID)
+      const isUnmapped = product.id.startsWith('unmapped-');
 
-      const { error } = await supabase
-        .from(table)
-        .update({ mapped_name: groupName })
-        .eq('id', product.id);
+      if (isUnmapped) {
+        // Create new mapping for unmapped product
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error("Not authenticated");
 
-      if (error) throw error;
+        const { error } = await supabase
+          .from('product_mappings')
+          .insert({
+            user_id: user.id,
+            original_name: product.original_name,
+            mapped_name: groupName,
+          });
+
+        if (error) throw error;
+      } else {
+        // Update existing mapping
+        const table = product.type === 'user' ? 'product_mappings' : 'global_product_mappings';
+
+        const { error } = await supabase
+          .from(table)
+          .update({ mapped_name: groupName })
+          .eq('id', product.id);
+
+        if (error) throw error;
+      }
     },
     onSuccess: (_, groupName) => {
       toast.success(`"${product.original_name}" tillagd i gruppen "${groupName}"`);
