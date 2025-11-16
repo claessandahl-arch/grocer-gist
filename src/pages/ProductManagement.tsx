@@ -29,6 +29,23 @@ export default function ProductManagement() {
     }
   });
 
+  // Fetch all receipts to get product names
+  const { data: receipts = [], isLoading: receiptsLoading } = useQuery({
+    queryKey: ['receipts', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from('receipts')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('receipt_date', { ascending: false });
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user,
+  });
+
   // Fetch all user mappings
   const { data: userMappings = [], isLoading: userMappingsLoading } = useQuery({
     queryKey: ['user-product-mappings', user?.id],
@@ -58,15 +75,53 @@ export default function ProductManagement() {
     },
   });
 
+  // Get unique product names from all receipts
+  const allProductNames = useMemo(() => {
+    const uniqueNames = new Set<string>();
+    receipts.forEach(receipt => {
+      const items = (receipt.items as any[]) || [];
+      items.forEach(item => {
+        if (item.name) uniqueNames.add(item.name);
+      });
+    });
+    return Array.from(uniqueNames);
+  }, [receipts]);
+
   // Combine all mappings
   const allMappings = useMemo(() => {
     return [...userMappings, ...globalMappings];
   }, [userMappings, globalMappings]);
 
-  // Get ungrouped products (no mapped_name)
-  const ungroupedProducts = useMemo(() => {
+  // Get mapped original names
+  const mappedOriginalNames = useMemo(() => {
+    return new Set(allMappings.map(m => m.original_name));
+  }, [allMappings]);
+
+  // Get unmapped products (products from receipts that don't have mappings yet)
+  const unmappedProducts = useMemo(() => {
+    return allProductNames
+      .filter(name => !mappedOriginalNames.has(name))
+      .map(name => ({
+        id: `unmapped-${name}`, // Temporary ID for unmapped products
+        original_name: name,
+        mapped_name: null,
+        category: null,
+        type: 'user' as const,
+        usage_count: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }));
+  }, [allProductNames, mappedOriginalNames]);
+
+  // Get products with mappings but no group (no mapped_name)
+  const mappedButUngrouped = useMemo(() => {
     return allMappings.filter(m => !m.mapped_name || m.mapped_name.trim() === '');
   }, [allMappings]);
+
+  // Combine unmapped and mapped-but-ungrouped products
+  const ungroupedProducts = useMemo(() => {
+    return [...unmappedProducts, ...mappedButUngrouped];
+  }, [unmappedProducts, mappedButUngrouped]);
 
   // Get product groups (unique mapped_name values)
   const productGroups = useMemo(() => {
@@ -91,7 +146,7 @@ export default function ProductManagement() {
         group.products.push(mapping);
         if (mapping.category) group.categories.add(mapping.category);
         group.types.add(mapping.type);
-        group.totalPurchases += (mapping.type === 'global' ? mapping.usage_count || 0 : 0);
+        group.totalPurchases += mapping.usage_count || 0;
       });
 
     return Array.from(groupsMap.values());
@@ -108,7 +163,7 @@ export default function ProductManagement() {
 
   // Calculate stats
   const stats = useMemo(() => {
-    const totalProducts = allMappings.length;
+    const totalProducts = allProductNames.length;
     const ungrouped = ungroupedProducts.length;
     const ungroupedPercentage = totalProducts > 0
       ? Math.round((ungrouped / totalProducts) * 100)
@@ -122,7 +177,7 @@ export default function ProductManagement() {
       globalGroupsCount: globalGroups.length,
       personalGroupsCount: personalGroups.length,
     };
-  }, [allMappings, ungroupedProducts, productGroups, globalGroups, personalGroups]);
+  }, [allProductNames, ungroupedProducts, productGroups, globalGroups, personalGroups]);
 
   // Apply search and sort
   const filteredUngroupedProducts = useMemo(() => {
@@ -176,7 +231,7 @@ export default function ProductManagement() {
     return filtered;
   }, [productGroups, searchQuery, sortBy]);
 
-  const isLoading = userMappingsLoading || globalMappingsLoading;
+  const isLoading = receiptsLoading || userMappingsLoading || globalMappingsLoading;
 
   const showLeftPanel = filterType === 'all' || filterType === 'ungrouped';
   const showRightPanel = filterType === 'all' || filterType === 'grouped';
@@ -250,6 +305,7 @@ export default function ProductManagement() {
                 existingGroups={productGroups}
                 isLoading={isLoading}
                 onRefresh={() => {
+                  queryClient.invalidateQueries({ queryKey: ['receipts'] });
                   queryClient.invalidateQueries({ queryKey: ['user-product-mappings'] });
                   queryClient.invalidateQueries({ queryKey: ['global-product-mappings'] });
                 }}
@@ -264,6 +320,7 @@ export default function ProductManagement() {
                 groups={filteredProductGroups}
                 isLoading={isLoading}
                 onRefresh={() => {
+                  queryClient.invalidateQueries({ queryKey: ['receipts'] });
                   queryClient.invalidateQueries({ queryKey: ['user-product-mappings'] });
                   queryClient.invalidateQueries({ queryKey: ['global-product-mappings'] });
                 }}
