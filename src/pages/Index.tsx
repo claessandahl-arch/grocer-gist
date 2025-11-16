@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Upload, BarChart3, TrendingDown, Calendar } from "lucide-react";
+import { Upload, BarChart3, TrendingDown, Calendar, Database } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const Index = () => {
@@ -75,6 +75,18 @@ const Index = () => {
               <CardTitle>Monthly Summaries</CardTitle>
               <CardDescription>
                 Track your spending trends over time with detailed monthly reports
+              </CardDescription>
+            </CardHeader>
+          </Card>
+
+          <Card className="shadow-card hover:shadow-soft transition-shadow">
+            <CardHeader>
+              <div className="h-12 w-12 rounded-lg bg-secondary/20 flex items-center justify-center mb-2">
+                <Database className="h-6 w-6 text-secondary-foreground" />
+              </div>
+              <CardTitle>Data Management</CardTitle>
+              <CardDescription>
+                Manage product categories and organize your grocery data efficiently
               </CardDescription>
             </CardHeader>
           </Card>
