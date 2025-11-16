@@ -1182,7 +1182,7 @@ export const ProductMerge = React.memo(() => {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <label className="text-sm font-medium">Välj produkter att slå ihop:</label>
-            <div className="border rounded-md overflow-hidden">
+            <div className="border rounded-md overflow-hidden max-h-[500px] overflow-y-auto">
               {unmappedProducts.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">
                   Alla produkter är redan sammanslagna
