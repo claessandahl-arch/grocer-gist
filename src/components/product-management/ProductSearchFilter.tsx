@@ -1,0 +1,72 @@
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Search } from "lucide-react";
+
+type ProductSearchFilterProps = {
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
+  filterType: string;
+  onFilterTypeChange: (type: string) => void;
+  sortBy: string;
+  onSortChange: (sort: string) => void;
+};
+
+export function ProductSearchFilter({
+  searchQuery,
+  onSearchChange,
+  filterType,
+  onFilterTypeChange,
+  sortBy,
+  onSortChange,
+}: ProductSearchFilterProps) {
+  return (
+    <div className="bg-card rounded-lg border p-4 mb-4 space-y-4">
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Sök produkter..."
+          value={searchQuery}
+          onChange={(e) => onSearchChange(e.target.value)}
+          className="pl-10"
+        />
+      </div>
+
+      {/* Filters */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="text-sm font-medium mb-2 block">Typ</label>
+          <Select value={filterType} onValueChange={onFilterTypeChange}>
+            <SelectTrigger>
+              <SelectValue placeholder="Alla" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alla</SelectItem>
+              <SelectItem value="ungrouped">Ogrupperade</SelectItem>
+              <SelectItem value="grouped">Grupperade</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
+          <label className="text-sm font-medium mb-2 block">Sortera efter</label>
+          <Select value={sortBy} onValueChange={onSortChange}>
+            <SelectTrigger>
+              <SelectValue placeholder="Välj sortering" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="name-asc">Namn (A-Z)</SelectItem>
+              <SelectItem value="name-desc">Namn (Z-A)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+    </div>
+  );
+}
