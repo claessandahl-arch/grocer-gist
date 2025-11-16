@@ -30,20 +30,18 @@ export default function ProductManagement() {
   });
 
   // Fetch all receipts to get product names
+  // Note: Not filtering by user_id to match ProductMerge behavior and ensure all products are shown
   const { data: receipts = [], isLoading: receiptsLoading } = useQuery({
-    queryKey: ['receipts', user?.id],
+    queryKey: ['receipts-all'],
     queryFn: async () => {
-      if (!user) return [];
       const { data, error } = await supabase
         .from('receipts')
         .select('*')
-        .eq('user_id', user.id)
         .order('receipt_date', { ascending: false });
 
       if (error) throw error;
-      return data;
+      return data || [];
     },
-    enabled: !!user,
   });
 
   // Fetch all user mappings
@@ -84,7 +82,9 @@ export default function ProductManagement() {
         if (item.name) uniqueNames.add(item.name);
       });
     });
-    return Array.from(uniqueNames);
+    const result = Array.from(uniqueNames);
+    console.log('[ProductManagement] Total unique products from receipts:', result.length);
+    return result;
   }, [receipts]);
 
   // Combine all mappings
@@ -94,12 +94,16 @@ export default function ProductManagement() {
 
   // Get mapped original names
   const mappedOriginalNames = useMemo(() => {
-    return new Set(allMappings.map(m => m.original_name));
-  }, [allMappings]);
+    const mapped = new Set(allMappings.map(m => m.original_name));
+    console.log('[ProductManagement] Total mapped products:', mapped.size);
+    console.log('[ProductManagement] User mappings:', userMappings.length);
+    console.log('[ProductManagement] Global mappings:', globalMappings.length);
+    return mapped;
+  }, [allMappings, userMappings, globalMappings]);
 
   // Get unmapped products (products from receipts that don't have mappings yet)
   const unmappedProducts = useMemo(() => {
-    return allProductNames
+    const result = allProductNames
       .filter(name => !mappedOriginalNames.has(name))
       .map(name => ({
         id: `unmapped-${name}`, // Temporary ID for unmapped products
@@ -111,16 +115,26 @@ export default function ProductManagement() {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }));
+    console.log('[ProductManagement] Unmapped products (from receipts without mappings):', result.length);
+    return result;
   }, [allProductNames, mappedOriginalNames]);
 
   // Get products with mappings but no group (no mapped_name)
   const mappedButUngrouped = useMemo(() => {
-    return allMappings.filter(m => !m.mapped_name || m.mapped_name.trim() === '');
+    const result = allMappings.filter(m => !m.mapped_name || m.mapped_name.trim() === '');
+    console.log('[ProductManagement] Mapped but ungrouped products:', result.length);
+    return result;
   }, [allMappings]);
 
   // Combine unmapped and mapped-but-ungrouped products
   const ungroupedProducts = useMemo(() => {
-    return [...unmappedProducts, ...mappedButUngrouped];
+    const result = [...unmappedProducts, ...mappedButUngrouped];
+    console.log('[ProductManagement] Total ungrouped products:', result.length);
+    console.log('[ProductManagement] Breakdown:', {
+      unmapped: unmappedProducts.length,
+      mappedButUngrouped: mappedButUngrouped.length
+    });
+    return result;
   }, [unmappedProducts, mappedButUngrouped]);
 
   // Get product groups (unique mapped_name values)
@@ -305,7 +319,7 @@ export default function ProductManagement() {
                 existingGroups={productGroups}
                 isLoading={isLoading}
                 onRefresh={() => {
-                  queryClient.invalidateQueries({ queryKey: ['receipts'] });
+                  queryClient.invalidateQueries({ queryKey: ['receipts-all'] });
                   queryClient.invalidateQueries({ queryKey: ['user-product-mappings'] });
                   queryClient.invalidateQueries({ queryKey: ['global-product-mappings'] });
                 }}
@@ -320,7 +334,7 @@ export default function ProductManagement() {
                 groups={filteredProductGroups}
                 isLoading={isLoading}
                 onRefresh={() => {
-                  queryClient.invalidateQueries({ queryKey: ['receipts'] });
+                  queryClient.invalidateQueries({ queryKey: ['receipts-all'] });
                   queryClient.invalidateQueries({ queryKey: ['user-product-mappings'] });
                   queryClient.invalidateQueries({ queryKey: ['global-product-mappings'] });
                 }}
