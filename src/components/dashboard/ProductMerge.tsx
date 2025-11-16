@@ -9,13 +9,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Trash2, Plus, Sparkles, ChevronDown, ChevronRight } from "lucide-react";
+import { Trash2, Plus, Sparkles, ChevronDown, ChevronRight, Info } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { categoryOptions, categoryNames } from "@/lib/categoryConstants";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDebouncedCallback } from "use-debounce";
 
 // Calculate similarity score between two strings (0-1)
@@ -210,6 +211,29 @@ export const ProductMerge = React.memo(() => {
     refetchOnWindowFocus: false,
   });
 
+  // Fetch user's category overrides for global mappings
+  const { data: userOverrides, isLoading: overridesLoading } = useQuery({
+    queryKey: ['user-global-overrides'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      const { data, error } = await supabase
+        .from('user_global_overrides')
+        .select('*')
+        .eq('user_id', user.id);
+
+      if (error) {
+        logger.error('Error fetching global overrides:', error);
+        return [];
+      }
+
+      return data || [];
+    },
+    staleTime: 30 * 1000, // 30 seconds
+    refetchOnWindowFocus: false,
+  });
+
   // Fetch existing mappings (both user-specific and global)
   const { data: mappings, isLoading: mappingsLoading } = useQuery({
     queryKey: ['product-mappings'],
@@ -236,20 +260,45 @@ export const ProductMerge = React.memo(() => {
         // Don't throw - global mappings table might not exist yet
       }
 
-      // Combine and mark global mappings
-      const combined = [
-        ...(userMappings || []).map(m => ({ ...m, isGlobal: false })),
-        ...(globalMappings || []).map(m => ({ ...m, isGlobal: true, user_id: null })),
-      ];
-
-      // Sort by mapped_name
-      combined.sort((a, b) => a.mapped_name.localeCompare(b.mapped_name));
-
-      return combined;
+      return { userMappings, globalMappings };
     },
     staleTime: 30 * 1000, // 30 seconds
     refetchOnWindowFocus: false,
   });
+
+  // Apply overrides to global mappings and combine with user mappings
+  const combinedMappings = useMemo(() => {
+    const userMappings = mappings?.userMappings || [];
+    const globalMappings = mappings?.globalMappings || [];
+
+    // User mappings (unchanged)
+    const userMaps = userMappings.map(m => ({ ...m, isGlobal: false }));
+
+    // Global mappings with overrides applied
+    const globalMaps = globalMappings.map(m => {
+      // Check if user has an override for this global mapping
+      const override = userOverrides?.find(o => o.global_mapping_id === m.id);
+
+      return {
+        ...m,
+        isGlobal: true,
+        user_id: null,
+        // Use override category if it exists, otherwise use global category
+        category: override ? override.override_category : m.category,
+        // Flag to indicate this has a local override
+        hasLocalOverride: !!override,
+        // Store override ID for deletion
+        overrideId: override?.id
+      };
+    });
+
+    const combined = [...userMaps, ...globalMaps];
+
+    // Sort by mapped_name
+    combined.sort((a, b) => a.mapped_name.localeCompare(b.mapped_name));
+
+    return combined;
+  }, [mappings?.userMappings, mappings?.globalMappings, userOverrides]);
 
   // Get unique product names from all receipts (memoized)
   const productList = useMemo(() => {
@@ -265,9 +314,9 @@ export const ProductMerge = React.memo(() => {
 
   // Filter out products that are already mapped (memoized)
   const unmappedProducts = useMemo(() => {
-    const mappedOriginalNames = new Set(mappings?.map(m => m.original_name) || []);
+    const mappedOriginalNames = new Set(combinedMappings?.map(m => m.original_name) || []);
     return productList.filter(p => !mappedOriginalNames.has(p));
-  }, [productList, mappings]);
+  }, [productList, combinedMappings]);
 
   // Defer expensive calculations to prevent blocking UI updates
   const deferredUnmappedProducts = useDeferredValue(unmappedProducts);
@@ -469,6 +518,69 @@ export const ProductMerge = React.memo(() => {
       toast.error("Kunde inte uppdatera kategori: " + error.message);
       logger.error("Category standardization error:", error);
     },
+  });
+
+  // Create or update category override for a global mapping
+  const updateCategoryOverride = useMutation({
+    mutationFn: async ({
+      globalMappingId,
+      category
+    }: {
+      globalMappingId: string;
+      category: string;
+    }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // Use upsert to handle both create and update
+      const { error } = await supabase
+        .from('user_global_overrides')
+        .upsert({
+          user_id: user.id,
+          global_mapping_id: globalMappingId,
+          override_category: category,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_id,global_mapping_id'
+        });
+
+      if (error) throw error;
+
+      return { globalMappingId, category };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['user-global-overrides'] });
+      queryClient.invalidateQueries({ queryKey: ['product-mappings'] });
+      toast.success(`Kategori uppdaterad lokalt till ${categoryNames[data.category] || data.category}`);
+      logger.debug('Category override created/updated:', data);
+    },
+    onError: (error) => {
+      toast.error(`Kunde inte uppdatera kategori: ${error.message}`);
+      logger.error('Category override error:', error);
+    }
+  });
+
+  // Remove category override (restore to global category)
+  const removeCategoryOverride = useMutation({
+    mutationFn: async (overrideId: string) => {
+      const { error } = await supabase
+        .from('user_global_overrides')
+        .delete()
+        .eq('id', overrideId);
+
+      if (error) throw error;
+
+      return overrideId;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user-global-overrides'] });
+      queryClient.invalidateQueries({ queryKey: ['product-mappings'] });
+      toast.success('Återställt till global kategori');
+    },
+    onError: (error) => {
+      toast.error(`Kunde inte återställa kategori: ${error.message}`);
+      logger.error('Remove override error:', error);
+    }
   });
 
   // Optimized checkbox toggle - instant UI update with stable callback
@@ -816,23 +928,24 @@ export const ProductMerge = React.memo(() => {
 
   // Group mappings by mapped_name with stats (memoized)
   const groupedMappings = useMemo(() => {
-    return mappings?.reduce((acc, mapping) => {
+    return combinedMappings?.reduce((acc, mapping) => {
       if (!acc[mapping.mapped_name]) {
         acc[mapping.mapped_name] = [];
       }
       acc[mapping.mapped_name].push(mapping);
       return acc;
-    }, {} as Record<string, Array<typeof mappings[number]>>);
-  }, [mappings]);
+    }, {} as Record<string, Array<typeof combinedMappings[number]>>);
+  }, [combinedMappings]);
 
   // Optimized: Pass only group names to ProductListItem instead of entire groupedMappings object
   const groupNames = useMemo(() => Object.keys(groupedMappings || {}), [groupedMappings]);
 
   // Debug log to check how many groups we have (only in development)
   if (import.meta.env.DEV) {
-    logger.debug('Total mappings:', mappings?.length);
-    logger.debug('User mappings:', mappings?.filter(m => !m.isGlobal).length);
-    logger.debug('Global mappings:', mappings?.filter(m => m.isGlobal).length);
+    logger.debug('Total mappings:', combinedMappings?.length);
+    logger.debug('User mappings:', combinedMappings?.filter(m => !m.isGlobal).length);
+    logger.debug('Global mappings:', combinedMappings?.filter(m => m.isGlobal).length);
+    logger.debug('Global overrides active:', userOverrides?.length || 0);
     logger.debug('Grouped mappings:', Object.keys(groupedMappings || {}).length, 'groups');
   }
 
@@ -1483,29 +1596,85 @@ export const ProductMerge = React.memo(() => {
                                 </div>
                               </TableCell>
                               <TableCell>
-                                <div className="flex items-center gap-1">
-                                  <span className={categoryMismatch ? "text-orange-600" : ""}>
-                                    {displayCategories.length > 0
-                                      ? displayCategories.map(cat => categoryNames[cat] || cat).join(', ')
-                                      : "Okategoriserad"}
-                                  </span>
-                                  {hasConflict && (
-                                    <span
-                                      title={`Sparad kategori: ${categoryNames[savedCategory] || savedCategory}\nKategorier i kvitton: ${receiptCategoriesArray.map(c => categoryNames[c] || c).join(', ')}`}
-                                      className="cursor-help text-blue-600"
+                                {item.isGlobal ? (
+                                  // Global product with editable dropdown
+                                  <div className="flex items-center gap-2">
+                                    <Select
+                                      value={item.category || ""}
+                                      onValueChange={(newCategory) => {
+                                        updateCategoryOverride.mutate({
+                                          globalMappingId: item.id,
+                                          category: newCategory
+                                        });
+                                      }}
+                                      disabled={updateCategoryOverride.isPending}
                                     >
-                                      ℹ️
+                                      <SelectTrigger className="w-[200px]">
+                                        <SelectValue placeholder="Välj kategori" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {categoryOptions.map(opt => (
+                                          <SelectItem key={opt.value} value={opt.value}>
+                                            {opt.label}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+
+                                    {/* Local override indicator */}
+                                    {item.hasLocalOverride && (
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Info className="h-4 w-4 text-blue-500 cursor-help flex-shrink-0" />
+                                          </TooltipTrigger>
+                                          <TooltipContent className="max-w-xs">
+                                            <p className="text-sm mb-2">
+                                              Du har anpassat kategorin lokalt. Andra användare ser fortfarande den globala kategorin.
+                                            </p>
+                                            <Button
+                                              size="sm"
+                                              variant="outline"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                removeCategoryOverride.mutate(item.overrideId!);
+                                              }}
+                                              disabled={removeCategoryOverride.isPending}
+                                              className="w-full"
+                                            >
+                                              Återställ till global kategori
+                                            </Button>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
+                                    )}
+                                  </div>
+                                ) : (
+                                  // User mapping - keep existing logic
+                                  <div className="flex items-center gap-1">
+                                    <span className={categoryMismatch ? "text-orange-600" : ""}>
+                                      {displayCategories.length > 0
+                                        ? displayCategories.map(cat => categoryNames[cat] || cat).join(', ')
+                                        : "Okategoriserad"}
                                     </span>
-                                  )}
-                                  {categoryMismatch && (
-                                    <span
-                                      title={`Avviker från gruppens kategori: ${categoryNames[commonCategory] || commonCategory}`}
-                                      className="cursor-help"
-                                    >
-                                      ⚠️
-                                    </span>
-                                  )}
-                                </div>
+                                    {hasConflict && (
+                                      <span
+                                        title={`Sparad kategori: ${categoryNames[savedCategory] || savedCategory}\nKategorier i kvitton: ${receiptCategoriesArray.map(c => categoryNames[c] || c).join(', ')}`}
+                                        className="cursor-help text-blue-600"
+                                      >
+                                        ℹ️
+                                      </span>
+                                    )}
+                                    {categoryMismatch && (
+                                      <span
+                                        title={`Avviker från gruppens kategori: ${categoryNames[commonCategory] || commonCategory}`}
+                                        className="cursor-help"
+                                      >
+                                        ⚠️
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
                               </TableCell>
                               <TableCell>
                               <Button

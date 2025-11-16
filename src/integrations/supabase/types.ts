@@ -205,6 +205,48 @@ export type Database = {
         }
         Relationships: []
       }
+      user_global_overrides: {
+        Row: {
+          created_at: string
+          global_mapping_id: string
+          id: string
+          override_category: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          global_mapping_id: string
+          id?: string
+          override_category: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          global_mapping_id?: string
+          id?: string
+          override_category?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_global_overrides_global_mapping_id_fkey"
+            columns: ["global_mapping_id"]
+            isOneToOne: false
+            referencedRelation: "global_product_mappings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_global_overrides_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Views: {
       [_ in never]: never
