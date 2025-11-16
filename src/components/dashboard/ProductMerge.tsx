@@ -1069,15 +1069,18 @@ export const ProductMerge = React.memo(() => {
                   rowCount={unmappedProducts.length}
                   rowHeight={48}
                   defaultHeight={400}
-                  rowComponent={ProductRow}
-                  rowProps={{
-                    products: unmappedProducts,
-                    selectedProducts,
-                    handleProductToggle,
-                    handleAddToExistingGroup,
-                    groupNames,
-                    isPending: createMapping.isPending,
-                  }}
+                  rowComponent={(props) => (
+                    <ProductRow
+                      {...props}
+                      products={unmappedProducts}
+                      selectedProducts={selectedProducts}
+                      handleProductToggle={handleProductToggle}
+                      handleAddToExistingGroup={handleAddToExistingGroup}
+                      groupNames={groupNames}
+                      isPending={createMapping.isPending}
+                    />
+                  )}
+                  rowProps={{}}
                 />
               )}
             </div>

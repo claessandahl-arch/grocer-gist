@@ -12,6 +12,7 @@ const Index = lazy(() => import("./pages/Index"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Upload = lazy(() => import("./pages/Upload"));
 const Training = lazy(() => import("./pages/Training"));
+const DataManagement = lazy(() => import("./pages/DataManagement"));
 const Auth = lazy(() => import("./pages/Auth"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -37,6 +38,7 @@ const App = () => (
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/upload" element={<Upload />} />
               <Route path="/training" element={<Training />} />
+              <Route path="/datamanagement" element={<DataManagement />} />
               <Route path="/auth" element={<Auth />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
