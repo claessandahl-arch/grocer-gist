@@ -1172,7 +1172,7 @@ export const ProductMerge = React.memo(() => {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <label className="text-sm font-medium">Välj produkter att slå ihop:</label>
-            <div className="border rounded-md">
+            <div className="border rounded-md overflow-hidden">
               {unmappedProducts.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">
                   Alla produkter är redan sammanslagna
@@ -1194,6 +1194,7 @@ export const ProductMerge = React.memo(() => {
                     />
                   )}
                   rowProps={{}}
+                  style={{ width: '100%' }}
                 />
               )}
             </div>
