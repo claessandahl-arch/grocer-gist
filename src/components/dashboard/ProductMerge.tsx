@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useTransition, useDeferredValue } from "react";
+import { List } from "react-window";
 import { ProductListItem } from "./ProductListItem";
 import { logger } from "@/lib/logger";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -112,6 +113,34 @@ type SuggestedMerge = {
   score: number;
   suggestedName: string;
 };
+
+// Row component for virtual list (react-window v2 API)
+const ProductRow = React.memo<{
+  index: number;
+  products: string[];
+  selectedProducts: string[];
+  handleProductToggle: (product: string) => void;
+  handleAddToExistingGroup: (product: string, mappedName: string) => void;
+  groupNames: string[] | undefined;
+  isPending: boolean;
+}>(({ index, products, selectedProducts, handleProductToggle, handleAddToExistingGroup, groupNames, isPending }) => {
+  const product = products[index];
+
+  return (
+    <div className="px-4 py-1">
+      <ProductListItem
+        product={product}
+        isSelected={selectedProducts.includes(product)}
+        onToggle={handleProductToggle}
+        onAddToGroup={handleAddToExistingGroup}
+        groupNames={groupNames}
+        isPending={isPending}
+      />
+    </div>
+  );
+});
+
+ProductRow.displayName = "ProductRow";
 
 export const ProductMerge = React.memo(() => {
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
@@ -970,23 +999,26 @@ export const ProductMerge = React.memo(() => {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <label className="text-sm font-medium">Välj produkter att slå ihop:</label>
-            <div className="max-h-64 overflow-y-auto border rounded-md p-4 space-y-2">
+            <div className="border rounded-md">
               {unmappedProducts.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">
                   Alla produkter är redan sammanslagna
                 </p>
               ) : (
-                unmappedProducts.map(product => (
-                  <ProductListItem
-                    key={product}
-                    product={product}
-                    isSelected={selectedProducts.includes(product)}
-                    onToggle={handleProductToggle}
-                    onAddToGroup={handleAddToExistingGroup}
-                    groupNames={groupNames}
-                    isPending={createMapping.isPending}
-                  />
-                ))
+                <List
+                  rowCount={unmappedProducts.length}
+                  rowHeight={48}
+                  defaultHeight={400}
+                  rowComponent={ProductRow}
+                  rowProps={{
+                    products: unmappedProducts,
+                    selectedProducts,
+                    handleProductToggle,
+                    handleAddToExistingGroup,
+                    groupNames,
+                    isPending: createMapping.isPending,
+                  }}
+                />
               )}
             </div>
           </div>
