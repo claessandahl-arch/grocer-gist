@@ -13,7 +13,6 @@ const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Upload = lazy(() => import("./pages/Upload"));
 const Training = lazy(() => import("./pages/Training"));
 const DataManagement = lazy(() => import("./pages/DataManagement"));
-const ProductManagement = lazy(() => import("./pages/ProductManagement"));
 const Auth = lazy(() => import("./pages/Auth"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -40,7 +39,6 @@ const App = () => (
               <Route path="/upload" element={<Upload />} />
               <Route path="/training" element={<Training />} />
               <Route path="/datamanagement" element={<DataManagement />} />
-              <Route path="/product-management" element={<ProductManagement />} />
               <Route path="/auth" element={<Auth />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
