@@ -16,9 +16,24 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Trash2, Globe, User } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Trash2, Globe, User, Info } from "lucide-react";
 import { categoryOptions } from "@/lib/categoryConstants";
 import { Skeleton } from "@/components/ui/skeleton";
+
+type UserOverride = {
+  id: string;
+  user_id: string;
+  global_mapping_id: string;
+  override_category: string;
+  created_at: string;
+  updated_at: string;
+};
 
 type ProductMapping = {
   id: string;
@@ -27,6 +42,8 @@ type ProductMapping = {
   category: string | null;
   type: 'user' | 'global';
   usage_count?: number;
+  override?: UserOverride;
+  effectiveCategory?: string | null;
 };
 
 type ProductTableProps = {
@@ -118,7 +135,7 @@ export function ProductTable({
               <TableCell>
                 <div className="flex items-center gap-2">
                   <Select
-                    value={mapping.category || "none"}
+                    value={mapping.effectiveCategory ?? mapping.category ?? "none"}
                     onValueChange={(value) => {
                       if (value !== "none") {
                         onCategoryUpdate(mapping.id, mapping.type, value);
@@ -127,9 +144,9 @@ export function ProductTable({
                   >
                     <SelectTrigger className="w-[200px]">
                       <SelectValue>
-                        {mapping.category ? (
+                        {(mapping.effectiveCategory ?? mapping.category) ? (
                           <Badge variant="secondary">
-                            {categoryOptions.find(c => c.value === mapping.category)?.label || mapping.category}
+                            {categoryOptions.find(c => c.value === (mapping.effectiveCategory ?? mapping.category))?.label || (mapping.effectiveCategory ?? mapping.category)}
                           </Badge>
                         ) : (
                           <Badge variant="destructive">Ingen kategori</Badge>
@@ -147,6 +164,23 @@ export function ProductTable({
                       ))}
                     </SelectContent>
                   </Select>
+                  
+                  {/* Show info icon if category is overridden */}
+                  {mapping.type === 'global' && mapping.override && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-4 w-4 text-primary cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Du har ändrat kategorin lokalt</p>
+                          <p className="text-xs text-muted-foreground">
+                            Global kategori: {mapping.category || 'Ingen'}
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
                 </div>
               </TableCell>
               <TableCell>
