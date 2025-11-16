@@ -26,15 +26,6 @@ import { Trash2, Globe, User, Info } from "lucide-react";
 import { categoryOptions } from "@/lib/categoryConstants";
 import { Skeleton } from "@/components/ui/skeleton";
 
-type UserOverride = {
-  id: string;
-  user_id: string;
-  global_mapping_id: string;
-  override_category: string;
-  created_at: string;
-  updated_at: string;
-};
-
 type ProductMapping = {
   id: string;
   original_name: string;
@@ -42,8 +33,6 @@ type ProductMapping = {
   category: string | null;
   type: 'user' | 'global';
   usage_count?: number;
-  override?: UserOverride;
-  effectiveCategory?: string | null;
 };
 
 type ProductTableProps = {
@@ -133,55 +122,36 @@ export function ProductTable({
               <TableCell className="font-medium">{mapping.original_name}</TableCell>
               <TableCell>{mapping.mapped_name}</TableCell>
               <TableCell>
-                <div className="flex items-center gap-2">
-                  <Select
-                    value={mapping.effectiveCategory ?? mapping.category ?? "none"}
-                    onValueChange={(value) => {
-                      if (value !== "none") {
-                        onCategoryUpdate(mapping.id, mapping.type, value);
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="w-[200px]">
-                      <SelectValue>
-                        {(mapping.effectiveCategory ?? mapping.category) ? (
-                          <Badge variant="secondary">
-                            {categoryOptions.find(c => c.value === (mapping.effectiveCategory ?? mapping.category))?.label || (mapping.effectiveCategory ?? mapping.category)}
-                          </Badge>
-                        ) : (
-                          <Badge variant="destructive">Ingen kategori</Badge>
-                        )}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none" disabled>
-                        Välj kategori
+                <Select
+                  value={mapping.category ?? "none"}
+                  onValueChange={(value) => {
+                    if (value !== "none") {
+                      onCategoryUpdate(mapping.id, mapping.type, value);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue>
+                      {mapping.category ? (
+                        <Badge variant="secondary">
+                          {categoryOptions.find(c => c.value === mapping.category)?.label || mapping.category}
+                        </Badge>
+                      ) : (
+                        <Badge variant="destructive">Ingen kategori</Badge>
+                      )}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none" disabled>
+                      Välj kategori
+                    </SelectItem>
+                    {categoryOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
                       </SelectItem>
-                      {categoryOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  
-                  {/* Show info icon if category is overridden */}
-                  {mapping.type === 'global' && mapping.override && (
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="h-4 w-4 text-primary cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Du har ändrat kategorin lokalt</p>
-                          <p className="text-xs text-muted-foreground">
-                            Global kategori: {mapping.category || 'Ingen'}
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  )}
-                </div>
+                    ))}
+                  </SelectContent>
+                </Select>
               </TableCell>
               <TableCell>
                 <Badge variant={mapping.type === 'global' ? 'default' : 'outline'}>

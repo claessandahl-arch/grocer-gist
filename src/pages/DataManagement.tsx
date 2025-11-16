@@ -12,15 +12,6 @@ import { ProductSearchFilter } from "@/components/datamanagement/ProductSearchFi
 import { StatsCard } from "@/components/datamanagement/StatsCard";
 import { CATEGORY_KEYS } from "@/lib/categoryConstants";
 
-type UserOverride = {
-  id: string;
-  user_id: string;
-  global_mapping_id: string;
-  override_category: string;
-  created_at: string;
-  updated_at: string;
-};
-
 type ProductMapping = {
   id: string;
   original_name: string;
@@ -31,8 +22,6 @@ type ProductMapping = {
   updated_at: string;
   type: 'user' | 'global';
   usage_count?: number;
-  override?: UserOverride;
-  effectiveCategory?: string | null;
 };
 
 export default function DataManagement() {
@@ -87,41 +76,10 @@ export default function DataManagement() {
     },
   });
 
-  // Fetch user's category overrides for global mappings
-  const { data: userOverrides = [] } = useQuery({
-    queryKey: ['user-global-overrides', user?.id],
-    queryFn: async () => {
-      if (!user) return [];
-      const { data, error } = await supabase
-        .from('user_global_overrides')
-        .select('*')
-        .eq('user_id', user.id);
-      
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user,
-  });
-
-  // Combine all mappings and apply overrides
+  // Combine all mappings
   const allMappings: ProductMapping[] = useMemo(() => {
-    const combined: ProductMapping[] = userMappings.map(m => ({
-      ...m,
-      effectiveCategory: m.category,
-    }));
-    
-    // Add global mappings with overrides applied
-    globalMappings.forEach(gm => {
-      const override = userOverrides.find(o => o.global_mapping_id === gm.id);
-      combined.push({
-        ...gm,
-        override,
-        effectiveCategory: override ? override.override_category : gm.category,
-      });
-    });
-    
-    return combined;
-  }, [userMappings, globalMappings, userOverrides]);
+    return [...userMappings, ...globalMappings];
+  }, [userMappings, globalMappings]);
 
   // Filter and sort mappings
   const filteredMappings = useMemo(() => {
@@ -136,17 +94,11 @@ export default function DataManagement() {
       );
     }
 
-    // Category filter (use effectiveCategory for filtering)
+    // Category filter
     if (categoryFilter === "uncategorized") {
-      filtered = filtered.filter(m => {
-        const cat = m.effectiveCategory ?? m.category;
-        return !cat || cat === null;
-      });
+      filtered = filtered.filter(m => !m.category || m.category === null);
     } else if (categoryFilter !== "all") {
-      filtered = filtered.filter(m => {
-        const cat = m.effectiveCategory ?? m.category;
-        return cat === categoryFilter;
-      });
+      filtered = filtered.filter(m => m.category === categoryFilter);
     }
 
     // Type filter
@@ -162,9 +114,7 @@ export default function DataManagement() {
         case "name-desc":
           return b.original_name.localeCompare(a.original_name, 'sv');
         case "category":
-          const catA = a.effectiveCategory ?? a.category;
-          const catB = b.effectiveCategory ?? b.category;
-          return (catA || 'zzz').localeCompare(catB || 'zzz', 'sv');
+          return (a.category || 'zzz').localeCompare(b.category || 'zzz', 'sv');
         case "usage":
           return (b.usage_count || 0) - (a.usage_count || 0);
         case "updated":
@@ -177,57 +127,25 @@ export default function DataManagement() {
     return filtered;
   }, [allMappings, searchQuery, categoryFilter, typeFilter, sortBy]);
 
-  // Get uncategorized products (use effectiveCategory)
+  // Get uncategorized products
   const uncategorizedProducts = useMemo(() => {
-    return allMappings.filter(m => {
-      const cat = m.effectiveCategory ?? m.category;
-      return !cat || cat === null;
-    });
+    return allMappings.filter(m => !m.category || m.category === null);
   }, [allMappings]);
 
-  // Update category mutation - handles user mappings differently than global
+  // Update category mutation
   const updateCategory = useMutation({
     mutationFn: async ({ id, type, category }: { id: string; type: 'user' | 'global'; category: string }) => {
-      if (!user) throw new Error("Not authenticated");
-
-      if (type === 'user') {
-        // Direct update for user mappings
-        const { error } = await supabase
-          .from('product_mappings')
-          .update({ category })
-          .eq('id', id);
-        
-        if (error) throw error;
-      } else {
-        // For global mappings, create/update override
-        const existingOverride = userOverrides.find(o => o.global_mapping_id === id);
-        
-        if (existingOverride) {
-          // Update existing override
-          const { error } = await supabase
-            .from('user_global_overrides')
-            .update({ override_category: category })
-            .eq('id', existingOverride.id);
-          
-          if (error) throw error;
-        } else {
-          // Create new override
-          const { error } = await supabase
-            .from('user_global_overrides')
-            .insert({
-              user_id: user.id,
-              global_mapping_id: id,
-              override_category: category,
-            });
-          
-          if (error) throw error;
-        }
-      }
+      const table = type === 'user' ? 'product_mappings' : 'global_product_mappings';
+      const { error } = await supabase
+        .from(table)
+        .update({ category })
+        .eq('id', id);
+      
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user-product-mappings'] });
       queryClient.invalidateQueries({ queryKey: ['global-product-mappings'] });
-      queryClient.invalidateQueries({ queryKey: ['user-global-overrides'] });
       toast.success("Kategori uppdaterad");
     },
     onError: (error) => {
