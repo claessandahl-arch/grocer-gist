@@ -91,7 +91,7 @@ export default function ProductManagement() {
         group.products.push(mapping);
         if (mapping.category) group.categories.add(mapping.category);
         group.types.add(mapping.type);
-        group.totalPurchases += mapping.usage_count || 0;
+        group.totalPurchases += (mapping.type === 'global' ? mapping.usage_count || 0 : 0);
       });
 
     return Array.from(groupsMap.values());

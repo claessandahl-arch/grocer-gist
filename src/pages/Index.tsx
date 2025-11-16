@@ -79,7 +79,7 @@ const Index = () => {
             </CardHeader>
           </Card>
 
-          <Card className="shadow-card hover:shadow-soft transition-shadow">
+          <Card className="shadow-card hover:shadow-soft transition-shadow cursor-pointer" onClick={() => navigate("/datamanagement")}>
             <CardHeader>
               <div className="h-12 w-12 rounded-lg bg-secondary/20 flex items-center justify-center mb-2">
                 <Database className="h-6 w-6 text-secondary-foreground" />
@@ -87,6 +87,18 @@ const Index = () => {
               <CardTitle>Data Management</CardTitle>
               <CardDescription>
                 Manage product categories and organize your grocery data efficiently
+              </CardDescription>
+            </CardHeader>
+          </Card>
+
+          <Card className="shadow-card hover:shadow-soft transition-shadow cursor-pointer" onClick={() => navigate("/product-management")}>
+            <CardHeader>
+              <div className="h-12 w-12 rounded-lg bg-chart-4/20 flex items-center justify-center mb-2">
+                <Upload className="h-6 w-6 text-chart-4" />
+              </div>
+              <CardTitle>Product Management</CardTitle>
+              <CardDescription>
+                Group similar products together and manage your product database
               </CardDescription>
             </CardHeader>
           </Card>
