@@ -28,7 +28,7 @@ export const ProductListItem = React.memo(({
   }, [onAddToGroup, product]);
 
   return (
-    <div className="flex items-center justify-between gap-2 py-1">
+    <div className="flex items-center gap-2 py-1 w-full">
       <div className="flex items-center space-x-2 flex-1 min-w-0">
         <Checkbox
           id={product}
@@ -39,24 +39,26 @@ export const ProductListItem = React.memo(({
           {product}
         </label>
       </div>
-      
+
       {groupNames.length > 0 && (
-        <Select 
-          value="" 
-          onValueChange={handleValueChange}
-          disabled={isPending}
-        >
-          <SelectTrigger className="w-48 h-8 text-xs">
-            <SelectValue placeholder="Lägg till i grupp..." />
-          </SelectTrigger>
-          <SelectContent>
-            {groupNames.map((groupName) => (
-              <SelectItem key={groupName} value={groupName} className="text-xs">
-                {groupName}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex-shrink-0">
+          <Select
+            value=""
+            onValueChange={handleValueChange}
+            disabled={isPending}
+          >
+            <SelectTrigger className="w-48 h-8 text-xs">
+              <SelectValue placeholder="Lägg till i grupp..." />
+            </SelectTrigger>
+            <SelectContent>
+              {groupNames.map((groupName) => (
+                <SelectItem key={groupName} value={groupName} className="text-xs">
+                  {groupName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       )}
     </div>
   );
