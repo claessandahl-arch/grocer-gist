@@ -585,28 +585,38 @@ export const ProductMerge = React.memo(() => {
 
   // Optimized checkbox toggle - instant UI update with stable callback
   const handleProductToggle = useCallback((product: string) => {
-    setSelectedProducts(prev =>
-      prev.includes(product)
-        ? prev.filter(p => p !== product)
-        : [...prev, product]
-    );
-  }, []);
+    startTransition(() => {
+      setSelectedProducts(prev =>
+        prev.includes(product)
+          ? prev.filter(p => p !== product)
+          : [...prev, product]
+      );
+    });
+  }, [startTransition]);
 
   // Debounced text input handlers to prevent excessive re-renders
   const handleMergedNameChange = useDebouncedCallback((value: string) => {
-    setMergedName(value);
+    startTransition(() => {
+      setMergedName(value);
+    });
   }, 150);
 
   const handleGroupMergeNameChange = useDebouncedCallback((value: string) => {
-    setGroupMergeName(value);
+    startTransition(() => {
+      setGroupMergeName(value);
+    });
   }, 150);
 
   const handleEditingSuggestionChange = useDebouncedCallback((idx: number, value: string) => {
-    setEditingSuggestion(prev => ({ ...prev, [idx]: value }));
+    startTransition(() => {
+      setEditingSuggestion(prev => ({ ...prev, [idx]: value }));
+    });
   }, 200);
 
   const handleEditingMergeGroupChange = useDebouncedCallback((key: string, value: string) => {
-    setEditingMergeGroup(prev => ({ ...prev, [key]: value }));
+    startTransition(() => {
+      setEditingMergeGroup(prev => ({ ...prev, [key]: value }));
+    });
   }, 200);
 
   const handleAddToExistingGroup = useCallback((product: string, mappedName: string) => {
