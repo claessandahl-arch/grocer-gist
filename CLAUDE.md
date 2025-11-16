@@ -182,6 +182,29 @@ Environment variables required:
 4. **Category Consistency**: Always import and use constants from `src/lib/categoryConstants.ts` rather than hardcoding category strings
 
 5. **Query Client**: TanStack Query is configured at the app level. Use `useQuery` for data fetching
+   - **Cache Control Best Practices**: When changing query keys or fetching critical data:
+     - Use `refetchOnMount: true` to force fresh data when component mounts
+     - Use `staleTime: 0` to bypass cache for real-time accuracy requirements
+     - Use `refetchOnWindowFocus: false` to prevent unnecessary refetches
+     - Example from ProductManagement (requires fresh data):
+       ```typescript
+       useQuery({
+         queryKey: ['receipts-all'],
+         queryFn: async () => { /* ... */ },
+         refetchOnMount: true,  // Force fresh data
+         staleTime: 0,          // Never use cache
+       });
+       ```
+     - Example from ProductMerge (can use stale data):
+       ```typescript
+       useQuery({
+         queryKey: ['receipts', receiptLimit],
+         queryFn: async () => { /* ... */ },
+         staleTime: 5 * 60 * 1000,      // Cache for 5 minutes
+         refetchOnWindowFocus: false,   // Don't refetch on focus
+       });
+       ```
+   - **Debugging Data Flow**: Add console.log statements at each data transformation step to track where data is lost or transformed incorrectly
 
 6. **Styling**: Uses Tailwind CSS with custom theme including gradient backgrounds (`bg-gradient-hero`) and shadow utilities (`shadow-card`, `shadow-soft`)
 
