@@ -156,6 +156,7 @@ export const ProductMerge = React.memo(() => {
   const [editingCategory, setEditingCategory] = useState<Record<string, string>>({});
   const [selectedSuggestionCategory, setSelectedSuggestionCategory] = useState<Record<number, string>>({});
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [selectedStandardCategory, setSelectedStandardCategory] = useState<Record<string, string>>({});
   const [receiptLimit, setReceiptLimit] = useState(100); // Pagination limit
 
   // Use transition for non-urgent updates to prevent blocking UI
@@ -411,6 +412,62 @@ export const ProductMerge = React.memo(() => {
     },
     onError: (error) => {
       toast.error("Kunde inte ta bort mappning: " + error.message);
+    },
+  });
+
+  // Standardize category mutation - updates all products in a group to the same category
+  const standardizeCategory = useMutation({
+    mutationFn: async ({
+      mappedName,
+      category
+    }: {
+      mappedName: string;
+      category: string;
+    }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      // Get all items in this group
+      const groupItems = groupedMappings?.[mappedName] || [];
+      const userMappings = groupItems.filter((item: any) => !item.isGlobal);
+      const globalMappings = groupItems.filter((item: any) => item.isGlobal);
+
+      let totalUpdated = 0;
+
+      // Update user mappings
+      if (userMappings.length > 0) {
+        const { error: userError } = await supabase
+          .from('product_mappings')
+          .update({ category })
+          .in('id', userMappings.map((m: any) => m.id));
+
+        if (userError) throw userError;
+        totalUpdated += userMappings.length;
+      }
+
+      // Update global mappings (separate table)
+      if (globalMappings.length > 0) {
+        const { error: globalError } = await supabase
+          .from('global_product_mappings')
+          .update({ category })
+          .in('id', globalMappings.map((m: any) => m.id));
+
+        if (globalError) throw globalError;
+        totalUpdated += globalMappings.length;
+      }
+
+      return {
+        updated: totalUpdated,
+        category
+      };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['product-mappings'] });
+      toast.success(`${data.updated} produkter uppdaterade till ${categoryNames[data.category] || data.category}`);
+    },
+    onError: (error) => {
+      toast.error("Kunde inte uppdatera kategori: " + error.message);
+      logger.error("Category standardization error:", error);
     },
   });
 
@@ -779,18 +836,16 @@ export const ProductMerge = React.memo(() => {
     logger.debug('Grouped mappings:', Object.keys(groupedMappings || {}).length, 'groups');
   }
 
-  // Calculate spending stats and category info for each group (optimized with indexing!)
-  const groupStats = useMemo(() => {
-    // Build an index of product name -> { spending, count, categories } for O(1) lookups
-    const productIndex = new Map<string, { spending: number; count: number; categories: Set<string> }>();
+  // Build product index for O(1) lookups of spending, count, and categories from receipts
+  const productIndex = useMemo(() => {
+    const index = new Map<string, { spending: number; count: number; categories: Set<string> }>();
 
-    // Single pass through all receipts to build the index
     receipts?.forEach(receipt => {
       const receiptItems = receipt.items as any[] || [];
       receiptItems.forEach(item => {
         if (!item.name) return;
 
-        const existing = productIndex.get(item.name) || {
+        const existing = index.get(item.name) || {
           spending: 0,
           count: 0,
           categories: new Set<string>()
@@ -803,10 +858,15 @@ export const ProductMerge = React.memo(() => {
           existing.categories.add(item.category);
         }
 
-        productIndex.set(item.name, existing);
+        index.set(item.name, existing);
       });
     });
 
+    return index;
+  }, [receipts]);
+
+  // Calculate spending stats and category info for each group (optimized with indexing!)
+  const groupStats = useMemo(() => {
     // Now calculate stats for each group using the index
     const stats: Record<string, {
       totalSpending: number;
@@ -844,7 +904,7 @@ export const ProductMerge = React.memo(() => {
     });
 
     return stats;
-  }, [groupedMappings, receipts]);
+  }, [groupedMappings, productIndex]);
 
   return (
     <div className="space-y-6">
@@ -1226,19 +1286,6 @@ export const ProductMerge = React.memo(() => {
                                         Blandade kategorier: {uniqueCategories.map(cat => categoryNames[cat] || cat).join(', ')}
                                       </Badge>
                                     )}
-                                    {hasUserMappings && (
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => setEditingCategory(prev => ({ 
-                                          ...prev, 
-                                          [mappedName]: savedCategory || '' 
-                                        }))}
-                                        className="h-6 px-2 text-xs"
-                                      >
-                                        Ändra kategori
-                                      </Button>
-                                    )}
                                   </>
                                 ) : (
                                   <>
@@ -1252,24 +1299,63 @@ export const ProductMerge = React.memo(() => {
                                         Blandade kategorier: {uniqueCategories.map(cat => categoryNames[cat] || cat).join(', ')}
                                       </Badge>
                                     )}
-                                    {hasUserMappings ? (
+                                  </>
+                                )}
+                                {/* Category standardization UI for mixed categories */}
+                                {hasMixedCategories && hasUserMappings && (
+                                  <div className="w-full mt-2 p-3 border border-orange-200 rounded-md bg-orange-50">
+                                    <div className="flex items-center gap-2">
+                                      <Label htmlFor={`std-category-${mappedName}`} className="text-sm font-medium whitespace-nowrap">
+                                        Standardisera till:
+                                      </Label>
+                                      <Select
+                                        value={selectedStandardCategory[mappedName] || ""}
+                                        onValueChange={(value) => setSelectedStandardCategory(prev => ({
+                                          ...prev,
+                                          [mappedName]: value
+                                        }))}
+                                      >
+                                        <SelectTrigger id={`std-category-${mappedName}`} className="w-[200px]">
+                                          <SelectValue placeholder="Välj kategori" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {categoryOptions.map(opt => {
+                                            // Count how many products have this category
+                                            const count = items.filter((item: any) => {
+                                              const pd = productIndex.get(item.original_name);
+                                              return pd?.categories.has(opt.value);
+                                            }).length;
+
+                                            return (
+                                              <SelectItem key={opt.value} value={opt.value}>
+                                                {opt.label}
+                                                {count > 0 && ` (${count})`}
+                                              </SelectItem>
+                                            );
+                                          })}
+                                        </SelectContent>
+                                      </Select>
+
                                       <Button
                                         size="sm"
-                                        variant="outline"
-                                        onClick={() => setEditingCategory(prev => ({ 
-                                          ...prev, 
-                                          [mappedName]: commonCategory || '' 
-                                        }))}
-                                        className="h-7 text-xs"
+                                        onClick={() => {
+                                          standardizeCategory.mutate({
+                                            mappedName,
+                                            category: selectedStandardCategory[mappedName]
+                                          });
+                                          // Clear selection after mutation
+                                          setSelectedStandardCategory(prev => {
+                                            const next = { ...prev };
+                                            delete next[mappedName];
+                                            return next;
+                                          });
+                                        }}
+                                        disabled={!selectedStandardCategory[mappedName] || standardizeCategory.isPending}
                                       >
-                                        + Lägg till kategori
+                                        Tillämpa på alla produkter
                                       </Button>
-                                    ) : (
-                                      <div className="text-sm text-muted-foreground italic">
-                                        Ingen kategori
-                                      </div>
-                                    )}
-                                  </>
+                                    </div>
+                                  </div>
                                 )}
                               </div>
                               {editingCategory[mappedName] !== undefined && (
@@ -1342,35 +1428,96 @@ export const ProductMerge = React.memo(() => {
                       <TableHeader>
                         <TableRow>
                           <TableHead>Originalnamn</TableHead>
+                          <TableHead>Kategori</TableHead>
                           <TableHead className="w-[100px]">Åtgärd</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {items.map(item => (
-                          <TableRow key={item.id}>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                {item.original_name}
-                                {item.isGlobal && (
-                                  <Badge variant="outline" className="text-xs">
-                                    Global
-                                  </Badge>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => deleteMapping.mutate(item.id)}
-                              disabled={deleteMapping.isPending || item.isGlobal}
-                              title={item.isGlobal ? "Kan inte ta bort globala mappningar" : "Ta bort mappning"}
-                            >
-                                <Trash2 className={`h-4 w-4 ${item.isGlobal ? 'opacity-50' : ''}`} />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        {items.map(item => {
+                          // Get saved category from mapping
+                          const savedCategory = item.category;
+
+                          // Get receipt categories from productIndex
+                          const productData = productIndex.get(item.original_name);
+                          const receiptCategories = productData?.categories || new Set<string>();
+                          const receiptCategoriesArray = Array.from(receiptCategories);
+
+                          // Determine display categories (saved first, then receipt categories)
+                          let displayCategories: string[] = [];
+                          if (savedCategory) {
+                            displayCategories = [savedCategory];
+                            // Add other receipt categories if they differ (show all per user preference)
+                            receiptCategoriesArray.forEach(cat => {
+                              if (cat !== savedCategory && !displayCategories.includes(cat)) {
+                                displayCategories.push(cat);
+                              }
+                            });
+                          } else {
+                            // No saved category, show all receipt categories
+                            displayCategories = receiptCategoriesArray;
+                          }
+
+                          // Check for conflicts
+                          const hasConflict = savedCategory &&
+                                            receiptCategories.size > 0 &&
+                                            !receiptCategories.has(savedCategory);
+
+                          // Check if this item's category differs from group's common category
+                          const categoryMismatch = commonCategory &&
+                                                  savedCategory &&
+                                                  savedCategory !== commonCategory;
+
+                          return (
+                            <TableRow key={item.id}>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  {item.original_name}
+                                  {item.isGlobal && (
+                                    <Badge variant="outline" className="text-xs">
+                                      Global
+                                    </Badge>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-1">
+                                  <span className={categoryMismatch ? "text-orange-600" : ""}>
+                                    {displayCategories.length > 0
+                                      ? displayCategories.map(cat => categoryNames[cat] || cat).join(', ')
+                                      : "Okategoriserad"}
+                                  </span>
+                                  {hasConflict && (
+                                    <span
+                                      title={`Sparad kategori: ${categoryNames[savedCategory] || savedCategory}\nKategorier i kvitton: ${receiptCategoriesArray.map(c => categoryNames[c] || c).join(', ')}`}
+                                      className="cursor-help text-blue-600"
+                                    >
+                                      ℹ️
+                                    </span>
+                                  )}
+                                  {categoryMismatch && (
+                                    <span
+                                      title={`Avviker från gruppens kategori: ${categoryNames[commonCategory] || commonCategory}`}
+                                      className="cursor-help"
+                                    >
+                                      ⚠️
+                                    </span>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => deleteMapping.mutate(item.id)}
+                                disabled={deleteMapping.isPending || item.isGlobal}
+                                title={item.isGlobal ? "Kan inte ta bort globala mappningar" : "Ta bort mappning"}
+                              >
+                                  <Trash2 className={`h-4 w-4 ${item.isGlobal ? 'opacity-50' : ''}`} />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                       </CollapsibleContent>
