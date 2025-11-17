@@ -115,6 +115,11 @@ export default function DataManagement() {
     return [...userMappings, ...globalMappings];
   }, [userMappings, globalMappings]);
 
+  // Get mapped original names
+  const mappedOriginalNames = useMemo(() => {
+    return new Set(allMappings.map(m => m.original_name));
+  }, [allMappings]);
+
   // Filter and sort mappings
   const filteredMappings = useMemo(() => {
     let filtered = allMappings;
@@ -162,9 +167,42 @@ export default function DataManagement() {
   }, [allMappings, searchQuery, categoryFilter, typeFilter, sortBy]);
 
   // Get uncategorized products
+  // This includes: unmapped products + mapped products without category
   const uncategorizedProducts = useMemo(() => {
-    return allMappings.filter(m => !m.category || m.category === null);
-  }, [allMappings]);
+    const uncategorized: ProductMapping[] = [];
+
+    // Check each product from receipts
+    allProductNames.forEach(productName => {
+      // Find if this product has a mapping
+      const mapping = allMappings.find(m => m.original_name === productName);
+
+      if (!mapping) {
+        // Unmapped product (no category by definition)
+        uncategorized.push({
+          id: `unmapped-${productName}`,
+          original_name: productName,
+          mapped_name: '',
+          category: null,
+          user_id: '',
+          created_at: '',
+          updated_at: '',
+          type: 'user' as const,
+        });
+      } else if (!mapping.category || mapping.category === null) {
+        // Mapped but no category
+        uncategorized.push(mapping);
+      }
+    });
+
+    console.log('[DataManagement] Uncategorized products:', uncategorized.length);
+    console.log('[DataManagement] Breakdown:', {
+      totalProducts: allProductNames.length,
+      mappedProducts: allMappings.length,
+      uncategorized: uncategorized.length,
+    });
+
+    return uncategorized;
+  }, [allProductNames, allMappings]);
 
   // Filter and sort uncategorized products (apply search and sort)
   const filteredUncategorizedMappings = useMemo(() => {
