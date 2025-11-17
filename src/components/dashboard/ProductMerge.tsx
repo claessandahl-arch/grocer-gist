@@ -52,15 +52,15 @@ const calculateSimilarity = (str1: string, str2: string): number => {
 // Calculate Levenshtein distance between two strings
 const levenshteinDistance = (str1: string, str2: string): number => {
   const matrix: number[][] = [];
-  
+
   for (let i = 0; i <= str2.length; i++) {
     matrix[i] = [i];
   }
-  
+
   for (let j = 0; j <= str1.length; j++) {
     matrix[0][j] = j;
   }
-  
+
   for (let i = 1; i <= str2.length; i++) {
     for (let j = 1; j <= str1.length; j++) {
       if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
@@ -74,9 +74,12 @@ const levenshteinDistance = (str1: string, str2: string): number => {
       }
     }
   }
-  
+
   return matrix[str2.length][str1.length];
 };
+
+// Swedish alphabet for filtering
+const SWEDISH_ALPHABET = ['Alla', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'Å', 'Ä', 'Ö', '#'];
 
 // Get categories for products from receipts
 const getProductCategories = (productNames: string[], receipts: any[] | undefined): { 
@@ -159,6 +162,7 @@ export const ProductMerge = React.memo(() => {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [selectedStandardCategory, setSelectedStandardCategory] = useState<Record<string, string>>({});
   const [receiptLimit, setReceiptLimit] = useState(100); // Pagination limit
+  const [activeFilter, setActiveFilter] = useState<string>('Alla'); // Alphabet filter
 
   // Use transition for non-urgent updates to prevent blocking UI
   const [isPending, startTransition] = useTransition();
@@ -320,6 +324,35 @@ export const ProductMerge = React.memo(() => {
 
   // Defer expensive calculations to prevent blocking UI updates
   const deferredUnmappedProducts = useDeferredValue(unmappedProducts);
+
+  // Filter products by selected alphabet letter
+  const filteredUnmappedProducts = useMemo(() => {
+    if (activeFilter === 'Alla') return unmappedProducts;
+
+    return unmappedProducts.filter(product => {
+      const firstChar = product[0]?.toUpperCase();
+      if (activeFilter === '#') {
+        // Numbers and symbols
+        return /[0-9]/.test(firstChar);
+      }
+      return firstChar === activeFilter;
+    });
+  }, [unmappedProducts, activeFilter]);
+
+  // Count products per letter for badge display
+  const letterCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    SWEDISH_ALPHABET.forEach(letter => {
+      if (letter === 'Alla') {
+        counts[letter] = unmappedProducts.length;
+      } else if (letter === '#') {
+        counts[letter] = unmappedProducts.filter(p => /[0-9]/.test(p[0])).length;
+      } else {
+        counts[letter] = unmappedProducts.filter(p => p[0]?.toUpperCase() === letter).length;
+      }
+    });
+    return counts;
+  }, [unmappedProducts]);
 
   // Generate suggested merges based on similarity (memoized with cache - expensive!)
   const suggestedMerges = useMemo(() => {
@@ -1181,21 +1214,62 @@ export const ProductMerge = React.memo(() => {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium">Välj produkter att slå ihop:</label>
+            <label className="text-sm font-medium">
+              Välj produkter att slå ihop:
+              {activeFilter !== 'Alla' && (
+                <span className="ml-2 text-muted-foreground">
+                  ({filteredUnmappedProducts.length} av {unmappedProducts.length})
+                </span>
+              )}
+            </label>
+
+            {/* Alphabet Filter */}
+            {unmappedProducts.length > 0 && (
+              <div className="flex flex-wrap gap-1 pb-3 border-b">
+                {SWEDISH_ALPHABET.map((letter) => (
+                  <button
+                    key={letter}
+                    onClick={() => setActiveFilter(letter)}
+                    disabled={letterCounts[letter] === 0}
+                    className={`
+                      px-2 py-1 text-xs font-medium rounded transition-colors min-w-[32px]
+                      ${activeFilter === letter
+                        ? 'bg-primary text-primary-foreground'
+                        : letterCounts[letter] > 0
+                          ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+                          : 'bg-muted text-muted-foreground/50 cursor-not-allowed'
+                      }
+                    `}
+                  >
+                    {letter}
+                    {letterCounts[letter] > 0 && letter !== 'Alla' && (
+                      <span className="ml-1 text-[10px] opacity-70">
+                        {letterCounts[letter]}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="border rounded-md overflow-hidden max-h-[500px] overflow-y-auto">
               {unmappedProducts.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">
                   Alla produkter är redan sammanslagna
                 </p>
+              ) : filteredUnmappedProducts.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Inga produkter börjar med "{activeFilter}"
+                </p>
               ) : (
                 <List
-                  rowCount={unmappedProducts.length}
+                  rowCount={filteredUnmappedProducts.length}
                   rowHeight={48}
                   defaultHeight={400}
                   rowComponent={(props) => (
                     <ProductRow
                       {...props}
-                      products={unmappedProducts}
+                      products={filteredUnmappedProducts}
                       selectedProducts={selectedProducts}
                       handleProductToggle={handleProductToggle}
                       handleAddToExistingGroup={handleAddToExistingGroup}
