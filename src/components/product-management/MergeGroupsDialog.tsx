@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -46,7 +46,15 @@ export function MergeGroupsDialog({
   const [searchQuery, setSearchQuery] = useState("");
   const queryClient = useQueryClient();
 
-  // Reset state when dialog opens/closes
+  // Reset state when dialog opens with a new source group
+  useEffect(() => {
+    if (open && sourceGroup) {
+      setSelectedTargetGroup("");
+      setSearchQuery("");
+    }
+  }, [open, sourceGroup]);
+
+  // Reset state when dialog closes
   const handleOpenChange = (isOpen: boolean) => {
     if (!isOpen) {
       setSelectedTargetGroup("");
