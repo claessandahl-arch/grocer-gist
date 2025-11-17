@@ -162,7 +162,8 @@ export const ProductMerge = React.memo(() => {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [selectedStandardCategory, setSelectedStandardCategory] = useState<Record<string, string>>({});
   const [receiptLimit, setReceiptLimit] = useState(100); // Pagination limit
-  const [activeFilter, setActiveFilter] = useState<string>('Alla'); // Alphabet filter
+  const [activeFilter, setActiveFilter] = useState<string>('Alla'); // Alphabet filter for unmapped products
+  const [activeGroupsFilter, setActiveGroupsFilter] = useState<string>('Alla'); // Alphabet filter for product groups
 
   // Use transition for non-urgent updates to prevent blocking UI
   const [isPending, startTransition] = useTransition();
@@ -983,6 +984,43 @@ export const ProductMerge = React.memo(() => {
   // Optimized: Pass only group names to ProductListItem instead of entire groupedMappings object
   const groupNames = useMemo(() => Object.keys(groupedMappings || {}), [groupedMappings]);
 
+  // Filter product groups by selected alphabet letter
+  const filteredGroupedMappings = useMemo(() => {
+    if (!groupedMappings) return {};
+    if (activeGroupsFilter === 'Alla') return groupedMappings;
+
+    const filtered: Record<string, Array<typeof combinedMappings[number]>> = {};
+    Object.entries(groupedMappings).forEach(([mappedName, items]) => {
+      const firstChar = mappedName[0]?.toUpperCase();
+      if (activeGroupsFilter === '#') {
+        // Numbers and symbols
+        if (/[0-9]/.test(firstChar)) {
+          filtered[mappedName] = items;
+        }
+      } else if (firstChar === activeGroupsFilter) {
+        filtered[mappedName] = items;
+      }
+    });
+    return filtered;
+  }, [groupedMappings, activeGroupsFilter]);
+
+  // Count product groups per letter for badge display
+  const groupLetterCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const allGroupNames = Object.keys(groupedMappings || {});
+
+    SWEDISH_ALPHABET.forEach(letter => {
+      if (letter === 'Alla') {
+        counts[letter] = allGroupNames.length;
+      } else if (letter === '#') {
+        counts[letter] = allGroupNames.filter(name => /[0-9]/.test(name[0])).length;
+      } else {
+        counts[letter] = allGroupNames.filter(name => name[0]?.toUpperCase() === letter).length;
+      }
+    });
+    return counts;
+  }, [groupedMappings]);
+
   // Debug log to check how many groups we have (only in development)
   if (import.meta.env.DEV) {
     logger.debug('Total mappings:', combinedMappings?.length);
@@ -1358,14 +1396,53 @@ export const ProductMerge = React.memo(() => {
         <>
           <Card>
             <CardHeader>
-              <CardTitle>Aktiva sammanslagningar</CardTitle>
+              <CardTitle>
+                Aktiva sammanslagningar
+                {activeGroupsFilter !== 'Alla' && (
+                  <span className="ml-2 text-sm font-normal text-muted-foreground">
+                    ({Object.keys(filteredGroupedMappings).length} av {Object.keys(groupedMappings).length})
+                  </span>
+                )}
+              </CardTitle>
               <CardDescription>
                 Produkter du har slagit ihop. Välj grupper för att slå ihop dem ytterligare.
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Alphabet Filter for Product Groups */}
+              <div className="flex flex-wrap gap-1 pb-3 mb-4 border-b">
+                {SWEDISH_ALPHABET.map((letter) => (
+                  <button
+                    key={letter}
+                    onClick={() => setActiveGroupsFilter(letter)}
+                    disabled={groupLetterCounts[letter] === 0}
+                    className={`
+                      px-2 py-1 text-xs font-medium rounded transition-colors min-w-[32px]
+                      ${activeGroupsFilter === letter
+                        ? 'bg-primary text-primary-foreground'
+                        : groupLetterCounts[letter] > 0
+                          ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+                          : 'bg-muted text-muted-foreground/50 cursor-not-allowed'
+                      }
+                    `}
+                  >
+                    {letter}
+                    {groupLetterCounts[letter] > 0 && letter !== 'Alla' && (
+                      <span className="ml-1 text-[10px] opacity-70">
+                        {groupLetterCounts[letter]}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {Object.keys(filteredGroupedMappings).length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p>Inga produktgrupper börjar med "{activeGroupsFilter}"</p>
+                </div>
+              ) : (
                 <div className="space-y-4">
-                {Object.entries(groupedMappings).map(([mappedName, items]: [string, any[]]) => {
+                {Object.entries(filteredGroupedMappings).map(([mappedName, items]: [string, any[]]) => {
                   // Use pre-calculated stats including category info
                   const stats = groupStats[mappedName] || { 
                     totalSpending: 0, 
@@ -1783,6 +1860,7 @@ export const ProductMerge = React.memo(() => {
                 );
                 })}
               </div>
+              )}
             </CardContent>
           </Card>
 
