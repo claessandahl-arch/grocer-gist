@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -32,6 +32,9 @@ type UngroupedProductsListProps = {
 
 const ITEMS_PER_PAGE = 50;
 
+// Swedish alphabet for filtering
+const SWEDISH_ALPHABET = ['Alla', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'Å', 'Ä', 'Ö', '#'];
+
 export function UngroupedProductsList({
   products,
   existingGroups,
@@ -41,6 +44,7 @@ export function UngroupedProductsList({
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(ITEMS_PER_PAGE);
+  const [activeFilter, setActiveFilter] = useState<string>('Alla');
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const handleSelectProduct = (productId: string, checked: boolean) => {
@@ -87,14 +91,43 @@ export function UngroupedProductsList({
     return () => observer.disconnect();
   }, [visibleCount, products.length]);
 
-  // Reset visible count when products change
+  // Reset visible count when products or filter changes
   useEffect(() => {
     setVisibleCount(ITEMS_PER_PAGE);
+  }, [products, activeFilter]);
+
+  // Filter products by selected letter
+  const filteredProducts = useMemo(() => {
+    if (activeFilter === 'Alla') return products;
+    
+    return products.filter(product => {
+      const firstChar = product.original_name[0]?.toUpperCase();
+      if (activeFilter === '#') {
+        // Numbers and symbols
+        return /[0-9]/.test(firstChar);
+      }
+      return firstChar === activeFilter;
+    });
+  }, [products, activeFilter]);
+
+  // Count products per letter for badge display
+  const letterCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    SWEDISH_ALPHABET.forEach(letter => {
+      if (letter === 'Alla') {
+        counts[letter] = products.length;
+      } else if (letter === '#') {
+        counts[letter] = products.filter(p => /[0-9]/.test(p.original_name[0])).length;
+      } else {
+        counts[letter] = products.filter(p => p.original_name[0]?.toUpperCase() === letter).length;
+      }
+    });
+    return counts;
   }, [products]);
 
   const loadAllProducts = useCallback(() => {
-    setVisibleCount(products.length);
-  }, [products.length]);
+    setVisibleCount(filteredProducts.length);
+  }, [filteredProducts.length]);
 
   if (isLoading) {
     return (
@@ -114,10 +147,10 @@ export function UngroupedProductsList({
     );
   }
 
-  const allSelected = products.length > 0 && selectedProducts.length === products.length;
+  const allSelected = filteredProducts.length > 0 && selectedProducts.length === products.length;
   const someSelected = selectedProducts.length > 0 && selectedProducts.length < products.length;
-  const visibleProducts = products.slice(0, visibleCount);
-  const hasMore = visibleCount < products.length;
+  const visibleProducts = filteredProducts.slice(0, visibleCount);
+  const hasMore = visibleCount < filteredProducts.length;
 
   return (
     <>
@@ -127,8 +160,17 @@ export function UngroupedProductsList({
             <div>
               <CardTitle>Produkter</CardTitle>
               <CardDescription>
-                {products.length} produkt{products.length !== 1 ? 'er' : ''} utan grupp
-                {hasMore && ` (visar ${visibleCount} av ${products.length})`}
+                {activeFilter === 'Alla' ? (
+                  <>
+                    {products.length} produkt{products.length !== 1 ? 'er' : ''} utan grupp
+                    {hasMore && ` (visar ${visibleCount} av ${products.length})`}
+                  </>
+                ) : (
+                  <>
+                    {filteredProducts.length} produkt{filteredProducts.length !== 1 ? 'er' : ''} börjar med "{activeFilter}"
+                    {hasMore && ` (visar ${visibleCount} av ${filteredProducts.length})`}
+                  </>
+                )}
               </CardDescription>
             </div>
             {selectedProducts.length > 0 && (
@@ -149,9 +191,36 @@ export function UngroupedProductsList({
               <p>Alla produkter tillhör en grupp! 🎉</p>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
+              {/* Alphabet Filter */}
+              <div className="flex flex-wrap gap-1 pb-3 border-b">
+                {SWEDISH_ALPHABET.map((letter) => (
+                  <button
+                    key={letter}
+                    onClick={() => setActiveFilter(letter)}
+                    disabled={letterCounts[letter] === 0}
+                    className={`
+                      px-2 py-1 text-xs font-medium rounded transition-colors min-w-[32px]
+                      ${activeFilter === letter 
+                        ? 'bg-primary text-primary-foreground' 
+                        : letterCounts[letter] > 0
+                          ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+                          : 'bg-muted text-muted-foreground/50 cursor-not-allowed'
+                      }
+                    `}
+                  >
+                    {letter}
+                    {letterCounts[letter] > 0 && letter !== 'Alla' && (
+                      <span className="ml-1 text-[10px] opacity-70">
+                        {letterCounts[letter]}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+
               {/* Select All */}
-              <div className="flex items-center gap-2 pb-2 border-b mb-2">
+              <div className="flex items-center gap-2 pb-2 border-b">
                 <Checkbox
                   checked={allSelected}
                   onCheckedChange={handleSelectAll}
@@ -167,13 +236,19 @@ export function UngroupedProductsList({
                     onClick={loadAllProducts}
                     className="ml-auto text-xs"
                   >
-                    Ladda alla ({products.length})
+                    Ladda alla ({filteredProducts.length})
                   </Button>
                 )}
               </div>
 
-              {/* Product List */}
-              <div className="space-y-2 max-h-[600px] overflow-y-auto">
+              {/* No results message */}
+              {filteredProducts.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p>Inga produkter börjar med "{activeFilter}"</p>
+                </div>
+              ) : (
+                /* Product List */
+                <div className="space-y-2 max-h-[600px] overflow-y-auto">
                 {visibleProducts.map((product) => (
                   <div
                     key={product.id}
@@ -226,6 +301,7 @@ export function UngroupedProductsList({
                   </div>
                 )}
               </div>
+              )}
             </div>
           )}
         </CardContent>
