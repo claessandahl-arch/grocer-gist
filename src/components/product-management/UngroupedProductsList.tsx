@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -30,6 +30,8 @@ type UngroupedProductsListProps = {
   onRefresh: () => void;
 };
 
+const ITEMS_PER_PAGE = 50;
+
 export function UngroupedProductsList({
   products,
   existingGroups,
@@ -38,6 +40,8 @@ export function UngroupedProductsList({
 }: UngroupedProductsListProps) {
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(ITEMS_PER_PAGE);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const handleSelectProduct = (productId: string, checked: boolean) => {
     if (checked) {
@@ -66,6 +70,32 @@ export function UngroupedProductsList({
     onRefresh();
   };
 
+  // Intersection Observer for infinite scroll
+  useEffect(() => {
+    if (!loadMoreRef.current) return;
+    
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && visibleCount < products.length) {
+          setVisibleCount(prev => Math.min(prev + ITEMS_PER_PAGE, products.length));
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(loadMoreRef.current);
+    return () => observer.disconnect();
+  }, [visibleCount, products.length]);
+
+  // Reset visible count when products change
+  useEffect(() => {
+    setVisibleCount(ITEMS_PER_PAGE);
+  }, [products]);
+
+  const loadAllProducts = useCallback(() => {
+    setVisibleCount(products.length);
+  }, [products.length]);
+
   if (isLoading) {
     return (
       <Card>
@@ -86,6 +116,8 @@ export function UngroupedProductsList({
 
   const allSelected = products.length > 0 && selectedProducts.length === products.length;
   const someSelected = selectedProducts.length > 0 && selectedProducts.length < products.length;
+  const visibleProducts = products.slice(0, visibleCount);
+  const hasMore = visibleCount < products.length;
 
   return (
     <>
@@ -96,6 +128,7 @@ export function UngroupedProductsList({
               <CardTitle>Produkter</CardTitle>
               <CardDescription>
                 {products.length} produkt{products.length !== 1 ? 'er' : ''} utan grupp
+                {hasMore && ` (visar ${visibleCount} av ${products.length})`}
               </CardDescription>
             </div>
             {selectedProducts.length > 0 && (
@@ -118,7 +151,7 @@ export function UngroupedProductsList({
           ) : (
             <div className="space-y-2">
               {/* Select All */}
-              <div className="flex items-center gap-2 pb-2 border-b">
+              <div className="flex items-center gap-2 pb-2 border-b mb-2">
                 <Checkbox
                   checked={allSelected}
                   onCheckedChange={handleSelectAll}
@@ -127,53 +160,72 @@ export function UngroupedProductsList({
                 <span className="text-sm text-muted-foreground">
                   Markera alla
                 </span>
+                {hasMore && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={loadAllProducts}
+                    className="ml-auto text-xs"
+                  >
+                    Ladda alla ({products.length})
+                  </Button>
+                )}
               </div>
 
               {/* Product List */}
-              {products.map((product) => (
-                <div
-                  key={product.id}
-                  className="flex items-start gap-3 p-3 rounded-lg border bg-card hover:bg-accent/5 transition-colors"
-                >
-                  <Checkbox
-                    checked={selectedProducts.includes(product.id)}
-                    onCheckedChange={(checked) => handleSelectProduct(product.id, checked as boolean)}
-                    className="mt-1"
-                  />
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">
-                          {product.original_name}
-                        </p>
-                        {product.category && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {product.category}
-                          </p>
-                        )}
-                      </div>
-                      <Badge variant={product.type === 'global' ? 'default' : 'outline'} className="shrink-0">
-                        {product.type === 'global' ? (
-                          <><Globe className="h-3 w-3 mr-1" /> Global</>
-                        ) : (
-                          <><User className="h-3 w-3 mr-1" /> User</>
-                        )}
-                      </Badge>
-                    </div>
-
-                    <AssignToGroupDropdown
-                      product={product}
-                      existingGroups={existingGroups}
-                      onAssigned={onRefresh}
-                      onCreateNew={() => {
-                        setSelectedProducts([product.id]);
-                        setCreateDialogOpen(true);
-                      }}
+              <div className="space-y-2 max-h-[600px] overflow-y-auto">
+                {visibleProducts.map((product) => (
+                  <div
+                    key={product.id}
+                    className="flex items-start gap-3 p-3 rounded-lg border bg-card hover:bg-accent/5 transition-colors"
+                  >
+                    <Checkbox
+                      checked={selectedProducts.includes(product.id)}
+                      onCheckedChange={(checked) => handleSelectProduct(product.id, checked as boolean)}
+                      className="mt-1"
                     />
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">
+                            {product.original_name}
+                          </p>
+                          {product.category && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {product.category}
+                            </p>
+                          )}
+                        </div>
+                        <Badge variant={product.type === 'global' ? 'default' : 'outline'} className="shrink-0">
+                          {product.type === 'global' ? (
+                            <><Globe className="h-3 w-3 mr-1" /> Global</>
+                          ) : (
+                            <><User className="h-3 w-3 mr-1" /> User</>
+                          )}
+                        </Badge>
+                      </div>
+
+                      <AssignToGroupDropdown
+                        product={product}
+                        existingGroups={existingGroups}
+                        onAssigned={onRefresh}
+                        onCreateNew={() => {
+                          setSelectedProducts([product.id]);
+                          setCreateDialogOpen(true);
+                        }}
+                      />
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+
+                {/* Load more trigger */}
+                {hasMore && (
+                  <div ref={loadMoreRef} className="text-center py-4 text-sm text-muted-foreground">
+                    Laddar fler produkter...
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </CardContent>
