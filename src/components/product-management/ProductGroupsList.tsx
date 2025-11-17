@@ -17,10 +17,11 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronRight, AlertTriangle, Globe, User, X, Edit } from "lucide-react";
+import { ChevronRight, AlertTriangle, Globe, User, X, Edit, Merge } from "lucide-react";
 import { toast } from "sonner";
 import { categoryOptions } from "@/lib/categoryConstants";
 import { RenameGroupDialog } from "./RenameGroupDialog";
+import { MergeGroupsDialog } from "./MergeGroupsDialog";
 
 type ProductGroup = {
   name: string;
@@ -45,6 +46,8 @@ export function ProductGroupsList({
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState<ProductGroup | null>(null);
+  const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
+  const [selectedGroupToMerge, setSelectedGroupToMerge] = useState<ProductGroup | null>(null);
 
   const toggleExpanded = (groupName: string) => {
     const newExpanded = new Set(expandedGroups);
@@ -234,19 +237,36 @@ export function ProductGroupsList({
                         </p>
                       </div>
 
-                      {/* Rename Button */}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedGroup(group);
-                          setRenameDialogOpen(true);
-                        }}
-                        className="h-8 shrink-0"
-                      >
-                        <Edit className="h-3 w-3 mr-1" />
-                        Byt namn
-                      </Button>
+                      {/* Action Buttons */}
+                      <div className="flex gap-2 shrink-0">
+                        {/* Rename Button */}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedGroup(group);
+                            setRenameDialogOpen(true);
+                          }}
+                          className="h-8"
+                        >
+                          <Edit className="h-3 w-3 mr-1" />
+                          Byt namn
+                        </Button>
+
+                        {/* Merge Button */}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedGroupToMerge(group);
+                            setMergeDialogOpen(true);
+                          }}
+                          className="h-8"
+                        >
+                          <Merge className="h-3 w-3 mr-1" />
+                          Kombinera
+                        </Button>
+                      </div>
                     </div>
 
                     {/* Expand/Collapse Trigger */}
@@ -312,6 +332,22 @@ export function ProductGroupsList({
           onSuccess={() => {
             setRenameDialogOpen(false);
             setSelectedGroup(null);
+            onRefresh();
+          }}
+        />
+
+        {/* Merge Groups Dialog */}
+        <MergeGroupsDialog
+          sourceGroup={selectedGroupToMerge}
+          allGroups={groups}
+          open={mergeDialogOpen}
+          onClose={() => {
+            setMergeDialogOpen(false);
+            setSelectedGroupToMerge(null);
+          }}
+          onSuccess={() => {
+            setMergeDialogOpen(false);
+            setSelectedGroupToMerge(null);
             onRefresh();
           }}
         />
