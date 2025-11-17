@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -41,11 +41,16 @@ export function RenameGroupDialog({
   const [newName, setNewName] = useState("");
   const queryClient = useQueryClient();
 
-  // Reset the input when dialog opens with a new group
-  const handleOpenChange = (isOpen: boolean) => {
-    if (isOpen && group) {
+  // Update input field whenever group changes or dialog opens
+  useEffect(() => {
+    if (open && group) {
       setNewName(group.name);
-    } else if (!isOpen) {
+    }
+  }, [group, open]);
+
+  // Handle dialog close
+  const handleOpenChange = (isOpen: boolean) => {
+    if (!isOpen) {
       onClose();
     }
   };
