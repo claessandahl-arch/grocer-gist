@@ -17,9 +17,10 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronRight, AlertTriangle, Globe, User, X } from "lucide-react";
+import { ChevronRight, AlertTriangle, Globe, User, X, Edit } from "lucide-react";
 import { toast } from "sonner";
 import { categoryOptions } from "@/lib/categoryConstants";
+import { RenameGroupDialog } from "./RenameGroupDialog";
 
 type ProductGroup = {
   name: string;
@@ -42,6 +43,8 @@ export function ProductGroupsList({
   onRefresh,
 }: ProductGroupsListProps) {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState<ProductGroup | null>(null);
 
   const toggleExpanded = (groupName: string) => {
     const newExpanded = new Set(expandedGroups);
@@ -230,6 +233,20 @@ export function ProductGroupsList({
                           {group.totalPurchases > 0 && ` • ${group.totalPurchases} köp`}
                         </p>
                       </div>
+
+                      {/* Rename Button */}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedGroup(group);
+                          setRenameDialogOpen(true);
+                        }}
+                        className="h-8 shrink-0"
+                      >
+                        <Edit className="h-3 w-3 mr-1" />
+                        Byt namn
+                      </Button>
                     </div>
 
                     {/* Expand/Collapse Trigger */}
@@ -283,6 +300,21 @@ export function ProductGroupsList({
             })}
           </div>
         )}
+
+        {/* Rename Group Dialog */}
+        <RenameGroupDialog
+          group={selectedGroup}
+          open={renameDialogOpen}
+          onClose={() => {
+            setRenameDialogOpen(false);
+            setSelectedGroup(null);
+          }}
+          onSuccess={() => {
+            setRenameDialogOpen(false);
+            setSelectedGroup(null);
+            onRefresh();
+          }}
+        />
       </CardContent>
     </Card>
   );
