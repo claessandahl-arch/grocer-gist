@@ -47,6 +47,24 @@ export default function DataManagement() {
     }
   });
 
+  // Fetch all receipts to get product names
+  // Note: Not filtering by user_id to match ProductManagement behavior and ensure all products are shown
+  const { data: receipts = [], isLoading: receiptsLoading } = useQuery({
+    queryKey: ['receipts-all'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('receipts')
+        .select('*')
+        .order('receipt_date', { ascending: false });
+
+      if (error) throw error;
+      console.log('[DataManagement] Fetched receipts:', data?.length || 0);
+      return data || [];
+    },
+    refetchOnMount: true, // Force fresh data
+    staleTime: 0, // Don't use cached data
+  });
+
   // Fetch user mappings
   const { data: userMappings = [], isLoading: userMappingsLoading } = useQuery({
     queryKey: ['user-product-mappings', user?.id],
@@ -75,6 +93,22 @@ export default function DataManagement() {
       return data.map(m => ({ ...m, type: 'global' as const, user_id: '' }));
     },
   });
+
+  // Get unique product names from all receipts
+  const allProductNames = useMemo(() => {
+    const uniqueNames = new Set<string>();
+    console.log('[DataManagement] Processing receipts:', receipts.length);
+    receipts.forEach((receipt, idx) => {
+      const items = (receipt.items as any[]) || [];
+      console.log(`[DataManagement] Receipt ${idx + 1}/${receipts.length}: ${items.length} items from ${receipt.store_name || 'unknown store'}`);
+      items.forEach(item => {
+        if (item.name) uniqueNames.add(item.name);
+      });
+    });
+    const result = Array.from(uniqueNames);
+    console.log('[DataManagement] Total unique products from receipts:', result.length);
+    return result;
+  }, [receipts]);
 
   // Combine all mappings
   const allMappings: ProductMapping[] = useMemo(() => {
@@ -250,7 +284,7 @@ export default function DataManagement() {
     });
   };
 
-  const isLoading = userMappingsLoading || globalMappingsLoading;
+  const isLoading = receiptsLoading || userMappingsLoading || globalMappingsLoading;
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
@@ -277,13 +311,13 @@ export default function DataManagement() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <StatsCard
             title="Totalt produkter"
-            value={allMappings.length}
+            value={allProductNames.length}
             loading={isLoading}
           />
           <StatsCard
             title="Okategoriserade"
             value={uncategorizedProducts.length}
-            subtitle={allMappings.length > 0 ? `${Math.round((uncategorizedProducts.length / allMappings.length) * 100)}%` : '0%'}
+            subtitle={allProductNames.length > 0 ? `${Math.round((uncategorizedProducts.length / allProductNames.length) * 100)}%` : '0%'}
             loading={isLoading}
             variant="warning"
           />
