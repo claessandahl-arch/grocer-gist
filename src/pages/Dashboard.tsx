@@ -13,6 +13,7 @@ import { startOfMonth, endOfMonth, format, addMonths, subMonths } from "date-fns
 import { sv } from "date-fns/locale";
 import { useState } from "react";
 import type { ReceiptItem } from "@/types/receipt";
+import { calculateCategoryTotals } from "@/lib/categoryUtils";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -24,15 +25,45 @@ const Dashboard = () => {
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
-      
+
       const { data, error } = await supabase
         .from('receipts')
         .select('*')
         .eq('user_id', user.id)
         .order('receipt_date', { ascending: false });
-      
+
       if (error) throw error;
       return data;
+    },
+  });
+
+  // Fetch user product mappings for category corrections
+  const { data: userMappings } = useQuery({
+    queryKey: ['user-product-mappings-dashboard'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      const { data, error } = await supabase
+        .from('product_mappings')
+        .select('original_name, mapped_name, category')
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Fetch global product mappings
+  const { data: globalMappings } = useQuery({
+    queryKey: ['global-product-mappings-dashboard'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('global_product_mappings')
+        .select('original_name, mapped_name, category');
+
+      if (error) throw error;
+      return data || [];
     },
   });
 
@@ -54,15 +85,12 @@ const Dashboard = () => {
   const handleNextMonth = () => setSelectedMonth(prev => addMonths(prev, 1));
   const isCurrentMonth = format(selectedMonth, 'yyyy-MM') === format(new Date(), 'yyyy-MM');
 
-  // Get top category this month
-  const categoryTotals: Record<string, number> = {};
-  thisMonthReceipts.forEach(receipt => {
-    const items = (receipt.items as unknown as ReceiptItem[]) || [];
-    items.forEach(item => {
-      const category = item.category || 'other';
-      categoryTotals[category] = (categoryTotals[category] || 0) + Number(item.price || 0);
-    });
-  });
+  // Get top category this month using corrected categories from mappings
+  const categoryTotals = calculateCategoryTotals(
+    thisMonthReceipts,
+    userMappings,
+    globalMappings
+  );
 
   const topCategory = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0];
   

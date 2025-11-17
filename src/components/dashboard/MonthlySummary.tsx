@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { startOfMonth, endOfMonth, subMonths, format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { categoryNames } from "@/lib/categoryConstants";
+import { calculateCategoryTotals } from "@/lib/categoryUtils";
 
 export const MonthlySummary = () => {
   const { data: receipts, isLoading } = useQuery({
@@ -12,15 +13,45 @@ export const MonthlySummary = () => {
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
-      
+
       const { data, error } = await supabase
         .from('receipts')
         .select('*')
         .eq('user_id', user.id)
         .order('receipt_date', { ascending: false });
-      
+
       if (error) throw error;
       return data;
+    },
+  });
+
+  // Fetch user product mappings
+  const { data: userMappings } = useQuery({
+    queryKey: ['user-product-mappings-summary'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+
+      const { data, error } = await supabase
+        .from('product_mappings')
+        .select('original_name, mapped_name, category')
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Fetch global product mappings
+  const { data: globalMappings } = useQuery({
+    queryKey: ['global-product-mappings-summary'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('global_product_mappings')
+        .select('original_name, mapped_name, category');
+
+      if (error) throw error;
+      return data || [];
     },
   });
 
@@ -39,15 +70,12 @@ export const MonthlySummary = () => {
     const count = monthReceipts.length;
     const avgPerTrip = count > 0 ? total / count : 0;
 
-    // Get top category
-    const categoryTotals: Record<string, number> = {};
-    monthReceipts.forEach(receipt => {
-      const items = receipt.items as any[] || [];
-      items.forEach(item => {
-        const category = item.category || 'other';
-        categoryTotals[category] = (categoryTotals[category] || 0) + Number(item.price || 0);
-      });
-    });
+    // Get top category using corrected categories from mappings
+    const categoryTotals = calculateCategoryTotals(
+      monthReceipts,
+      userMappings,
+      globalMappings
+    );
 
     const topCategoryEntry = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0];
     const topCategory = topCategoryEntry ? categoryNames[topCategoryEntry[0]] || 'Övrigt' : 'Ingen data';
