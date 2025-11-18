@@ -122,7 +122,7 @@ serve(async (req) => {
     const aiSuggestions = aiData.choices[0].message.content;
 
     // Parse AI response (expecting JSON, possibly wrapped in markdown)
-    let suggestions;
+    let parsedResponse;
     try {
       let jsonString = aiSuggestions.trim();
       
@@ -133,14 +133,15 @@ serve(async (req) => {
         jsonString = jsonString.replace(/^```\s*/, '').replace(/\s*```$/, '');
       }
       
-      suggestions = JSON.parse(jsonString);
+      parsedResponse = JSON.parse(jsonString);
     } catch (e) {
       console.error('Failed to parse AI response:', aiSuggestions);
       throw new Error('Invalid AI response format');
     }
 
+    // The AI returns { suggestions: [...] }, so we pass it through directly
     return new Response(
-      JSON.stringify({ suggestions }),
+      JSON.stringify(parsedResponse),
       {
         headers: {
           ...corsHeaders,
