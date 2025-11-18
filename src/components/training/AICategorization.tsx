@@ -208,10 +208,17 @@ export function AICategorization() {
     mutationFn: async (productsToApply: ProductWithSuggestion[]) => {
       if (!user) throw new Error('Not authenticated');
 
+      console.log('🔄 Starting to save categories for', productsToApply.length, 'products');
+      
       let totalUpdated = 0;
+      let receiptUpdatesFailed = 0;
+      let mappingUpdatesFailed = 0;
+      const errors: string[] = [];
 
       for (const product of productsToApply) {
         if (product.status !== 'accepted' && product.status !== 'modified') continue;
+
+        console.log(`📦 Processing product: "${product.name}" with category "${product.userCategory}"`);
 
         // Get non-excluded items
         const itemsToUpdate = product.items.filter(item => {
@@ -219,7 +226,12 @@ export function AICategorization() {
           return !product.excludedItemIds.has(itemId);
         });
 
-        if (itemsToUpdate.length === 0) continue;
+        console.log(`  ├─ Items to update: ${itemsToUpdate.length} (${product.excludedItemIds.size} excluded)`);
+
+        if (itemsToUpdate.length === 0) {
+          console.log(`  └─ ⚠️ No items to update, skipping`);
+          continue;
+        }
 
         // Group by receipt
         const receiptUpdates = new Map<string, number[]>();
@@ -230,6 +242,8 @@ export function AICategorization() {
           receiptUpdates.get(item.receiptId)!.push(item.itemIndex);
         });
 
+        console.log(`  ├─ Updating ${receiptUpdates.size} receipts`);
+
         // Update each receipt
         for (const [receiptId, itemIndices] of receiptUpdates) {
           const { data: receipt, error: fetchError } = await supabase
@@ -238,7 +252,12 @@ export function AICategorization() {
             .eq('id', receiptId)
             .single();
 
-          if (fetchError || !receipt) continue;
+          if (fetchError || !receipt) {
+            console.error(`  │  ├─ ❌ Failed to fetch receipt ${receiptId}:`, fetchError);
+            receiptUpdatesFailed++;
+            errors.push(`Failed to fetch receipt: ${fetchError?.message || 'Unknown error'}`);
+            continue;
+          }
 
           const items = (receipt.items as any[]) || [];
           itemIndices.forEach(idx => {
@@ -252,46 +271,84 @@ export function AICategorization() {
             .update({ items })
             .eq('id', receiptId);
 
-          if (!updateError) {
+          if (updateError) {
+            console.error(`  │  ├─ ❌ Failed to update receipt ${receiptId}:`, updateError);
+            receiptUpdatesFailed++;
+            errors.push(`Failed to update receipt: ${updateError.message}`);
+          } else {
+            console.log(`  │  ├─ ✅ Updated ${itemIndices.length} items in receipt ${receiptId.substring(0, 8)}...`);
             totalUpdated += itemIndices.length;
           }
         }
 
-        // Also create a mapping for future items
+        // Create a mapping for future items - THIS IS CRITICAL
+        console.log(`  ├─ Creating product mapping for "${product.name}" -> "${product.userCategory}"`);
         const { error: mappingError } = await supabase
           .from('product_mappings')
           .upsert({
             user_id: user.id,
             original_name: product.name,
-            mapped_name: null,
+            mapped_name: product.name,
             category: product.userCategory!,
           }, {
             onConflict: 'user_id,original_name',
             ignoreDuplicates: false
           });
 
+        if (mappingError) {
+          console.error(`  ├─ ❌ CRITICAL: Failed to create product mapping:`, mappingError);
+          mappingUpdatesFailed++;
+          errors.push(`Failed to create mapping for "${product.name}": ${mappingError.message}`);
+          // This is critical - throw to stop the process
+          throw new Error(`Failed to save category mapping: ${mappingError.message}`);
+        } else {
+          console.log(`  └─ ✅ Product mapping saved successfully`);
+        }
+
         // Save feedback for learning
         await saveFeedback.mutateAsync(product);
       }
 
-      return { count: totalUpdated };
+      console.log('📊 Summary:');
+      console.log(`  ├─ Total items updated: ${totalUpdated}`);
+      console.log(`  ├─ Receipt updates failed: ${receiptUpdatesFailed}`);
+      console.log(`  └─ Mapping updates failed: ${mappingUpdatesFailed}`);
+
+      if (errors.length > 0) {
+        console.warn('⚠️ Errors encountered:', errors);
+      }
+
+      return { 
+        count: totalUpdated,
+        receiptUpdatesFailed,
+        mappingUpdatesFailed,
+        errors
+      };
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['mappings-for-categorization'] });
       queryClient.invalidateQueries({ queryKey: ['receipts-for-categorization'] });
       setProcessedCount(prev => prev + result.count);
-      toast.success(`${result.count} kategorier sparade!`);
+      
+      // Show detailed success message
+      if (result.errors.length > 0) {
+        toast.warning(`${result.count} kategorier sparade, men ${result.receiptUpdatesFailed + result.mappingUpdatesFailed} misslyckades. Se konsolen för detaljer.`);
+      } else {
+        toast.success(`✅ ${result.count} kategorier sparade!`);
+      }
 
       // Move to next batch
       if (batchIndex < totalBatches - 1) {
         setBatchIndex(prev => prev + 1);
       } else {
-        toast.success('Alla produkter kategoriserade! 🎉');
+        toast.success('🎉 Alla produkter kategoriserade!');
       }
     },
     onError: (error: any) => {
-      console.error('Error applying categories:', error);
-      toast.error(`Kunde inte spara kategorier: ${error.message}`);
+      console.error('❌ CRITICAL ERROR applying categories:', error);
+      toast.error(`Kunde inte spara kategorier: ${error.message}`, {
+        description: 'Kontrollera konsolen för mer information.'
+      });
     }
   });
 
