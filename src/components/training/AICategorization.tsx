@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sparkles, Check, X, AlertCircle, RefreshCw } from "lucide-react";
+import { Sparkles, Check, X, AlertCircle, RefreshCw, ChevronDown, ChevronRight, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { categoryOptions, categoryNames } from "@/lib/categoryConstants";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 const BATCH_SIZE = 15;
 
@@ -25,14 +26,22 @@ type CategorySuggestion = {
   reasoning: string;
 };
 
-type ProductWithSuggestion = UncategorizedProduct & {
-  suggestion?: CategorySuggestion;
+type ProductGroup = {
+  id: string;
+  products: UncategorizedProduct[];
+  suggestion?: {
+    category: string;
+    confidence: number;
+    reasoning: string;
+  };
   userCategory?: string;
   status: 'pending' | 'accepted' | 'modified' | 'skipped';
+  removedProducts: Set<string>; // Track removed products
+  isExpanded: boolean;
 };
 
 export function AICategorization() {
-  const [currentBatch, setCurrentBatch] = useState<ProductWithSuggestion[]>([]);
+  const [productGroups, setProductGroups] = useState<ProductGroup[]>([]);
   const [batchIndex, setBatchIndex] = useState(0);
   const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState(false);
   const [processedCount, setProcessedCount] = useState(0);
@@ -111,6 +120,31 @@ export function AICategorization() {
     return uncategorized;
   }, [receipts, mappings]);
 
+  // Group similar products together
+  const groupSimilarProducts = (products: UncategorizedProduct[]): ProductGroup[] => {
+    const groups: ProductGroup[] = [];
+    const processed = new Set<string>();
+
+    products.forEach((product, idx) => {
+      if (processed.has(product.name)) return;
+
+      // For now, each product is its own group
+      // TODO: Add similarity grouping logic
+      const group: ProductGroup = {
+        id: `group-${idx}`,
+        products: [product],
+        status: 'pending',
+        removedProducts: new Set(),
+        isExpanded: false,
+      };
+
+      groups.push(group);
+      processed.add(product.name);
+    });
+
+    return groups;
+  };
+
   // Get current batch
   const totalBatches = Math.ceil(uncategorizedProducts.length / BATCH_SIZE);
   const startIndex = batchIndex * BATCH_SIZE;
@@ -119,23 +153,25 @@ export function AICategorization() {
   // Initialize batch when index changes
   useEffect(() => {
     if (uncategorizedProducts.length > 0) {
-      const batch = uncategorizedProducts
-        .slice(startIndex, endIndex)
-        .map(p => ({ ...p, status: 'pending' as const }));
-      setCurrentBatch(batch);
+      const batchProducts = uncategorizedProducts.slice(startIndex, endIndex);
+      const groups = groupSimilarProducts(batchProducts);
+      setProductGroups(groups);
     }
   }, [batchIndex, uncategorizedProducts, startIndex, endIndex]);
 
   // Generate AI suggestions
   const generateSuggestions = async () => {
-    if (!user || currentBatch.length === 0) return;
+    if (!user || productGroups.length === 0) return;
 
     setIsGeneratingSuggestions(true);
 
     try {
+      // Collect all products from all groups
+      const allProducts = productGroups.flatMap(g => g.products);
+
       const { data, error } = await supabase.functions.invoke('suggest-categories', {
         body: {
-          products: currentBatch.map(p => ({ name: p.name, occurrences: p.occurrences })),
+          products: allProducts.map(p => ({ name: p.name, occurrences: p.occurrences })),
           userId: user.id,
         }
       });
@@ -144,12 +180,17 @@ export function AICategorization() {
 
       const suggestions = data.suggestions as CategorySuggestion[];
 
-      // Match suggestions to products
-      setCurrentBatch(prev => prev.map(product => {
-        const suggestion = suggestions.find(s => s.product === product.name);
+      // Match suggestions to groups
+      setProductGroups(prev => prev.map(group => {
+        // Find suggestion for the first product in the group
+        const suggestion = suggestions.find(s => s.product === group.products[0].name);
         return {
-          ...product,
-          suggestion,
+          ...group,
+          suggestion: suggestion ? {
+            category: suggestion.category,
+            confidence: suggestion.confidence,
+            reasoning: suggestion.reasoning,
+          } : undefined,
           userCategory: suggestion?.category,
         };
       }));
@@ -163,28 +204,28 @@ export function AICategorization() {
     }
   };
 
-  // Save feedback mutation (currently disabled as feedback table doesn't exist)
-  const saveFeedback = useMutation({
-    mutationFn: async (product: ProductWithSuggestion) => {
-      // Feedback saving is currently disabled
-      // Will be re-enabled when category_suggestion_feedback table is created
-      return Promise.resolve();
-    },
-  });
-
   // Apply categories mutation
   const applyCategories = useMutation({
-    mutationFn: async (productsToApply: ProductWithSuggestion[]) => {
+    mutationFn: async (groupsToApply: ProductGroup[]) => {
       if (!user) throw new Error('Not authenticated');
 
-      const mappingsToCreate = productsToApply
-        .filter(p => p.status === 'accepted' || p.status === 'modified')
-        .map(p => ({
-          user_id: user.id,
-          original_name: p.name,
-          mapped_name: null,
-          category: p.userCategory!,
-        }));
+      const mappingsToCreate: any[] = [];
+
+      groupsToApply
+        .filter(g => g.status === 'accepted' || g.status === 'modified')
+        .forEach(group => {
+          // Only include products that haven't been removed
+          group.products.forEach(product => {
+            if (!group.removedProducts.has(product.name)) {
+              mappingsToCreate.push({
+                user_id: user.id,
+                original_name: product.name,
+                mapped_name: null,
+                category: group.userCategory!,
+              });
+            }
+          });
+        });
 
       if (mappingsToCreate.length === 0) return { count: 0 };
 
@@ -194,20 +235,13 @@ export function AICategorization() {
 
       if (error) throw error;
 
-      // Save feedback for learning
-      for (const product of productsToApply) {
-        if (product.status === 'accepted' || product.status === 'modified') {
-          await saveFeedback.mutateAsync(product);
-        }
-      }
-
       return { count: mappingsToCreate.length };
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['mappings-for-categorization'] });
       queryClient.invalidateQueries({ queryKey: ['receipts-for-categorization'] });
       setProcessedCount(prev => prev + result.count);
-      toast.success(`${result.count} kategorier sparade!`);
+      toast.success(`${result.count} produkter kategoriserade!`);
 
       // Move to next batch
       if (batchIndex < totalBatches - 1) {
@@ -222,32 +256,59 @@ export function AICategorization() {
     }
   });
 
-  const handleAccept = (index: number) => {
-    setCurrentBatch(prev => prev.map((p, i) =>
-      i === index ? { ...p, status: 'accepted' as const } : p
+  const handleAccept = (groupId: string) => {
+    setProductGroups(prev => prev.map(g =>
+      g.id === groupId ? { ...g, status: 'accepted' as const } : g
     ));
   };
 
-  const handleModify = (index: number, newCategory: string) => {
-    setCurrentBatch(prev => prev.map((p, i) =>
-      i === index ? { ...p, userCategory: newCategory, status: 'modified' as const } : p
+  const handleModify = (groupId: string, newCategory: string) => {
+    setProductGroups(prev => prev.map(g =>
+      g.id === groupId ? { ...g, userCategory: newCategory, status: 'modified' as const } : g
     ));
   };
 
-  const handleSkip = (index: number) => {
-    setCurrentBatch(prev => prev.map((p, i) =>
-      i === index ? { ...p, status: 'skipped' as const } : p
+  const handleSkip = (groupId: string) => {
+    setProductGroups(prev => prev.map(g =>
+      g.id === groupId ? { ...g, status: 'skipped' as const } : g
     ));
+  };
+
+  const handleToggleExpand = (groupId: string) => {
+    setProductGroups(prev => prev.map(g =>
+      g.id === groupId ? { ...g, isExpanded: !g.isExpanded } : g
+    ));
+  };
+
+  const handleRemoveProduct = (groupId: string, productName: string) => {
+    setProductGroups(prev => prev.map(g => {
+      if (g.id === groupId) {
+        const newRemoved = new Set(g.removedProducts);
+        newRemoved.add(productName);
+        return { ...g, removedProducts: newRemoved };
+      }
+      return g;
+    }));
   };
 
   const handleApplyBatch = () => {
-    applyCategories.mutate(currentBatch);
+    applyCategories.mutate(productGroups);
   };
 
-  const readyToApply = currentBatch.some(p => p.status === 'accepted' || p.status === 'modified');
-  const allReviewed = currentBatch.every(p => p.status !== 'pending');
+  const getActiveProductCount = (group: ProductGroup) => {
+    return group.products.filter(p => !group.removedProducts.has(p.name)).length;
+  };
+
+  const getTotalActiveProducts = () => {
+    return productGroups
+      .filter(g => g.status === 'accepted' || g.status === 'modified')
+      .reduce((sum, g) => sum + getActiveProductCount(g), 0);
+  };
+
+  const readyToApply = productGroups.some(g => g.status === 'accepted' || g.status === 'modified');
+  const allReviewed = productGroups.every(g => g.status !== 'pending');
   const progress = uncategorizedProducts.length > 0
-    ? Math.round(((processedCount + currentBatch.filter(p => p.status !== 'pending' && p.status !== 'skipped').length) / uncategorizedProducts.length) * 100)
+    ? Math.round(((processedCount + getTotalActiveProducts()) / uncategorizedProducts.length) * 100)
     : 0;
 
   if (receiptsLoading) {
@@ -295,7 +356,7 @@ export function AICategorization() {
               {uncategorizedProducts.length} produkter behöver kategoriseras
             </CardDescription>
           </div>
-          {currentBatch.length > 0 && !currentBatch[0].suggestion && (
+          {productGroups.length > 0 && !productGroups[0].suggestion && (
             <Button
               onClick={generateSuggestions}
               disabled={isGeneratingSuggestions}
@@ -330,110 +391,164 @@ export function AICategorization() {
           </p>
         </div>
 
-        {/* Batch list */}
+        {/* Group list */}
         <div className="space-y-3">
-          {currentBatch.map((product, index) => (
-            <Card key={product.name} className={`p-4 ${
-              product.status === 'accepted' ? 'border-green-500/50 bg-green-500/5' :
-              product.status === 'modified' ? 'border-blue-500/50 bg-blue-500/5' :
-              product.status === 'skipped' ? 'border-gray-500/50 bg-gray-500/5' :
-              ''
-            }`}>
-              <div className="space-y-3">
-                {/* Product name */}
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="font-semibold">{product.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Förekommer {product.occurrences} gång{product.occurrences !== 1 ? 'er' : ''}
-                    </p>
+          {productGroups.map((group) => {
+            const activeCount = getActiveProductCount(group);
+            const hasMultipleProducts = group.products.length > 1;
+
+            return (
+              <Card key={group.id} className={`p-4 ${
+                group.status === 'accepted' ? 'border-green-500/50 bg-green-500/5' :
+                group.status === 'modified' ? 'border-blue-500/50 bg-blue-500/5' :
+                group.status === 'skipped' ? 'border-gray-500/50 bg-gray-500/5' :
+                ''
+              }`}>
+                <div className="space-y-3">
+                  {/* Group header */}
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="font-semibold">{group.products[0].name}</p>
+                        {hasMultipleProducts && (
+                          <Badge variant="secondary" className="text-xs">
+                            +{group.products.length - 1} liknande
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {activeCount} produkt{activeCount !== 1 ? 'er' : ''} kommer att kategoriseras
+                      </p>
+                    </div>
+                    {group.status !== 'pending' && (
+                      <Badge variant={
+                        group.status === 'accepted' ? 'default' :
+                        group.status === 'modified' ? 'secondary' :
+                        'outline'
+                      }>
+                        {group.status === 'accepted' ? 'Accepterad' :
+                         group.status === 'modified' ? 'Justerad' :
+                         'Hoppades över'}
+                      </Badge>
+                    )}
                   </div>
-                  {product.status !== 'pending' && (
-                    <Badge variant={
-                      product.status === 'accepted' ? 'default' :
-                      product.status === 'modified' ? 'secondary' :
-                      'outline'
-                    }>
-                      {product.status === 'accepted' ? 'Accepterad' :
-                       product.status === 'modified' ? 'Justerad' :
-                       'Hoppades över'}
-                    </Badge>
+
+                  {/* Show all products button */}
+                  {hasMultipleProducts && (
+                    <Collapsible open={group.isExpanded} onOpenChange={() => handleToggleExpand(group.id)}>
+                      <CollapsibleTrigger asChild>
+                        <Button variant="ghost" size="sm" className="w-full justify-start gap-2">
+                          {group.isExpanded ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                          {group.isExpanded ? 'Dölj' : 'Visa'} alla produkter ({group.products.length})
+                        </Button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="mt-2">
+                        <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+                          {group.products.map((product, idx) => (
+                            <div key={product.name} className="flex items-center justify-between text-sm">
+                              <div className={group.removedProducts.has(product.name) ? 'line-through text-muted-foreground' : ''}>
+                                <span className="font-medium">{product.name}</span>
+                                <span className="text-muted-foreground ml-2">
+                                  ({product.occurrences} gång{product.occurrences !== 1 ? 'er' : ''})
+                                </span>
+                              </div>
+                              {!group.removedProducts.has(product.name) && idx !== 0 && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleRemoveProduct(group.id, product.name)}
+                                  className="h-6 w-6 p-0"
+                                >
+                                  <Trash2 className="h-3 w-3 text-destructive" />
+                                </Button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  )}
+
+                  {/* AI Suggestion */}
+                  {group.suggestion && (
+                    <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="h-4 w-4 text-primary" />
+                          <span className="text-sm font-medium">AI-förslag</span>
+                        </div>
+                        <Badge variant="outline">
+                          {Math.round(group.suggestion.confidence * 100)}% säker
+                        </Badge>
+                      </div>
+                      <p className="text-sm font-semibold text-primary mb-1">
+                        {categoryNames[group.suggestion.category] || group.suggestion.category}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {group.suggestion.reasoning}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Category selector */}
+                  {group.suggestion && group.status === 'pending' && (
+                    <div className="space-y-2">
+                      <Select
+                        value={group.userCategory || group.suggestion.category}
+                        onValueChange={(value) => handleModify(group.id, value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categoryOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={() => handleAccept(group.id)}
+                          className="flex-1 gap-2"
+                        >
+                          <Check className="h-4 w-4" />
+                          Acceptera ({activeCount} produkt{activeCount !== 1 ? 'er' : ''})
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleSkip(group.id)}
+                          className="gap-2"
+                        >
+                          <X className="h-4 w-4" />
+                          Hoppa över
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Modified category display */}
+                  {(group.status === 'accepted' || group.status === 'modified') && group.userCategory && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <Check className="h-4 w-4 text-green-500" />
+                      <span>
+                        Kategori: <strong>{categoryNames[group.userCategory]}</strong> tillämpas på {activeCount} produkt{activeCount !== 1 ? 'er' : ''}
+                      </span>
+                    </div>
                   )}
                 </div>
-
-                {/* AI Suggestion */}
-                {product.suggestion && (
-                  <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <Sparkles className="h-4 w-4 text-primary" />
-                        <span className="text-sm font-medium">AI-förslag</span>
-                      </div>
-                      <Badge variant="outline">
-                        {Math.round(product.suggestion.confidence * 100)}% säker
-                      </Badge>
-                    </div>
-                    <p className="text-sm font-semibold text-primary mb-1">
-                      {categoryNames[product.suggestion.category] || product.suggestion.category}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {product.suggestion.reasoning}
-                    </p>
-                  </div>
-                )}
-
-                {/* Category selector */}
-                {product.suggestion && product.status === 'pending' && (
-                  <div className="space-y-2">
-                    <Select
-                      value={product.userCategory || product.suggestion.category}
-                      onValueChange={(value) => handleModify(index, value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {categoryOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="default"
-                        onClick={() => handleAccept(index)}
-                        className="flex-1 gap-2"
-                      >
-                        <Check className="h-4 w-4" />
-                        Acceptera
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleSkip(index)}
-                        className="gap-2"
-                      >
-                        <X className="h-4 w-4" />
-                        Hoppa över
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Modified category display */}
-                {(product.status === 'accepted' || product.status === 'modified') && product.userCategory && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Check className="h-4 w-4 text-green-500" />
-                    <span>Kategori: <strong>{categoryNames[product.userCategory]}</strong></span>
-                  </div>
-                )}
-              </div>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
 
         {/* Apply button */}
@@ -450,7 +565,7 @@ export function AICategorization() {
                   Sparar...
                 </>
               ) : (
-                `Spara kategorier (${currentBatch.filter(p => p.status === 'accepted' || p.status === 'modified').length})`
+                `Spara kategorier (${getTotalActiveProducts()} produkter)`
               )}
             </Button>
             {batchIndex < totalBatches - 1 && (
