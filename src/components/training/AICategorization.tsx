@@ -256,24 +256,25 @@ export function AICategorization() {
                         {product.isExpanded ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />}
                       </Button>
                     </div>
-                    
+
                     {product.isExpanded && (
                       <div className="mt-2 space-y-1 pl-4 border-l-2 border-muted">
                         {product.items.map((item, itemIdx) => {
                           const itemId = `${item.receiptId}-${item.itemIndex}`;
                           const isExcluded = product.excludedItemIds.has(itemId);
-                          
+
                           return (
                             <div key={itemId} className={`flex items-center justify-between text-sm ${isExcluded ? 'opacity-50 line-through' : ''}`}>
-                              <div className="flex gap-3">
-                                <span className="text-muted-foreground w-24">{item.receiptDate}</span>
-                                <span className="font-medium w-32 truncate" title={item.storeName}>{item.storeName}</span>
-                                <span>{item.price.toFixed(2)} kr</span>
+                              <div className="flex gap-3 flex-1 min-w-0">
+                                <span className="text-muted-foreground w-24 shrink-0">{item.receiptDate}</span>
+                                <span className="font-medium w-32 truncate shrink-0" title={item.storeName}>{item.storeName}</span>
+                                <span className="truncate flex-1" title={item.productName}>{item.productName}</span>
+                                <span className="w-20 text-right shrink-0">{item.price.toFixed(2)} kr</span>
                               </div>
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                                className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0 ml-2"
                                 onClick={() => handleExcludeItem(index, itemId)}
                                 title={isExcluded ? "Inkludera igen" : "Exkludera denna förekomst"}
                               >
@@ -290,9 +291,9 @@ export function AICategorization() {
                     {product.status === 'modified' && <Badge className="bg-blue-500"><Check className="h-3 w-3 mr-1" />Modifierad</Badge>}
                     {product.status === 'skipped' && <Badge variant="secondary"><X className="h-3 w-3 mr-1" />Överhoppad</Badge>}
                     {(product.status === 'accepted' || product.status === 'modified' || product.status === 'skipped') && (
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => setCurrentBatch(prev => prev.map((p, i) => i === index ? { ...p, status: 'pending' as const } : p))}
                         title="Återställ status"
                       >
@@ -319,10 +320,10 @@ export function AICategorization() {
 
                 <div className="flex gap-2">
                   {product.userCategory && (
-                    <Button 
-                      variant="default" 
-                      size="sm" 
-                      className="flex-1" 
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="flex-1"
                       onClick={() => handleAccept(index)}
                     >
                       <Check className="h-4 w-4 mr-2" />
