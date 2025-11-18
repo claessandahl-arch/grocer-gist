@@ -6,16 +6,25 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sparkles, Check, X, AlertCircle, RefreshCw } from "lucide-react";
+import { Sparkles, Check, X, AlertCircle, RefreshCw, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { categoryOptions, categoryNames } from "@/lib/categoryConstants";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const BATCH_SIZE = 15;
 
+type ItemOccurrence = {
+  receiptId: string;
+  storeName: string;
+  receiptDate: string;
+  price: number;
+  itemIndex: number;
+};
+
 type UncategorizedProduct = {
   name: string;
   occurrences: number;
+  items: ItemOccurrence[];
 };
 
 type CategorySuggestion = {
@@ -29,6 +38,8 @@ type ProductWithSuggestion = UncategorizedProduct & {
   suggestion?: CategorySuggestion;
   userCategory?: string;
   status: 'pending' | 'accepted' | 'modified' | 'skipped';
+  excludedItemIds: Set<string>;
+  isExpanded: boolean;
 };
 
 export function AICategorization() {
@@ -54,7 +65,7 @@ export function AICategorization() {
       if (!user) return [];
       const { data, error } = await supabase
         .from('receipts')
-        .select('items')
+        .select('id, store_name, receipt_date, items')
         .eq('user_id', user.id);
 
       if (error) throw error;
@@ -83,13 +94,22 @@ export function AICategorization() {
   const uncategorizedProducts = useMemo(() => {
     if (!receipts || !mappings) return [];
 
-    // Count product occurrences
-    const productCounts = new Map<string, number>();
+    // Count product occurrences and track item details
+    const productData = new Map<string, ItemOccurrence[]>();
     receipts.forEach(receipt => {
       const items = (receipt.items as any[]) || [];
-      items.forEach(item => {
+      items.forEach((item, itemIndex) => {
         if (item.name) {
-          productCounts.set(item.name, (productCounts.get(item.name) || 0) + 1);
+          if (!productData.has(item.name)) {
+            productData.set(item.name, []);
+          }
+          productData.get(item.name)!.push({
+            receiptId: receipt.id,
+            storeName: receipt.store_name || 'Okänd butik',
+            receiptDate: receipt.receipt_date || '',
+            price: item.price || 0,
+            itemIndex,
+          });
         }
       });
     });
@@ -98,10 +118,14 @@ export function AICategorization() {
     const mappingsMap = new Map(mappings.map(m => [m.original_name.toLowerCase(), m.category]));
     const uncategorized: UncategorizedProduct[] = [];
 
-    productCounts.forEach((count, name) => {
+    productData.forEach((items, name) => {
       const category = mappingsMap.get(name.toLowerCase());
       if (!category || category === null) {
-        uncategorized.push({ name, occurrences: count });
+        uncategorized.push({ 
+          name, 
+          occurrences: items.length,
+          items 
+        });
       }
     });
 
@@ -121,7 +145,12 @@ export function AICategorization() {
     if (uncategorizedProducts.length > 0) {
       const batch = uncategorizedProducts
         .slice(startIndex, endIndex)
-        .map(p => ({ ...p, status: 'pending' as const }));
+        .map(p => ({ 
+          ...p, 
+          status: 'pending' as const,
+          excludedItemIds: new Set<string>(),
+          isExpanded: false
+        }));
       setCurrentBatch(batch);
     }
   }, [batchIndex, uncategorizedProducts, startIndex, endIndex]);
@@ -177,31 +206,73 @@ export function AICategorization() {
     mutationFn: async (productsToApply: ProductWithSuggestion[]) => {
       if (!user) throw new Error('Not authenticated');
 
-      const mappingsToCreate = productsToApply
-        .filter(p => p.status === 'accepted' || p.status === 'modified')
-        .map(p => ({
-          user_id: user.id,
-          original_name: p.name,
-          mapped_name: null,
-          category: p.userCategory!,
-        }));
+      let totalUpdated = 0;
 
-      if (mappingsToCreate.length === 0) return { count: 0 };
-
-      const { error } = await supabase
-        .from('product_mappings')
-        .insert(mappingsToCreate);
-
-      if (error) throw error;
-
-      // Save feedback for learning
       for (const product of productsToApply) {
-        if (product.status === 'accepted' || product.status === 'modified') {
-          await saveFeedback.mutateAsync(product);
+        if (product.status !== 'accepted' && product.status !== 'modified') continue;
+
+        // Get non-excluded items
+        const itemsToUpdate = product.items.filter(item => {
+          const itemId = `${item.receiptId}-${item.itemIndex}`;
+          return !product.excludedItemIds.has(itemId);
+        });
+
+        if (itemsToUpdate.length === 0) continue;
+
+        // Group by receipt
+        const receiptUpdates = new Map<string, number[]>();
+        itemsToUpdate.forEach(item => {
+          if (!receiptUpdates.has(item.receiptId)) {
+            receiptUpdates.set(item.receiptId, []);
+          }
+          receiptUpdates.get(item.receiptId)!.push(item.itemIndex);
+        });
+
+        // Update each receipt
+        for (const [receiptId, itemIndices] of receiptUpdates) {
+          const { data: receipt, error: fetchError } = await supabase
+            .from('receipts')
+            .select('items')
+            .eq('id', receiptId)
+            .single();
+
+          if (fetchError || !receipt) continue;
+
+          const items = (receipt.items as any[]) || [];
+          itemIndices.forEach(idx => {
+            if (items[idx]) {
+              items[idx].category = product.userCategory;
+            }
+          });
+
+          const { error: updateError } = await supabase
+            .from('receipts')
+            .update({ items })
+            .eq('id', receiptId);
+
+          if (!updateError) {
+            totalUpdated += itemIndices.length;
+          }
         }
+
+        // Also create a mapping for future items
+        const { error: mappingError } = await supabase
+          .from('product_mappings')
+          .upsert({
+            user_id: user.id,
+            original_name: product.name,
+            mapped_name: null,
+            category: product.userCategory!,
+          }, {
+            onConflict: 'user_id,original_name',
+            ignoreDuplicates: false
+          });
+
+        // Save feedback for learning
+        await saveFeedback.mutateAsync(product);
       }
 
-      return { count: mappingsToCreate.length };
+      return { count: totalUpdated };
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['mappings-for-categorization'] });
@@ -221,6 +292,27 @@ export function AICategorization() {
       toast.error(`Kunde inte spara kategorier: ${error.message}`);
     }
   });
+
+  const handleToggleExpand = (index: number) => {
+    setCurrentBatch(prev => prev.map((p, i) =>
+      i === index ? { ...p, isExpanded: !p.isExpanded } : p
+    ));
+  };
+
+  const handleExcludeItem = (productIndex: number, itemId: string) => {
+    setCurrentBatch(prev => prev.map((p, i) => {
+      if (i === productIndex) {
+        const newExcluded = new Set(p.excludedItemIds);
+        if (newExcluded.has(itemId)) {
+          newExcluded.delete(itemId);
+        } else {
+          newExcluded.add(itemId);
+        }
+        return { ...p, excludedItemIds: newExcluded };
+      }
+      return p;
+    }));
+  };
 
   const handleAccept = (index: number) => {
     setCurrentBatch(prev => prev.map((p, i) =>
@@ -340,13 +432,38 @@ export function AICategorization() {
               ''
             }`}>
               <div className="space-y-3">
-                {/* Product name */}
+                {/* Product name and occurrences */}
                 <div className="flex items-start justify-between">
-                  <div>
+                  <div className="flex-1">
                     <p className="font-semibold">{product.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Förekommer {product.occurrences} gång{product.occurrences !== 1 ? 'er' : ''}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs text-muted-foreground">
+                        Förekommer {product.occurrences - product.excludedItemIds.size} gång{(product.occurrences - product.excludedItemIds.size) !== 1 ? 'er' : ''}
+                        {product.excludedItemIds.size > 0 && (
+                          <span className="text-orange-500">
+                            {' '}({product.excludedItemIds.size} exkluderade)
+                          </span>
+                        )}
+                      </p>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleToggleExpand(index)}
+                        className="h-6 px-2 text-xs"
+                      >
+                        {product.isExpanded ? (
+                          <>
+                            <ChevronUp className="h-3 w-3 mr-1" />
+                            Dölj
+                          </>
+                        ) : (
+                          <>
+                            <ChevronDown className="h-3 w-3 mr-1" />
+                            Visa alla [{product.occurrences}]
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </div>
                   {product.status !== 'pending' && (
                     <Badge variant={
@@ -360,6 +477,51 @@ export function AICategorization() {
                     </Badge>
                   )}
                 </div>
+
+                {/* Expandable item list */}
+                {product.isExpanded && (
+                  <div className="mt-3 space-y-2 border-t pt-3">
+                    <p className="text-xs font-medium text-muted-foreground mb-2">Förekomster:</p>
+                    <div className="space-y-1 max-h-60 overflow-y-auto">
+                      {product.items.map((item, itemIdx) => {
+                        const itemId = `${item.receiptId}-${item.itemIndex}`;
+                        const isExcluded = product.excludedItemIds.has(itemId);
+                        return (
+                          <div
+                            key={itemId}
+                            className={`flex items-center justify-between gap-2 p-2 rounded text-xs ${
+                              isExcluded ? 'bg-muted/30 line-through opacity-50' : 'bg-muted/50'
+                            }`}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{item.storeName}</span>
+                                <span className="text-muted-foreground">•</span>
+                                <span className="text-muted-foreground">{item.receiptDate}</span>
+                              </div>
+                              <div className="text-muted-foreground">
+                                {item.price} kr
+                              </div>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleExcludeItem(index, itemId)}
+                              className="h-7 w-7 p-0 shrink-0"
+                              title={isExcluded ? "Inkludera" : "Exkludera"}
+                            >
+                              {isExcluded ? (
+                                <Check className="h-3 w-3 text-green-500" />
+                              ) : (
+                                <Trash2 className="h-3 w-3 text-destructive" />
+                              )}
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* AI Suggestion */}
                 {product.suggestion && (
