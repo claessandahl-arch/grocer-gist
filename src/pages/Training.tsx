@@ -172,11 +172,104 @@ export default function Training() {
     // Update store pattern
     await updateStorePattern(editedData.store_name, editedData);
 
+    // Sync categories to product_mappings
+    // This ensures category corrections are persisted to the mapping system
+    await syncCategoriesToMappings(user.id, editedData.items);
+
     toast.success('Correction saved successfully!');
     setSaving(false);
     fetchReceipts();
     setSelectedReceipt(null);
     setEditedData(null);
+  };
+
+  const syncCategoriesToMappings = async (userId: string, items: ReceiptItem[]) => {
+    // Sync categories from receipt items to product_mappings
+    // This ensures that category corrections in Training are persisted to the mapping system
+
+    try {
+      // Fetch existing mappings for this user
+      const { data: existingMappings, error: fetchError } = await supabase
+        .from('product_mappings')
+        .select('*')
+        .eq('user_id', userId);
+
+      if (fetchError) {
+        logger.error('Error fetching existing mappings:', fetchError);
+        return; // Don't fail the whole operation if we can't sync
+      }
+
+      // Create a map for quick lookup
+      const existingMappingsMap = new Map(
+        existingMappings?.map(m => [m.original_name.toLowerCase(), m]) || []
+      );
+
+      const mappingsToInsert: any[] = [];
+      const mappingsToUpdate: any[] = [];
+
+      // Process each item
+      items.forEach((item: ReceiptItem) => {
+        if (!item.name || !item.category) return; // Skip items without name or category
+
+        const itemNameLower = item.name.toLowerCase();
+        const existingMapping = existingMappingsMap.get(itemNameLower);
+
+        if (existingMapping) {
+          // Update existing mapping if category changed
+          if (existingMapping.category !== item.category) {
+            mappingsToUpdate.push({
+              id: existingMapping.id,
+              category: item.category,
+            });
+          }
+        } else {
+          // Create new mapping
+          mappingsToInsert.push({
+            user_id: userId,
+            original_name: item.name,
+            mapped_name: null, // User can set this later in ProductMerge
+            category: item.category,
+          });
+        }
+      });
+
+      // Insert new mappings
+      if (mappingsToInsert.length > 0) {
+        const { error: insertError } = await supabase
+          .from('product_mappings')
+          .insert(mappingsToInsert);
+
+        if (insertError) {
+          logger.error('Error inserting product mappings:', insertError);
+        } else {
+          logger.debug(`Created ${mappingsToInsert.length} new product mappings`);
+        }
+      }
+
+      // Update existing mappings
+      for (const mapping of mappingsToUpdate) {
+        const { error: updateError } = await supabase
+          .from('product_mappings')
+          .update({ category: mapping.category })
+          .eq('id', mapping.id);
+
+        if (updateError) {
+          logger.error('Error updating product mapping:', updateError);
+        }
+      }
+
+      if (mappingsToUpdate.length > 0) {
+        logger.debug(`Updated ${mappingsToUpdate.length} product mappings`);
+      }
+
+      logger.debug('Category sync completed', {
+        inserted: mappingsToInsert.length,
+        updated: mappingsToUpdate.length,
+      });
+    } catch (error) {
+      logger.error('Error syncing categories to mappings:', error);
+      // Don't show error to user - this is a background sync operation
+    }
   };
 
   const updateStorePattern = async (storeName: string, data: ParsedReceiptData) => {
@@ -186,7 +279,7 @@ export default function Training() {
       .select('*')
       .eq('store_name', storeName)
       .maybeSingle();
-    
+
     if (error) {
       logger.error('Error fetching store pattern:', error);
     }
@@ -208,7 +301,7 @@ export default function Training() {
           usage_count: existingPattern.usage_count + 1
         })
         .eq('store_name', storeName);
-      
+
       if (updateError) {
         logger.error('Error updating store pattern:', updateError);
         toast.error('Kunde inte uppdatera inlärningsmönster');
@@ -224,7 +317,7 @@ export default function Training() {
           pattern_data: patternData,
           usage_count: 1
         });
-      
+
       if (insertError) {
         logger.error('Error inserting store pattern:', insertError);
         toast.error('Kunde inte spara inlärningsmönster');
