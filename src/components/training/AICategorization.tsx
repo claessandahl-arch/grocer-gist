@@ -15,6 +15,7 @@ const BATCH_SIZE = 15;
 
 type ItemOccurrence = {
   receiptId: string;
+  productName: string;
   storeName: string;
   receiptDate: string;
   price: number;
@@ -105,6 +106,7 @@ export function AICategorization() {
           }
           productData.get(item.name)!.push({
             receiptId: receipt.id,
+            productName: item.name,
             storeName: receipt.store_name || 'Okänd butik',
             receiptDate: receipt.receipt_date || '',
             price: item.price || 0,
@@ -493,14 +495,14 @@ export function AICategorization() {
                               isExcluded ? 'bg-muted/30 line-through opacity-50' : 'bg-muted/50'
                             }`}
                           >
-                            <div className="flex-1 min-w-0">
+                              <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
-                                <span className="font-medium">{item.storeName}</span>
+                                <span className="font-medium">{item.productName}</span>
                                 <span className="text-muted-foreground">•</span>
-                                <span className="text-muted-foreground">{item.receiptDate}</span>
+                                <span className="text-muted-foreground">{item.storeName}</span>
                               </div>
                               <div className="text-muted-foreground">
-                                {item.price} kr
+                                {item.price.toFixed(2)} kr
                               </div>
                             </div>
                             <Button
@@ -598,13 +600,24 @@ export function AICategorization() {
           ))}
         </div>
 
+        {/* Helper Text */}
+        {currentBatch.some(p => p.status === 'accepted' || p.status === 'modified') && (
+          <Alert className="bg-primary/5 border-primary/20">
+            <AlertCircle className="h-4 w-4 text-primary" />
+            <AlertDescription className="text-sm">
+              Granska och acceptera eller hoppa över produkter. Klicka sedan på "Spara kategorier" för att tillämpa alla ändringar till databasen.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Apply button */}
         {allReviewed && (
           <div className="flex gap-2">
             <Button
               onClick={handleApplyBatch}
               disabled={!readyToApply || applyCategories.isPending}
-              className="flex-1"
+              className={`flex-1 ${readyToApply ? 'shadow-lg ring-2 ring-primary/20' : ''}`}
+              variant={readyToApply ? 'default' : 'secondary'}
             >
               {applyCategories.isPending ? (
                 <>
@@ -612,7 +625,14 @@ export function AICategorization() {
                   Sparar...
                 </>
               ) : (
-                `Spara kategorier (${currentBatch.filter(p => p.status === 'accepted' || p.status === 'modified').length})`
+                <>
+                  Spara kategorier
+                  {readyToApply && (
+                    <Badge className="ml-2 bg-background text-foreground hover:bg-background">
+                      {currentBatch.filter(p => p.status === 'accepted' || p.status === 'modified').length}
+                    </Badge>
+                  )}
+                </>
               )}
             </Button>
             {batchIndex < totalBatches - 1 && (
