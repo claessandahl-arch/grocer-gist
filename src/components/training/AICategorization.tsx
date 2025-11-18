@@ -244,8 +244,46 @@ export function AICategorization() {
               <CardContent className="pt-6 space-y-4">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
-                    <h3 className="font-semibold">{product.name}</h3>
-                    <p className="text-sm text-muted-foreground">{product.items.length} förekomster</p>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold">{product.name}</h3>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-muted-foreground hover:text-foreground"
+                        onClick={() => handleToggleExpand(index)}
+                      >
+                        {product.items.length} förekomster
+                        {product.isExpanded ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />}
+                      </Button>
+                    </div>
+                    
+                    {product.isExpanded && (
+                      <div className="mt-2 space-y-1 pl-4 border-l-2 border-muted">
+                        {product.items.map((item, itemIdx) => {
+                          const itemId = `${item.receiptId}-${item.itemIndex}`;
+                          const isExcluded = product.excludedItemIds.has(itemId);
+                          
+                          return (
+                            <div key={itemId} className={`flex items-center justify-between text-sm ${isExcluded ? 'opacity-50 line-through' : ''}`}>
+                              <div className="flex gap-3">
+                                <span className="text-muted-foreground w-24">{item.receiptDate}</span>
+                                <span className="font-medium w-32 truncate" title={item.storeName}>{item.storeName}</span>
+                                <span>{item.price.toFixed(2)} kr</span>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                                onClick={() => handleExcludeItem(index, itemId)}
+                                title={isExcluded ? "Inkludera igen" : "Exkludera denna förekomst"}
+                              >
+                                {isExcluded ? <RefreshCw className="h-3 w-3" /> : <Trash2 className="h-3 w-3" />}
+                              </Button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     {product.status === 'accepted' && <Badge className="bg-green-500"><Check className="h-3 w-3 mr-1" />Accepterad</Badge>}
