@@ -95,12 +95,21 @@ export function AICategorization() {
   const uncategorizedProducts = useMemo(() => {
     if (!receipts || !mappings) return [];
 
+    console.log('[AICategorization] Finding uncategorized products...');
+    console.log('[AICategorization] Total receipts:', receipts.length);
+    console.log('[AICategorization] Total mappings:', mappings.length);
+
     // Count product occurrences and track item details
     const productData = new Map<string, ItemOccurrence[]>();
     receipts.forEach(receipt => {
       const items = (receipt.items as any[]) || [];
       items.forEach((item, itemIndex) => {
         if (item.name) {
+          // Skip items that already have a category in the receipt itself
+          if (item.category && item.category !== null) {
+            return;
+          }
+          
           if (!productData.has(item.name)) {
             productData.set(item.name, []);
           }
@@ -115,6 +124,8 @@ export function AICategorization() {
         }
       });
     });
+
+    console.log('[AICategorization] Products from receipts (no category):', productData.size);
 
     // Find products without category in mappings
     const mappingsMap = new Map(mappings.map(m => [m.original_name.toLowerCase(), m.category]));
@@ -134,6 +145,7 @@ export function AICategorization() {
     // Sort by occurrence (most common first)
     uncategorized.sort((a, b) => b.occurrences - a.occurrences);
 
+    console.log('[AICategorization] Final uncategorized products:', uncategorized.length);
     return uncategorized;
   }, [receipts, mappings]);
 
@@ -326,8 +338,12 @@ export function AICategorization() {
       };
     },
     onSuccess: (result) => {
+      console.log('[AICategorization] Categories applied successfully, invalidating queries');
       queryClient.invalidateQueries({ queryKey: ['mappings-for-categorization'] });
       queryClient.invalidateQueries({ queryKey: ['receipts-for-categorization'] });
+      queryClient.invalidateQueries({ queryKey: ['product-mappings'] });
+      queryClient.invalidateQueries({ queryKey: ['user-product-mappings'] });
+      queryClient.invalidateQueries({ queryKey: ['receipts-all'] });
       setProcessedCount(prev => prev + result.count);
       
       // Show detailed success message
