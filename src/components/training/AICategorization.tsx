@@ -229,6 +229,15 @@ export function AICategorization() {
           <Progress value={(batchIndex / totalBatches) * 100} />
         </div>
 
+        <div className="flex gap-2 pb-4 border-b">
+          <Button onClick={generateSuggestions} disabled={isGeneratingSuggestions || currentBatch.length === 0} className="flex-1">
+            {isGeneratingSuggestions ? <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Genererar...</> : <><Sparkles className="h-4 w-4 mr-2" />Generera AI-förslag</>}
+          </Button>
+          <Button onClick={handleApplyBatch} disabled={acceptedCount === 0 || applyCategories.isPending} variant="default" className="flex-1">
+            {applyCategories.isPending ? <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Sparar...</> : <><Check className="h-4 w-4 mr-2" />Spara kategorier {acceptedCount > 0 && `(${acceptedCount})`}</>}
+          </Button>
+        </div>
+
         <div className="space-y-4">
           {currentBatch.map((product, index) => (
             <Card key={product.name} className="border-2">
@@ -287,15 +296,6 @@ export function AICategorization() {
               </CardContent>
             </Card>
           ))}
-        </div>
-
-        <div className="flex gap-2 pt-4 border-t">
-          <Button onClick={generateSuggestions} disabled={isGeneratingSuggestions || currentBatch.length === 0} className="flex-1">
-            {isGeneratingSuggestions ? <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Genererar...</> : <><Sparkles className="h-4 w-4 mr-2" />Generera AI-förslag</>}
-          </Button>
-          <Button onClick={handleApplyBatch} disabled={acceptedCount === 0 || applyCategories.isPending} variant="default" className="flex-1">
-            {applyCategories.isPending ? <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Sparar...</> : <><Check className="h-4 w-4 mr-2" />Spara kategorier {acceptedCount > 0 && `(${acceptedCount})`}</>}
-          </Button>
         </div>
 
         {totalBatches > 1 && (
