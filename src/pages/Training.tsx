@@ -11,6 +11,7 @@ import { ArrowLeft, Save, Trash2, RefreshCw } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProductMerge } from "@/components/dashboard/ProductMerge";
+import { AICategorization } from "@/components/training/AICategorization";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import {
   AlertDialog,
@@ -474,6 +475,7 @@ export default function Training() {
           <TabsList>
             <TabsTrigger value="receipts">Kvitton</TabsTrigger>
             <TabsTrigger value="products">Produkter</TabsTrigger>
+            <TabsTrigger value="ai-categorization">AI-Kategorisering</TabsTrigger>
           </TabsList>
 
           <TabsContent value="receipts" className="space-y-0">
@@ -746,6 +748,10 @@ export default function Training() {
 
           <TabsContent value="products">
             <ProductMerge />
+          </TabsContent>
+
+          <TabsContent value="ai-categorization">
+            <AICategorization />
           </TabsContent>
         </Tabs>
 
