@@ -12,10 +12,10 @@ serve(async (req) => {
 
   try {
     const { imageUrl, imageUrls, originalFilename } = await req.json();
-    
+
     // Support both single image (legacy) and multiple images (new)
     const imagesToProcess = imageUrls || (imageUrl ? [imageUrl] : []);
-    
+
     if (imagesToProcess.length === 0) {
       return new Response(
         JSON.stringify({ error: 'At least one image URL is required' }),
@@ -38,7 +38,7 @@ serve(async (req) => {
     // Fetch store patterns to improve parsing accuracy
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    
+
     let storeContext = '';
     try {
       const patternsResponse = await fetch(`${SUPABASE_URL}/rest/v1/store_patterns?select=*`, {
@@ -47,7 +47,7 @@ serve(async (req) => {
           'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`
         }
       });
-      
+
       if (patternsResponse.ok) {
         const patterns = await patternsResponse.json();
         if (patterns && patterns.length > 0) {
@@ -69,9 +69,9 @@ serve(async (req) => {
     const promptText = `Parse this ${imagesToProcess.length > 1 ? imagesToProcess.length + '-page ' : ''}grocery receipt${imagesToProcess.length > 1 ? '. Combine information from ALL pages into a single receipt. The images are in page order.' : ''} and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), category, and discount (as number, optional).
 
 🏪 STORE NAME RULE:
-- Extract the BRAND/CHAIN NAME (e.g., "Willys", "ICA", "Coop", "Hemköp")
-- DO NOT use the location/city/address (e.g., NOT "Älvsjö", "Stockholm", etc.)
-- Look for the prominent store logo or brand name at the top of the receipt
+- Extract the FULL STORE NAME including branch/location (e.g., "ICA Nära Älvsjö", "Willys Hemma", "Coop Konsum")
+- DO NOT truncate to just the brand (e.g., "ICA Nära Älvsjö" is correct, "ICA" is WRONG)
+- Exclude street addresses and city names if they are on a separate line, but keep the branch name if it's part of the logo/header
 
 ${originalFilename ? `\n📁 FILENAME HINT: The original filename is "${originalFilename}". If it contains a date pattern (like "2025-10-26" or "2025-10-26T15_49_07"), use it to help determine the receipt_date. Match the date format YYYY-MM-DD.\n` : ''}
 
@@ -233,21 +233,21 @@ Return ONLY the function call with properly formatted JSON. No additional text o
     if (!response.ok) {
       const errorText = await response.text();
       console.error('AI gateway error:', response.status, errorText);
-      
+
       if (response.status === 429) {
         return new Response(
           JSON.stringify({ error: 'Rate limit exceeded. Please try again in a moment.' }),
           { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      
+
       if (response.status === 402) {
         return new Response(
           JSON.stringify({ error: 'AI credits depleted. Please add credits in your workspace settings.' }),
           { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      
+
       throw new Error(`AI gateway returned ${response.status}: ${errorText}`);
     }
 
