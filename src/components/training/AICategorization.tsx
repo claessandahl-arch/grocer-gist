@@ -163,24 +163,12 @@ export function AICategorization() {
     }
   };
 
-  // Save feedback mutation
+  // Save feedback mutation (currently disabled as feedback table doesn't exist)
   const saveFeedback = useMutation({
     mutationFn: async (product: ProductWithSuggestion) => {
-      if (!user || !product.suggestion || !product.userCategory) return;
-
-      const accepted = product.suggestion.category === product.userCategory;
-
-      await supabase
-        .from('category_suggestion_feedback')
-        .insert({
-          user_id: user.id,
-          product_name: product.name,
-          suggested_category: product.suggestion.category,
-          final_category: product.userCategory,
-          accepted,
-          confidence: product.suggestion.confidence,
-          reasoning: product.suggestion.reasoning,
-        });
+      // Feedback saving is currently disabled
+      // Will be re-enabled when category_suggestion_feedback table is created
+      return Promise.resolve();
     },
   });
 
