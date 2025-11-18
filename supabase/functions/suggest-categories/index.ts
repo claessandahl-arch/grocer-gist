@@ -121,10 +121,19 @@ serve(async (req) => {
     const aiData = await aiResponse.json();
     const aiSuggestions = aiData.choices[0].message.content;
 
-    // Parse AI response (expecting JSON)
+    // Parse AI response (expecting JSON, possibly wrapped in markdown)
     let suggestions;
     try {
-      suggestions = JSON.parse(aiSuggestions);
+      let jsonString = aiSuggestions.trim();
+      
+      // Remove markdown code blocks if present
+      if (jsonString.startsWith('```json')) {
+        jsonString = jsonString.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+      } else if (jsonString.startsWith('```')) {
+        jsonString = jsonString.replace(/^```\s*/, '').replace(/\s*```$/, '');
+      }
+      
+      suggestions = JSON.parse(jsonString);
     } catch (e) {
       console.error('Failed to parse AI response:', aiSuggestions);
       throw new Error('Invalid AI response format');
