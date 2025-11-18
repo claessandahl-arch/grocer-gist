@@ -238,9 +238,21 @@ export function AICategorization() {
                     <h3 className="font-semibold">{product.name}</h3>
                     <p className="text-sm text-muted-foreground">{product.items.length} förekomster</p>
                   </div>
-                  {product.status === 'accepted' && <Badge className="bg-green-500"><Check className="h-3 w-3 mr-1" />Accepterad</Badge>}
-                  {product.status === 'modified' && <Badge className="bg-blue-500"><Check className="h-3 w-3 mr-1" />Modifierad</Badge>}
-                  {product.status === 'skipped' && <Badge variant="secondary"><X className="h-3 w-3 mr-1" />Överhoppad</Badge>}
+                  <div className="flex items-center gap-2">
+                    {product.status === 'accepted' && <Badge className="bg-green-500"><Check className="h-3 w-3 mr-1" />Accepterad</Badge>}
+                    {product.status === 'modified' && <Badge className="bg-blue-500"><Check className="h-3 w-3 mr-1" />Modifierad</Badge>}
+                    {product.status === 'skipped' && <Badge variant="secondary"><X className="h-3 w-3 mr-1" />Överhoppad</Badge>}
+                    {(product.status === 'accepted' || product.status === 'modified' || product.status === 'skipped') && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setCurrentBatch(prev => prev.map((p, i) => i === index ? { ...p, status: 'pending' as const } : p))}
+                        title="Återställ status"
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
                 {product.suggestion && (
@@ -259,9 +271,15 @@ export function AICategorization() {
                 </Select>
 
                 <div className="flex gap-2">
-                  {product.status === 'pending' && product.suggestion && (
-                    <Button variant="default" size="sm" className="flex-1" onClick={() => handleAccept(index)} disabled={!product.userCategory}>
-                      <Check className="h-4 w-4 mr-2" />Acceptera
+                  {product.userCategory && (
+                    <Button 
+                      variant="default" 
+                      size="sm" 
+                      className="flex-1" 
+                      onClick={() => handleAccept(index)}
+                    >
+                      <Check className="h-4 w-4 mr-2" />
+                      {product.status === 'accepted' || product.status === 'modified' ? 'Uppdatera' : 'Acceptera'}
                     </Button>
                   )}
                   <Button variant="outline" size="sm" className="flex-1" onClick={() => handleSkip(index)}><X className="h-4 w-4 mr-2" />Hoppa över</Button>
