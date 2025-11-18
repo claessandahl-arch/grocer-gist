@@ -142,8 +142,9 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Error in suggest-categories:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: errorMessage }),
       {
         status: 500,
         headers: {
@@ -174,7 +175,7 @@ function buildPrompt(
     'other'
   ];
 
-  const categoryDescriptions = {
+  const categoryDescriptions: Record<string, string> = {
     frukt_gront: 'Frukt och grönsaker',
     mejeri: 'Mjölkprodukter, ost, yoghurt, smör',
     kott_fagel_chark: 'Kött, kyckling, korv, chark',
@@ -191,7 +192,7 @@ function buildPrompt(
   let prompt = `Du är en expert på att kategorisera svenska matvaror. Din uppgift är att föreslå kategorier för produkter.
 
 TILLGÄNGLIGA KATEGORIER:
-${categoryList.map(cat => `- ${cat}: ${categoryDescriptions[cat]}`).join('\n')}
+${categoryList.map(cat => `- ${cat}: ${categoryDescriptions[cat] || cat}`).join('\n')}
 
 TRÄNINGSDATA (${trainingExamples.length} exempel):
 ${trainingExamples.slice(0, 100).map(ex => `"${ex.name}" → ${ex.category}`).join('\n')}
