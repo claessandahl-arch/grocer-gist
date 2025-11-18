@@ -246,22 +246,61 @@ export default function DataManagement() {
   // Update category mutation
   const updateCategory = useMutation({
     mutationFn: async ({ id, type, category }: { id: string; type: 'user' | 'global'; category: string }) => {
-      const table = type === 'user' ? 'product_mappings' : 'global_product_mappings';
-      const { error } = await supabase
-        .from(table)
-        .update({ category })
-        .eq('id', id);
+      console.log('[DataManagement] updateCategory called:', { id, type, category });
       
-      if (error) throw error;
+      // Check if this is an unmapped product
+      const isUnmapped = id.startsWith('unmapped-');
+      
+      if (isUnmapped) {
+        // Extract product name from ID
+        const productName = id.substring('unmapped-'.length);
+        console.log('[DataManagement] Creating new mapping for unmapped product:', productName);
+        
+        // Create new mapping
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error("Not authenticated");
+        
+        const { error } = await supabase
+          .from('product_mappings')
+          .insert({
+            user_id: user.id,
+            original_name: productName,
+            mapped_name: productName,
+            category: category,
+          });
+        
+        if (error) {
+          console.error('[DataManagement] Failed to create mapping:', error);
+          throw error;
+        }
+        console.log('[DataManagement] Successfully created mapping for:', productName);
+      } else {
+        // Update existing mapping
+        console.log('[DataManagement] Updating existing mapping:', id);
+        const table = type === 'user' ? 'product_mappings' : 'global_product_mappings';
+        const { error } = await supabase
+          .from(table)
+          .update({ category })
+          .eq('id', id);
+        
+        if (error) {
+          console.error('[DataManagement] Failed to update mapping:', error);
+          throw error;
+        }
+        console.log('[DataManagement] Successfully updated mapping:', id);
+      }
     },
     onSuccess: () => {
+      console.log('[DataManagement] Category update successful, invalidating queries');
+      queryClient.invalidateQueries({ queryKey: ['product-mappings'] });
       queryClient.invalidateQueries({ queryKey: ['user-product-mappings'] });
       queryClient.invalidateQueries({ queryKey: ['global-product-mappings'] });
+      queryClient.invalidateQueries({ queryKey: ['receipts-all'] });
       toast.success("Kategori uppdaterad");
     },
     onError: (error) => {
-      console.error('Update error:', error);
-      toast.error("Kunde inte uppdatera kategori");
+      console.error('[DataManagement] Category update failed:', error);
+      toast.error(error instanceof Error ? error.message : "Kunde inte uppdatera kategori");
     }
   });
 
