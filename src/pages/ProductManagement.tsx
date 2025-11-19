@@ -8,6 +8,7 @@ import { StatsCard } from "@/components/datamanagement/StatsCard";
 import { UngroupedProductsList } from "@/components/product-management/UngroupedProductsList";
 import { ProductGroupsList } from "@/components/product-management/ProductGroupsList";
 import { ProductSearchFilter } from "@/components/product-management/ProductSearchFilter";
+import { AutoGrouping } from "@/components/product-management/AutoGrouping";
 
 export default function ProductManagement() {
   const navigate = useNavigate();
@@ -255,6 +256,7 @@ export default function ProductManagement() {
 
   const showLeftPanel = filterType === 'all' || filterType === 'ungrouped';
   const showRightPanel = filterType === 'all' || filterType === 'grouped';
+  const showAutoGrouping = filterType === 'auto-grouping';
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
@@ -315,39 +317,45 @@ export default function ProductManagement() {
           onSortChange={setSortBy}
         />
 
-        {/* Split-screen Layout */}
-        <div className={`grid gap-4 ${showLeftPanel && showRightPanel ? 'lg:grid-cols-5' : 'lg:grid-cols-1'}`}>
-          {/* Left Panel - Ungrouped Products */}
-          {showLeftPanel && (
-            <div className={showLeftPanel && showRightPanel ? 'lg:col-span-2' : 'lg:col-span-1'}>
-              <UngroupedProductsList
-                products={filteredUngroupedProducts}
-                existingGroups={productGroups}
-                isLoading={isLoading}
-                onRefresh={() => {
-                  queryClient.invalidateQueries({ queryKey: ['receipts-all'] });
-                  queryClient.invalidateQueries({ queryKey: ['user-product-mappings'] });
-                  queryClient.invalidateQueries({ queryKey: ['global-product-mappings'] });
-                }}
-              />
-            </div>
-          )}
+        {/* Content Area */}
+        {showAutoGrouping ? (
+          <div className="mt-6">
+            <AutoGrouping />
+          </div>
+        ) : (
+          <div className={`grid gap-4 ${showLeftPanel && showRightPanel ? 'lg:grid-cols-5' : 'lg:grid-cols-1'}`}>
+            {/* Left Panel - Ungrouped Products */}
+            {showLeftPanel && (
+              <div className={showLeftPanel && showRightPanel ? 'lg:col-span-2' : 'lg:col-span-1'}>
+                <UngroupedProductsList
+                  products={filteredUngroupedProducts}
+                  existingGroups={productGroups}
+                  isLoading={isLoading}
+                  onRefresh={() => {
+                    queryClient.invalidateQueries({ queryKey: ['receipts-all'] });
+                    queryClient.invalidateQueries({ queryKey: ['user-product-mappings'] });
+                    queryClient.invalidateQueries({ queryKey: ['global-product-mappings'] });
+                  }}
+                />
+              </div>
+            )}
 
-          {/* Right Panel - Product Groups */}
-          {showRightPanel && (
-            <div className={showLeftPanel && showRightPanel ? 'lg:col-span-3' : 'lg:col-span-1'}>
-              <ProductGroupsList
-                groups={filteredProductGroups}
-                isLoading={isLoading}
-                onRefresh={() => {
-                  queryClient.invalidateQueries({ queryKey: ['receipts-all'] });
-                  queryClient.invalidateQueries({ queryKey: ['user-product-mappings'] });
-                  queryClient.invalidateQueries({ queryKey: ['global-product-mappings'] });
-                }}
-              />
-            </div>
-          )}
-        </div>
+            {/* Right Panel - Product Groups */}
+            {showRightPanel && (
+              <div className={showLeftPanel && showRightPanel ? 'lg:col-span-3' : 'lg:col-span-1'}>
+                <ProductGroupsList
+                  groups={filteredProductGroups}
+                  isLoading={isLoading}
+                  onRefresh={() => {
+                    queryClient.invalidateQueries({ queryKey: ['receipts-all'] });
+                    queryClient.invalidateQueries({ queryKey: ['user-product-mappings'] });
+                    queryClient.invalidateQueries({ queryKey: ['global-product-mappings'] });
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
