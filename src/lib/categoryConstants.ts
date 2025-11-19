@@ -39,7 +39,9 @@ export const categoryNames: Record<string, string> = {
 
 export const categories = Object.values(CATEGORY_KEYS);
 
-export const categoryOptions = categories.map(key => ({
-  value: key,
-  label: categoryNames[key] || key,
-}));
+export const categoryOptions = categories
+  .map(key => ({
+    value: key,
+    label: categoryNames[key] || key,
+  }))
+  .sort((a, b) => a.label.localeCompare(b.label, 'sv'));
