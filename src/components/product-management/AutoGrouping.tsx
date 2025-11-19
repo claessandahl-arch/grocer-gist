@@ -14,6 +14,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 
 type ProductCandidate = {
     original_name: string;
+    mapped_name?: string | null;
     occurrences: number;
 };
 
@@ -40,34 +41,21 @@ export function AutoGrouping() {
         }
     });
 
-    // Fetch ungrouped products for the selected category
+    // Fetch ALL products for the selected category (grouped and ungrouped)
     const { data: candidates = [], isLoading: candidatesLoading } = useQuery({
-        queryKey: ['ungrouped-products', selectedCategory],
+        queryKey: ['category-products', selectedCategory],
         queryFn: async () => {
             if (!user || !selectedCategory) return [];
 
-            // We need to fetch products that have a category but NO mapped_name
             const { data, error } = await supabase
                 .from('product_mappings')
-                .select('original_name')
+                .select('original_name, mapped_name')
                 .eq('user_id', user.id)
-                .eq('category', selectedCategory)
-                .is('mapped_name', null);
+                .eq('category', selectedCategory);
 
             if (error) throw error;
 
-            // For occurrences, we would ideally join with receipts, but for now we'll just count them
-            // This is a simplification. In a real scenario, we might want a dedicated RPC or view.
-            // Here we will just map them to a default occurrence of 1 if we can't easily get the count,
-            // or we could try to fetch receipt items.
-            // Let's try to get occurrences from receipts for these products.
-
-            // Optimization: Fetch all receipt items for this user once or filter?
-            // Fetching all items is heavy. Let's stick to a simpler approach for now:
-            // Just pass the names. The Edge Function prompt says "occurrences" is input, 
-            // but if we don't have it easily, maybe we can skip it or fetch it separately.
-
-            // Let's try to get a count from receipts.
+            // Get occurrences
             const { data: receiptItems } = await supabase
                 .from('receipts')
                 .select('items')
@@ -85,8 +73,9 @@ export function AutoGrouping() {
 
             return data.map(p => ({
                 original_name: p.original_name,
+                mapped_name: p.mapped_name,
                 occurrences: occurrenceMap.get(p.original_name) || 0
-            })).filter(p => p.occurrences > 0) // Only include products that actually appear in receipts
+            })).filter(p => p.occurrences > 0)
                 .sort((a, b) => b.occurrences - a.occurrences);
         },
         enabled: !!user && !!selectedCategory,
@@ -100,20 +89,37 @@ export function AutoGrouping() {
                 body: {
                     userId: user.id,
                     category: selectedCategory,
-                    products: candidates.slice(0, 50) // Batch limit to prevent timeout
+                    products: candidates.slice(0, 100) // Increased batch limit since we process more items
                 }
             });
 
             if (error) throw error;
 
-            const newSuggestions = (data.suggestions as any[]).map(s => ({
+            const rawSuggestions = data.suggestions as GroupSuggestion[];
+
+            // Filter out suggestions that don't result in any change
+            const usefulSuggestions = rawSuggestions.filter(suggestion => {
+                // Check if ANY product in this group would actually change its status
+                return suggestion.products.some(prodName => {
+                    const candidate = candidates.find(c => c.original_name === prodName);
+                    // It's useful if:
+                    // 1. The product currently has NO group (mapped_name is null/empty)
+                    // 2. The product has a DIFFERENT group than the suggested one
+                    return !candidate?.mapped_name || candidate.mapped_name !== suggestion.groupName;
+                });
+            }).map(s => ({
                 ...s,
                 excludedProducts: new Set<string>(),
-                status: 'pending'
+                status: 'pending' as const
             }));
 
-            setSuggestions(newSuggestions);
-            toast.success(`${newSuggestions.length} förslag genererade!`);
+            if (usefulSuggestions.length === 0) {
+                toast.info("Inga nya grupperingar hittades. Alla produkter verkar redan ligga rätt!");
+            } else {
+                setSuggestions(usefulSuggestions);
+                toast.success(`${usefulSuggestions.length} förslag genererade!`);
+            }
+
         } catch (error: any) {
             toast.error(`Kunde inte generera förslag: ${error.message}`);
         } finally {
