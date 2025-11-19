@@ -52,42 +52,70 @@ RETURN FORMAT (JSON):
   ]
 }`;
 
-        const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                model: 'google/gemini-2.5-flash',
-                messages: [
-                    {
-                        role: 'system',
-                        content: 'You are a helpful assistant that groups grocery products based on similarity. Return valid JSON only.'
-                    },
-                    {
-                        role: 'user',
-                        content: promptText
-                    }
-                ],
-                response_format: { type: "json_object" }
-            }),
-        });
+        console.log(`Processing ${products.length} products for category ${category}`);
+        
+        // Create a timeout controller
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 50000); // 50 second timeout
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('AI gateway error:', response.status, errorText);
-            throw new Error(`AI gateway returned ${response.status}: ${errorText}`);
+        try {
+            const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+                    'Content-Type': 'application/json',
+                },
+                signal: controller.signal,
+                body: JSON.stringify({
+                    model: 'google/gemini-2.5-flash',
+                    messages: [
+                        {
+                            role: 'system',
+                            content: 'You are a helpful assistant that groups grocery products based on similarity. Return valid JSON only.'
+                        },
+                        {
+                            role: 'user',
+                            content: promptText
+                        }
+                    ],
+                    response_format: { type: "json_object" }
+                }),
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('AI gateway error:', response.status, errorText);
+                
+                if (response.status === 429) {
+                    throw new Error('Rate limit exceeded. Please try again in a moment.');
+                }
+                if (response.status === 402) {
+                    throw new Error('AI credits exhausted. Please add more credits.');
+                }
+                
+                throw new Error(`AI gateway returned ${response.status}: ${errorText}`);
+            }
+
+            const data = await response.json();
+            const content = data.choices[0].message.content;
+            const parsedContent = JSON.parse(content);
+            
+            console.log(`Generated ${parsedContent.suggestions?.length || 0} suggestions`);
+
+            return new Response(
+                JSON.stringify(parsedContent),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+        } catch (fetchError) {
+            clearTimeout(timeoutId);
+            if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+                console.error('Request timeout after 50 seconds');
+                throw new Error('Request took too long. Try selecting a category with fewer products.');
+            }
+            throw fetchError;
         }
-
-        const data = await response.json();
-        const content = data.choices[0].message.content;
-        const parsedContent = JSON.parse(content);
-
-        return new Response(
-            JSON.stringify(parsedContent),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
 
     } catch (error) {
         console.error('Error in suggest-product-groups function:', error);
