@@ -58,6 +58,7 @@ export function Navigation() {
     { to: "/upload", label: "Upload" },
     { to: "/datamanagement", label: "Data Management" },
     { to: "/product-management", label: "Products" },
+    { to: "/price-comparison", label: "Prisjämförelse" },
   ];
 
   return (
