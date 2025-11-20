@@ -21,6 +21,8 @@ export type Database = {
           id: string
           mapped_name: string
           original_name: string
+          quantity_amount: number | null
+          quantity_unit: string | null
           updated_at: string
           usage_count: number | null
         }
@@ -30,6 +32,8 @@ export type Database = {
           id?: string
           mapped_name: string
           original_name: string
+          quantity_amount?: number | null
+          quantity_unit?: string | null
           updated_at?: string
           usage_count?: number | null
         }
@@ -39,6 +43,8 @@ export type Database = {
           id?: string
           mapped_name?: string
           original_name?: string
+          quantity_amount?: number | null
+          quantity_unit?: string | null
           updated_at?: string
           usage_count?: number | null
         }
@@ -72,6 +78,8 @@ export type Database = {
           id: string
           mapped_name: string
           original_name: string
+          quantity_amount: number | null
+          quantity_unit: string | null
           updated_at: string
           user_id: string
         }
@@ -81,6 +89,8 @@ export type Database = {
           id?: string
           mapped_name: string
           original_name: string
+          quantity_amount?: number | null
+          quantity_unit?: string | null
           updated_at?: string
           user_id: string
         }
@@ -90,6 +100,8 @@ export type Database = {
           id?: string
           mapped_name?: string
           original_name?: string
+          quantity_amount?: number | null
+          quantity_unit?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -245,7 +257,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      extract_unit_info: {
+        Args: { product_name: string }
+        Returns: {
+          amount: number
+          unit: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
