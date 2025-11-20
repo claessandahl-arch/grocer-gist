@@ -18,19 +18,19 @@ const Index = () => {
             </span>
           </h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Upload your grocery receipts and get instant insights into your spending habits, 
+            Upload your grocery receipts and get instant insights into your spending habits,
             compare prices across stores, and discover ways to save money.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button 
-              size="lg" 
+            <Button
+              size="lg"
               onClick={() => navigate("/upload")}
               className="gap-2 shadow-soft"
             >
               Get Started
             </Button>
-            <Button 
-              size="lg" 
+            <Button
+              size="lg"
               variant="outline"
               onClick={() => navigate("/dashboard")}
             >
@@ -55,7 +55,7 @@ const Index = () => {
             </CardHeader>
           </Card>
 
-          <Card className="shadow-card hover:shadow-soft transition-shadow">
+          <Card className="shadow-card hover:shadow-soft transition-shadow cursor-pointer" onClick={() => navigate("/price-comparison")}>
             <CardHeader>
               <div className="h-12 w-12 rounded-lg bg-accent/10 flex items-center justify-center mb-2">
                 <TrendingDown className="h-6 w-6 text-accent" />
@@ -115,8 +115,8 @@ const Index = () => {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex justify-center">
-            <Button 
-              size="lg" 
+            <Button
+              size="lg"
               onClick={() => navigate("/upload")}
               className="gap-2"
             >

@@ -1,286 +1,128 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Search, TrendingDown, Store, Package } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Search, ArrowLeft, TrendingDown, TrendingUp, Store } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
-type PriceComparisonRow = {
-  mapped_name: string | null;
-  quantity_unit: string | null;
-  min_price_per_unit: number | null;
-  avg_price_per_unit: number | null;
-  max_price_per_unit: number | null;
-  best_store_name: string | null;
-  data_points: number | null;
+type PriceComparisonItem = {
+  mapped_name: string;
+  quantity_unit: string;
+  min_price_per_unit: number;
+  avg_price_per_unit: number;
+  max_price_per_unit: number;
+  best_store_name: string;
+  data_points: number;
 };
 
 export default function PriceComparison() {
+  const [searchTerm, setSearchTerm] = useState("");
   const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState<"savings" | "name" | "price">("savings");
 
-  // Fetch price comparison data
-  const { data: priceData, isLoading } = useQuery({
-    queryKey: ["price-comparison"],
+  const { data: items, isLoading } = useQuery({
+    queryKey: ['price-comparison'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("view_price_comparison")
-        .select("*")
-        .order("mapped_name");
+        .from('view_price_comparison')
+        .select('*')
+        .order('data_points', { ascending: false }); // Show most popular items first
 
       if (error) throw error;
-      return data as PriceComparisonRow[];
+      return data as PriceComparisonItem[];
     },
   });
 
-  // Filter and sort data
-  const processedData = useMemo(() => {
-    if (!priceData) return [];
-
-    // Filter by search query
-    let filtered = priceData.filter(
-      (item) =>
-        item.mapped_name &&
-        item.mapped_name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
-    // Calculate savings percentage for each item
-    const withSavings = filtered.map((item) => {
-      const savingsPercent =
-        item.avg_price_per_unit && item.min_price_per_unit
-          ? ((item.avg_price_per_unit - item.min_price_per_unit) /
-              item.avg_price_per_unit) *
-            100
-          : 0;
-      return { ...item, savingsPercent };
-    });
-
-    // Sort
-    const sorted = [...withSavings].sort((a, b) => {
-      if (sortBy === "savings") {
-        return b.savingsPercent - a.savingsPercent;
-      } else if (sortBy === "name") {
-        return (a.mapped_name || "").localeCompare(b.mapped_name || "");
-      } else if (sortBy === "price") {
-        return (a.min_price_per_unit || 0) - (b.min_price_per_unit || 0);
-      }
-      return 0;
-    });
-
-    return sorted;
-  }, [priceData, searchQuery, sortBy]);
-
-  // Calculate summary stats
-  const stats = useMemo(() => {
-    if (!processedData.length) return { totalProducts: 0, avgSavings: 0, bestStores: [] };
-
-    const totalProducts = processedData.length;
-    const avgSavings =
-      processedData.reduce((sum, item) => sum + item.savingsPercent, 0) / totalProducts;
-
-    const storeCount: Record<string, number> = {};
-    processedData.forEach((item) => {
-      if (item.best_store_name) {
-        storeCount[item.best_store_name] = (storeCount[item.best_store_name] || 0) + 1;
-      }
-    });
-
-    const bestStores = Object.entries(storeCount)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 3)
-      .map(([name, count]) => ({ name, count }));
-
-    return { totalProducts, avgSavings, bestStores };
-  }, [processedData]);
+  const filteredItems = items?.filter(item =>
+    item.mapped_name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
-      <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <Button
-            variant="ghost"
-            onClick={() => navigate("/dashboard")}
-            className="mb-4"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Tillbaka
-          </Button>
-          <h1 className="text-4xl font-bold mb-2 bg-gradient-primary bg-clip-text text-transparent">
+    <div className="container mx-auto p-4 space-y-6 max-w-6xl pb-20">
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+          <ArrowLeft className="h-5 w-5" />
+        </Button>
+        <div>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
             Prisjämförelse
           </h1>
-          <p className="text-muted-foreground">
-            Hitta bästa butiken för varje produkt och spara pengar
-          </p>
+          <p className="text-muted-foreground">Hitta bästa priset per enhet för dina varor</p>
         </div>
-
-        {/* Stats Cards */}
-        <div className="grid gap-4 md:grid-cols-3 mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Totalt produkter</CardTitle>
-              <Package className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalProducts}</div>
-              <p className="text-xs text-muted-foreground">
-                Med prisjämförelse
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Genomsnittlig besparing</CardTitle>
-              <TrendingDown className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">
-                {stats.avgSavings.toFixed(1)}%
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Jämfört med snittpris
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Bästa butikerna</CardTitle>
-              <Store className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-1">
-                {stats.bestStores.map((store, idx) => (
-                  <div key={store.name} className="flex justify-between text-sm">
-                    <span className="font-medium">
-                      {idx + 1}. {store.name}
-                    </span>
-                    <span className="text-muted-foreground">{store.count} produkter</span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Search and Filter */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Sök och filtrera</CardTitle>
-            <CardDescription>Hitta specifika produkter eller sortera efter besparing</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Sök efter produkt..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-              <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
-                <SelectTrigger className="w-full sm:w-[200px]">
-                  <SelectValue placeholder="Sortera efter..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="savings">Störst besparing</SelectItem>
-                  <SelectItem value="name">Produktnamn</SelectItem>
-                  <SelectItem value="price">Lägsta pris</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Results Table */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Prisjämförelse</CardTitle>
-            <CardDescription>
-              {processedData.length} produkter hittade
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <div className="text-center py-8 text-muted-foreground">
-                Laddar prisjämförelse...
-              </div>
-            ) : processedData.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                Inga produkter hittades
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Produkt</TableHead>
-                      <TableHead>Enhet</TableHead>
-                      <TableHead>Bästa butiken</TableHead>
-                      <TableHead className="text-right">Lägsta pris</TableHead>
-                      <TableHead className="text-right">Snittpris</TableHead>
-                      <TableHead className="text-right">Besparing</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {processedData.map((item, idx) => (
-                      <TableRow key={idx}>
-                        <TableCell className="font-medium">
-                          {item.mapped_name || "Okänd produkt"}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="font-mono">
-                            {item.quantity_unit || "—"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className="bg-primary/10 text-primary hover:bg-primary/20">
-                            {item.best_store_name || "—"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right font-semibold">
-                          {item.min_price_per_unit
-                            ? `${item.min_price_per_unit.toFixed(2)} kr/${item.quantity_unit || "enhet"}`
-                            : "—"}
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground">
-                          {item.avg_price_per_unit
-                            ? `${item.avg_price_per_unit.toFixed(2)} kr/${item.quantity_unit || "enhet"}`
-                            : "—"}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {item.savingsPercent > 0 ? (
-                            <Badge className="bg-green-500/10 text-green-700 hover:bg-green-500/20 dark:text-green-400">
-                              Spara {item.savingsPercent.toFixed(0)}%
-                            </Badge>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
       </div>
+
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Sök produkt (t.ex. Kaffe, Smör)..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="pl-10 bg-card/50 backdrop-blur-sm"
+        />
+      </div>
+
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2, 3, 4, 5, 6].map(i => (
+            <div key={i} className="h-40 bg-muted/20 animate-pulse rounded-lg" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredItems?.map((item) => (
+            <Card key={`${item.mapped_name}-${item.quantity_unit}`} className="hover:shadow-md transition-shadow border-l-4 border-l-primary">
+              <CardHeader className="pb-2">
+                <div className="flex justify-between items-start">
+                  <CardTitle className="text-lg font-semibold">{item.mapped_name}</CardTitle>
+                  <Badge variant="secondary" className="font-mono">
+                    kr/{item.quantity_unit}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="bg-green-500/10 text-green-700 dark:text-green-400 p-3 rounded-md flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Store className="h-4 w-4" />
+                    <span className="font-medium truncate max-w-[120px]" title={item.best_store_name}>
+                      {item.best_store_name}
+                    </span>
+                  </div>
+                  <span className="text-lg font-bold">
+                    {item.min_price_per_unit.toFixed(2)}:-
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="flex flex-col p-2 bg-muted/30 rounded">
+                    <span className="text-muted-foreground text-xs flex items-center gap-1">
+                      <TrendingDown className="h-3 w-3" /> Snittpris
+                    </span>
+                    <span className="font-medium">{item.avg_price_per_unit.toFixed(2)}:-</span>
+                  </div>
+                  <div className="flex flex-col p-2 bg-muted/30 rounded">
+                    <span className="text-muted-foreground text-xs flex items-center gap-1">
+                      <TrendingUp className="h-3 w-3" /> Maxpris
+                    </span>
+                    <span className="font-medium">{item.max_price_per_unit.toFixed(2)}:-</span>
+                  </div>
+                </div>
+
+                <div className="text-xs text-muted-foreground text-right">
+                  Baserat på {item.data_points} köp
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+
+          {filteredItems?.length === 0 && (
+            <div className="col-span-full text-center py-12 text-muted-foreground">
+              Inga produkter hittades som matchar din sökning.
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
