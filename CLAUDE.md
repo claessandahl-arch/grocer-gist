@@ -140,6 +140,9 @@ This project uses Supabase migrations to manage database schema changes. Migrati
 - Deploying through Lovable.ai
 - Using Supabase CLI with `supabase db push` or `supabase db reset`
 
+> [!IMPORTANT]
+> **Lovable Cloud Database**: The database is hosted on Lovable Cloud and is fully managed by Lovable. You CANNOT access it via an external Supabase dashboard or CLI using standard credentials. All schema changes must be applied by creating migration files and asking Lovable to execute them.
+
 ### Recent Migrations
 
 **20251115000000_seed_global_product_mappings.sql**
