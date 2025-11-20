@@ -254,7 +254,18 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      view_price_comparison: {
+        Row: {
+          avg_price_per_unit: number | null
+          best_store_name: string | null
+          data_points: number | null
+          mapped_name: string | null
+          max_price_per_unit: number | null
+          min_price_per_unit: number | null
+          quantity_unit: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       extract_unit_info: {
