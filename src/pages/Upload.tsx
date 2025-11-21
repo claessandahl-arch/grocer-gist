@@ -426,7 +426,7 @@ const Upload = () => {
                   )}
                 </Button>
               </CardContent>
-            </Card>
+            </Card >
           )}
 
           {uploadedFiles.length > 0 && (
