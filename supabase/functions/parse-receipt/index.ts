@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import pdf from "npm:pdf-parse@1.1.1";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,7 +24,7 @@ serve(async (req) => {
   }
 
   try {
-    const { imageUrl, imageUrls, originalFilename } = await req.json();
+    const { imageUrl, imageUrls, originalFilename, pdfUrl } = await req.json();
 
     // Support both single image (legacy) and multiple images (new)
     const imagesToProcess = imageUrls || (imageUrl ? [imageUrl] : []);
@@ -78,7 +79,55 @@ serve(async (req) => {
       console.log('Could not fetch store patterns:', e);
     }
 
+    let pdfText = '';
+
+    // Priority 1: Use provided raw PDF URL
+    if (pdfUrl) {
+      try {
+        console.log('Using provided raw PDF URL for text extraction...');
+        const pdfResponse = await fetch(pdfUrl);
+        if (pdfResponse.ok) {
+          const pdfBuffer = await pdfResponse.arrayBuffer();
+          const data = await pdf(Buffer.from(pdfBuffer));
+          if (data.text) {
+            pdfText = `\n\n--- EXTRACTED TEXT FROM PDF ---\n${data.text}\n-------------------------------\n`;
+            console.log('Successfully extracted text from raw PDF');
+          }
+        }
+      } catch (e) {
+        console.error('Error extracting text from raw PDF:', e);
+      }
+    }
+
+    // Priority 2: Fallback to checking image URLs (legacy behavior)
+    if (!pdfText) {
+      // Check if any of the images are PDFs and extract text
+      for (const url of imagesToProcess) {
+        const isPdf = url.toLowerCase().endsWith('.pdf') ||
+          (originalFilename && originalFilename.toLowerCase().endsWith('.pdf'));
+
+        if (isPdf) {
+          try {
+            console.log('Detected PDF in images, fetching content for text extraction...');
+            const pdfResponse = await fetch(url);
+            if (pdfResponse.ok) {
+              const pdfBuffer = await pdfResponse.arrayBuffer();
+              const data = await pdf(Buffer.from(pdfBuffer));
+              if (data.text) {
+                pdfText += `\n\n--- EXTRACTED TEXT FROM PDF PAGE ---\n${data.text}\n------------------------------------\n`;
+                console.log('Successfully extracted text from PDF image');
+              }
+            }
+          } catch (e) {
+            console.error('Error extracting text from PDF image:', e);
+          }
+        }
+      }
+    }
+
     const promptText = `Parse this ${imagesToProcess.length > 1 ? imagesToProcess.length + '-page ' : ''}grocery receipt${imagesToProcess.length > 1 ? '. Combine information from ALL pages into a single receipt. The images are in page order.' : ''} and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), category, and discount (as number, optional).
+
+${pdfText ? `\n📜 TEXT LAYER EXTRACTED FROM PDF:\n${pdfText}\n\n⚠️ INSTRUCTION: Use the extracted text above as the PRIMARY source of truth for item names and prices, as it is more accurate than OCR. Use the image only for visual confirmation or if the text is garbled.\n` : ''}
 
 🏪 STORE NAME RULE:
 - Extract the FULL STORE NAME including branch/location (e.g., "ICA Nära Älvsjö", "Willys Hemma", "Coop Konsum")
@@ -122,6 +171,13 @@ ${originalFilename ? `\n📁 FILENAME HINT: The original filename is "${original
    - Lines with discount keywords + negative amount = discount on previous product
    - These ALL mean: apply discount to the product ABOVE
    
+5. SWEDISH ABBREVIATIONS & CONTEXT:
+   - "st" = styck (piece/quantity). Example: "2 st" means quantity 2.
+   - "kg" = kilogram. Treat as unit.
+   - "pant" = deposit. Categorize as "pant".
+   - "rabatt" = discount.
+   - "moms" = tax (ignore line).
+   - "öresavrundning" = rounding (ignore line).
 📋 REAL EXAMPLES - CORRECT PARSING:
 
 Example 1 - Multi-line product name:
@@ -145,7 +201,7 @@ Example 3 - Standalone discount line:
 ❌ WRONG: Two items with one having negative price
 ✅ CORRECT: { name: "Lätta 70% 500g", price: 30.00, quantity: 1, discount: 10.00 }
 
-5. CATEGORY MAPPING:
+6. CATEGORY MAPPING:
    Categorize each item into ONE of these Swedish categories:
    - frukt_gront (Fruit, vegetables, salad)
    - mejeri (Milk, cheese, yogurt, butter)
