@@ -9,104 +9,63 @@ import { Upload, ArrowLeft, ChevronLeft, ChevronRight, Package } from "lucide-re
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { startOfMonth, endOfMonth, format, addMonths, subMonths } from "date-fns";
+import { startOfMonth, format, addMonths, subMonths } from "date-fns";
 import { sv } from "date-fns/locale";
 import { useState } from "react";
-import type { ReceiptItem } from "@/types/receipt";
-import { calculateCategoryTotals } from "@/lib/categoryUtils";
+import { MonthlyStat, CategoryBreakdown as CategoryBreakdownType } from "@/types/dashboardTypes";
+import { categoryNames } from "@/lib/categoryConstants";
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const [selectedMonth, setSelectedMonth] = useState(new Date());
 
-  // Fetch current month's receipts
-  const { data: receipts, isLoading } = useQuery({
-    queryKey: ['receipts'],
+  const monthStart = format(startOfMonth(selectedMonth), 'yyyy-MM-dd');
+
+  // Fetch monthly stats from view
+  const { data: monthlyStats, isLoading: statsLoading } = useQuery({
+    queryKey: ['monthly-stats', monthStart],
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
       const { data, error } = await supabase
-        .from('receipts')
+        .from('view_monthly_stats' as any)
         .select('*')
         .eq('user_id', user.id)
-        .order('receipt_date', { ascending: false });
+        .eq('month_start', monthStart)
+        .maybeSingle();
 
       if (error) throw error;
-      return data;
+      return data as unknown as MonthlyStat | null;
     },
   });
 
-  // Fetch user product mappings for category corrections
-  const { data: userMappings } = useQuery({
-    queryKey: ['user-product-mappings-dashboard'],
+  // Fetch category breakdown from view
+  const { data: categoryStats, isLoading: categoriesLoading } = useQuery({
+    queryKey: ['category-breakdown', monthStart],
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
 
       const { data, error } = await supabase
-        .from('product_mappings')
-        .select('original_name, mapped_name, category')
-        .eq('user_id', user.id);
+        .from('view_category_breakdown' as any)
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('month_start', monthStart)
+        .order('total_spend', { ascending: false });
 
       if (error) throw error;
-      return data || [];
+      return data as unknown as CategoryBreakdownType[] || [];
     },
   });
 
-  // Fetch global product mappings
-  const { data: globalMappings } = useQuery({
-    queryKey: ['global-product-mappings-dashboard'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('global_product_mappings')
-        .select('original_name, mapped_name, category');
-
-      if (error) throw error;
-      return data || [];
-    },
-  });
-
-  // Calculate selected month's stats
-  const thisMonthStart = startOfMonth(selectedMonth);
-  const thisMonthEnd = endOfMonth(selectedMonth);
-  
-  const thisMonthReceipts = receipts?.filter(r => {
-    if (!r.receipt_date) return false;
-    const date = new Date(r.receipt_date);
-    return date >= thisMonthStart && date <= thisMonthEnd;
-  }) || [];
-
-  const thisMonthTotal = thisMonthReceipts.reduce((sum, r) => sum + Number(r.total_amount || 0), 0);
-  const thisMonthCount = thisMonthReceipts.length;
-  const avgPerReceipt = thisMonthCount > 0 ? thisMonthTotal / thisMonthCount : 0;
+  const isLoading = statsLoading || categoriesLoading;
 
   const handlePreviousMonth = () => setSelectedMonth(prev => subMonths(prev, 1));
   const handleNextMonth = () => setSelectedMonth(prev => addMonths(prev, 1));
   const isCurrentMonth = format(selectedMonth, 'yyyy-MM') === format(new Date(), 'yyyy-MM');
 
-  // Get top category this month using corrected categories from mappings
-  const categoryTotals = calculateCategoryTotals(
-    thisMonthReceipts,
-    userMappings,
-    globalMappings
-  );
-
-  const topCategory = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0];
-  
-  const categoryNames: Record<string, string> = {
-    frukt_gront: 'Frukt och grönt',
-    mejeri: 'Mejeri',
-    kott_fagel_chark: 'Kött, fågel, chark',
-    brod_bageri: 'Bröd och bageri',
-    drycker: 'Drycker',
-    sotsaker_snacks: 'Sötsaker och snacks',
-    fardigmat: 'Färdigmat',
-    hushall_hygien: 'Hushåll och hygien',
-    delikatess: 'Delikatess',
-    pant: 'Pant',
-    other: 'Övrigt',
-  };
+  const topCategory = categoryStats && categoryStats.length > 0 ? categoryStats[0] : null;
 
   return (
     <div className="min-h-screen bg-gradient-hero">
@@ -177,7 +136,7 @@ const Dashboard = () => {
                 <CardHeader className="pb-2">
                   <CardDescription>Vald månad</CardDescription>
                   <CardTitle className="text-3xl">
-                    {isLoading ? '...' : `${thisMonthTotal.toLocaleString('sv-SE', { maximumFractionDigits: 0 })} kr`}
+                    {isLoading ? '...' : `${(monthlyStats?.total_spend || 0).toLocaleString('sv-SE', { maximumFractionDigits: 0 })} kr`}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -190,23 +149,23 @@ const Dashboard = () => {
                 <CardHeader className="pb-2">
                   <CardDescription>Snitt per kvitto</CardDescription>
                   <CardTitle className="text-3xl">
-                    {isLoading ? '...' : `${avgPerReceipt.toLocaleString('sv-SE', { maximumFractionDigits: 0 })} kr`}
+                    {isLoading ? '...' : `${(monthlyStats?.avg_per_receipt || 0).toLocaleString('sv-SE', { maximumFractionDigits: 0 })} kr`}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-muted-foreground">{thisMonthCount} kvitton uppladdade</p>
+                  <p className="text-sm text-muted-foreground">{monthlyStats?.receipt_count || 0} kvitton uppladdade</p>
                 </CardContent>
               </Card>
               <Card className="shadow-card">
                 <CardHeader className="pb-2">
                   <CardDescription>Topkategori</CardDescription>
                   <CardTitle className="text-2xl">
-                    {isLoading ? '...' : (topCategory ? categoryNames[topCategory[0]] || 'Övrigt' : 'Ingen data')}
+                    {isLoading ? '...' : (topCategory ? categoryNames[topCategory.category] || 'Övrigt' : 'Ingen data')}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-muted-foreground">
-                    {topCategory ? `${topCategory[1].toLocaleString('sv-SE', { maximumFractionDigits: 0 })} kr spenderat` : '-'}
+                    {topCategory ? `${topCategory.total_spend.toLocaleString('sv-SE', { maximumFractionDigits: 0 })} kr spenderat` : '-'}
                   </p>
                 </CardContent>
               </Card>
@@ -214,11 +173,12 @@ const Dashboard = () => {
                 <CardHeader className="pb-2">
                   <CardDescription>Totalt antal kvitton</CardDescription>
                   <CardTitle className="text-3xl text-accent">
-                    {isLoading ? '...' : receipts?.length || 0}
+                    {/* Note: This is total for the month now, not all time. If all time is needed, we need a separate query. */}
+                    {isLoading ? '...' : monthlyStats?.receipt_count || 0}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-muted-foreground">Alla uppladdade kvitton</p>
+                  <p className="text-sm text-muted-foreground">Kvitton denna månad</p>
                 </CardContent>
               </Card>
             </div>
