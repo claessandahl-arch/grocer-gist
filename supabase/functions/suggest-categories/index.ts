@@ -14,6 +14,11 @@ interface CategorySuggestionRequest {
   userId: string;
 }
 
+interface ReceiptItem {
+  name: string;
+  category?: string;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -68,7 +73,7 @@ serve(async (req) => {
 
     // Add from receipts
     receipts?.forEach(receipt => {
-      const items = (receipt.items as any[]) || [];
+      const items = (receipt.items as unknown as ReceiptItem[]) || [];
       items.forEach(item => {
         if (item.name && item.category) {
           trainingExamples.push({ name: item.name, category: item.category });
@@ -125,14 +130,14 @@ serve(async (req) => {
     let parsedResponse;
     try {
       let jsonString = aiSuggestions.trim();
-      
+
       // Remove markdown code blocks if present
       if (jsonString.startsWith('```json')) {
         jsonString = jsonString.replace(/^```json\s*/, '').replace(/\s*```$/, '');
       } else if (jsonString.startsWith('```')) {
         jsonString = jsonString.replace(/^```\s*/, '').replace(/\s*```$/, '');
       }
-      
+
       parsedResponse = JSON.parse(jsonString);
     } catch (e) {
       console.error('Failed to parse AI response:', aiSuggestions);
@@ -211,12 +216,12 @@ ${trainingExamples.slice(0, 100).map(ex => `"${ex.name}" → ${ex.category}`).jo
   if (feedback.length > 0) {
     prompt += `\n\nFEEDBACK FRÅN ANVÄNDAREN (lär dig av dessa):
 ${feedback.map(f => {
-  if (f.accepted) {
-    return `"${f.product_name}" → ${f.suggested_category} ✅ (accepterad)`;
-  } else {
-    return `"${f.product_name}" → AI föreslog: ${f.suggested_category}, Användare valde: ${f.final_category} ❌`;
-  }
-}).join('\n')}
+      if (f.accepted) {
+        return `"${f.product_name}" → ${f.suggested_category} ✅ (accepterad)`;
+      } else {
+        return `"${f.product_name}" → AI föreslog: ${f.suggested_category}, Användare valde: ${f.final_category} ❌`;
+      }
+    }).join('\n')}
 `;
   }
 

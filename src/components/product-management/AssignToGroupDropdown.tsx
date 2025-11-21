@@ -19,7 +19,7 @@ type Product = {
 
 type ProductGroup = {
   name: string;
-  products: any[];
+  products: unknown[];
 };
 
 type AssignToGroupDropdownProps = {

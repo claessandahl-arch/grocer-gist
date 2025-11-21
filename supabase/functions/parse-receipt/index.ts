@@ -5,6 +5,18 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+interface ItemPattern {
+  category: string;
+  name_pattern: string;
+}
+
+interface StorePattern {
+  store_name: string;
+  pattern_data: {
+    item_patterns: ItemPattern[];
+  };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -52,10 +64,10 @@ serve(async (req) => {
         const patterns = await patternsResponse.json();
         if (patterns && patterns.length > 0) {
           storeContext = '\n\nIMPORTANT - Learned item categorizations from previous corrections:\n';
-          patterns.forEach((p: any) => {
+          patterns.forEach((p: StorePattern) => {
             storeContext += `\nFor ${p.store_name}:\n`;
             const itemPatterns = p.pattern_data?.item_patterns || [];
-            itemPatterns.forEach((item: any) => {
+            itemPatterns.forEach((item: ItemPattern) => {
               storeContext += `- "${item.name_pattern}" should be categorized as "${item.category}"\n`;
             });
           });

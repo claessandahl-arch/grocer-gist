@@ -11,6 +11,7 @@ import { BulkCategoryEditor } from "@/components/datamanagement/BulkCategoryEdit
 import { ProductSearchFilter } from "@/components/datamanagement/ProductSearchFilter";
 import { StatsCard } from "@/components/datamanagement/StatsCard";
 import { CATEGORY_KEYS } from "@/lib/categoryConstants";
+import { ReceiptItem } from "@/types/receipt";
 
 type ProductMapping = {
   id: string;
@@ -74,7 +75,7 @@ export default function DataManagement() {
         .from('product_mappings')
         .select('*')
         .eq('user_id', user.id);
-      
+
       if (error) throw error;
       return data.map(m => ({ ...m, type: 'user' as const }));
     },
@@ -88,7 +89,7 @@ export default function DataManagement() {
       const { data, error } = await supabase
         .from('global_product_mappings')
         .select('*');
-      
+
       if (error) throw error;
       return data.map(m => ({ ...m, type: 'global' as const, user_id: '' }));
     },
@@ -99,7 +100,7 @@ export default function DataManagement() {
     const uniqueNames = new Set<string>();
     console.log('[DataManagement] Processing receipts:', receipts.length);
     receipts.forEach((receipt, idx) => {
-      const items = (receipt.items as any[]) || [];
+      const items = (receipt.items as unknown as ReceiptItem[]) || [];
       console.log(`[DataManagement] Receipt ${idx + 1}/${receipts.length}: ${items.length} items from ${receipt.store_name || 'unknown store'}`);
       items.forEach(item => {
         if (item.name) uniqueNames.add(item.name);
@@ -127,7 +128,7 @@ export default function DataManagement() {
     // Search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(m => 
+      filtered = filtered.filter(m =>
         m.original_name.toLowerCase().includes(query) ||
         m.mapped_name.toLowerCase().includes(query)
       );
@@ -247,19 +248,19 @@ export default function DataManagement() {
   const updateCategory = useMutation({
     mutationFn: async ({ id, type, category }: { id: string; type: 'user' | 'global'; category: string }) => {
       console.log('[DataManagement] updateCategory called:', { id, type, category });
-      
+
       // Check if this is an unmapped product
       const isUnmapped = id.startsWith('unmapped-');
-      
+
       if (isUnmapped) {
         // Extract product name from ID
         const productName = id.substring('unmapped-'.length);
         console.log('[DataManagement] Creating new mapping for unmapped product:', productName);
-        
+
         // Create new mapping
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error("Not authenticated");
-        
+
         const { error } = await supabase
           .from('product_mappings')
           .insert({
@@ -268,7 +269,7 @@ export default function DataManagement() {
             mapped_name: productName,
             category: category,
           });
-        
+
         if (error) {
           console.error('[DataManagement] Failed to create mapping:', error);
           throw error;
@@ -282,7 +283,7 @@ export default function DataManagement() {
           .from(table)
           .update({ category })
           .eq('id', id);
-        
+
         if (error) {
           console.error('[DataManagement] Failed to update mapping:', error);
           throw error;
@@ -312,7 +313,7 @@ export default function DataManagement() {
         .from(table)
         .delete()
         .eq('id', id);
-      
+
       if (error) throw error;
     },
     onSuccess: () => {
@@ -338,7 +339,7 @@ export default function DataManagement() {
 
   const handleBulkCategoryUpdate = (category: string) => {
     const selectedMappings = filteredMappings.filter(m => selectedProducts.includes(m.id));
-    
+
     Promise.all(
       selectedMappings.map(m => updateCategory.mutateAsync({ id: m.id, type: m.type, category }))
     ).then(() => {
@@ -353,7 +354,7 @@ export default function DataManagement() {
     }
 
     const selectedMappings = filteredMappings.filter(m => selectedProducts.includes(m.id));
-    
+
     Promise.all(
       selectedMappings.map(m => deleteMapping.mutateAsync({ id: m.id, type: m.type }))
     ).then(() => {

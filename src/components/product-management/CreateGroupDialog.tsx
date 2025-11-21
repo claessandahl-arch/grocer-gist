@@ -95,7 +95,7 @@ export function CreateGroupDialog({
       const mappedUserProducts = selectedProducts.filter(p => !p.id.startsWith('unmapped-') && p.type === 'user');
       const mappedGlobalProducts = selectedProducts.filter(p => !p.id.startsWith('unmapped-') && p.type === 'global');
 
-      const updates: any = { mapped_name: groupName.trim() };
+      const updates: { mapped_name: string; category?: string } = { mapped_name: groupName.trim() };
       if (category !== "none") {
         updates.category = category;
       }

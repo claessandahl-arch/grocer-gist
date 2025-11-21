@@ -8,10 +8,11 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { categoryNames } from "@/lib/categoryConstants";
+import { ReceiptItem } from "@/types/receipt";
 
 export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) => {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  
+
   const { data: receipts, isLoading } = useQuery({
     queryKey: ['receipts'],
     queryFn: async () => {
@@ -19,7 +20,7 @@ export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) =
         .from('receipts')
         .select('*')
         .order('receipt_date', { ascending: false });
-      
+
       if (error) throw error;
       return data;
     },
@@ -30,22 +31,22 @@ export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) =
     queryKey: ['product-mappings', 'with-global'],
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       // Fetch user mappings
       const { data: userMappings, error: userError } = await supabase
         .from('product_mappings')
         .select('*')
         .eq('user_id', user?.id || '');
-      
+
       if (userError) throw userError;
-      
+
       // Fetch global mappings
       const { data: globalMappings, error: globalError } = await supabase
         .from('global_product_mappings')
         .select('*');
-      
+
       if (globalError) throw globalError;
-      
+
       // Combine both - user mappings take precedence
       const userMappingNames = new Set((userMappings || []).map(m => m.original_name));
       const combined = [
@@ -58,7 +59,7 @@ export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) =
             isGlobal: true
           }))
       ];
-      
+
       return combined;
     },
   });
@@ -67,7 +68,7 @@ export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) =
   const monthToUse = selectedMonth || new Date();
   const thisMonthStart = startOfMonth(monthToUse);
   const thisMonthEnd = endOfMonth(monthToUse);
-  
+
   const thisMonthReceipts = receipts?.filter(r => {
     if (!r.receipt_date) return false;
     const date = new Date(r.receipt_date);
@@ -102,20 +103,20 @@ export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) =
   // Calculate category totals
   const categoryTotals: Record<string, number> = {};
   const itemsByCategory: Record<string, Record<string, { total: number; quantity: number; originalNames: Set<string> }>> = {};
-  
+
   thisMonthReceipts.forEach(receipt => {
-    const items = receipt.items as any[] || [];
+    const items = (receipt.items as unknown as ReceiptItem[]) || [];
     items.forEach(item => {
       const itemName = item.name || 'Okänd produkt';
       const normalizedData = normalizeProductName(itemName);
       const normalizedName = normalizedData.normalizedName;
-      
+
       // Use category from mapping if available, otherwise use item category
       const category = normalizedData.category || item.category || 'other';
       const price = Number(item.price || 0);
-      
+
       categoryTotals[category] = (categoryTotals[category] || 0) + price;
-      
+
       if (!itemsByCategory[category]) {
         itemsByCategory[category] = {};
       }
@@ -146,7 +147,7 @@ export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) =
         const displayName = normalizedName.split(' ')
           .map(word => word.charAt(0).toUpperCase() + word.slice(1))
           .join(' ');
-        
+
         return {
           name: displayName,
           total: Math.round(data.total),
@@ -156,7 +157,7 @@ export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) =
       .sort((a, b) => b.total - a.total);
   };
 
-  const handleBarClick = (data: any) => {
+  const handleBarClick = (data: { categoryKey: string }) => {
     setSelectedCategory(data.categoryKey);
   };
 
@@ -219,19 +220,19 @@ export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) =
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={itemChartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis 
-                dataKey="name" 
+              <XAxis
+                dataKey="name"
                 stroke="hsl(var(--muted-foreground))"
                 fontSize={11}
                 angle={-45}
                 textAnchor="end"
                 height={100}
               />
-              <YAxis 
+              <YAxis
                 stroke="hsl(var(--muted-foreground))"
                 fontSize={12}
               />
-              <Tooltip 
+              <Tooltip
                 contentStyle={{
                   backgroundColor: "hsl(var(--card))",
                   border: "1px solid hsl(var(--border))",
@@ -277,28 +278,28 @@ export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) =
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-            <XAxis 
-              dataKey="category" 
+            <XAxis
+              dataKey="category"
               stroke="hsl(var(--muted-foreground))"
               fontSize={11}
               angle={-45}
               textAnchor="end"
               height={80}
             />
-            <YAxis 
+            <YAxis
               stroke="hsl(var(--muted-foreground))"
               fontSize={12}
             />
-            <Tooltip 
+            <Tooltip
               contentStyle={{
                 backgroundColor: "hsl(var(--card))",
                 border: "1px solid hsl(var(--border))",
                 borderRadius: "var(--radius)",
               }}
             />
-            <Bar 
-              dataKey="amount" 
-              fill="hsl(var(--chart-2))" 
+            <Bar
+              dataKey="amount"
+              fill="hsl(var(--chart-2))"
               radius={[8, 8, 0, 0]}
               onClick={handleBarClick}
               cursor="pointer"

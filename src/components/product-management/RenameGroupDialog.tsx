@@ -18,7 +18,7 @@ import { toast } from "sonner";
 
 type ProductGroup = {
   name: string;
-  products: any[];
+  products: { id: string; user_id: string | null; original_name: string }[];
   categories: Set<string>;
   types: Set<string>;
   totalPurchases: number;
@@ -63,7 +63,7 @@ export function RenameGroupDialog({
     }: {
       oldName: string;
       newName: string;
-      products: any[];
+      products: { id: string; user_id: string | null }[];
     }) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
