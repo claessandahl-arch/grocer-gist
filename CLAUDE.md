@@ -31,6 +31,7 @@ This project is actively developed with Lovable.ai:
 4. **Never force push** - Avoid `git push --force` or `git push -f` at all times
 5. **Pull latest changes** - Always run `git pull` before starting work
 6. **Sync frequently** - Keep your local repository in sync with remote
+7. **Database Access** - You CANNOT access the database directly. It is managed by Lovable Cloud. Use migrations for schema changes.
 
 Example workflow:
 ```bash
@@ -125,6 +126,8 @@ The application has the following routes (all lazy-loaded for performance):
 
 2. **AI Parsing**: Images are sent to the `parse-receipt` Supabase Edge Function
    - Uses `google/gemini-2.5-flash` via Lovable AI Gateway
+   - **New**: Supports direct PDF text extraction (if PDF URL provided) for 100% accuracy
+   - **New**: Enhanced Swedish abbreviation handling (st, kg, pant, rabatt)
    - Applies learned patterns from `store_patterns` table for improved accuracy
    - Extracts: store name, total amount, date, and itemized list with categories
    - Handles multi-line product names and discount parsing
@@ -316,8 +319,10 @@ Location: `supabase/functions/`
 
 **Features:**
 - Multi-page receipt support
+- **Direct PDF text extraction** (hybrid approach: uses text layer if available)
 - Store pattern learning from `store_patterns` table
 - Sophisticated prompt engineering for accurate extraction
+- **Swedish abbreviation rules** (st, kg, pant, rabatt)
 - Discount/rebate handling (negative amounts applied to previous product)
 - Multi-line product name detection
 - Never creates items with negative prices
