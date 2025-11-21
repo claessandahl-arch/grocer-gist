@@ -29,6 +29,7 @@ const Dashboard = () => {
       if (!user) throw new Error('Not authenticated');
 
       const { data, error } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .from('view_monthly_stats' as any)
         .select('*')
         .eq('user_id', user.id)
@@ -48,6 +49,7 @@ const Dashboard = () => {
       if (!user) return [];
 
       const { data, error } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .from('view_category_breakdown' as any)
         .select('*')
         .eq('user_id', user.id)

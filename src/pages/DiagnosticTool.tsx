@@ -32,11 +32,6 @@ export default function DiagnosticTool() {
   const [fixing, setFixing] = useState(false);
   const [selectedFixes, setSelectedFixes] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    checkAuth();
-    scanForCorruptedData();
-  }, []);
-
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
@@ -113,6 +108,12 @@ export default function DiagnosticTool() {
 
     setLoading(false);
   };
+
+  useEffect(() => {
+    checkAuth();
+    scanForCorruptedData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const fixProduct = async (product: CorruptedProduct) => {
     const newCategory = selectedFixes[product.id];

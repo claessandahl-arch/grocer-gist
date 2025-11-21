@@ -76,7 +76,7 @@ export function getCategoryForItem(
  * @returns Object with category keys and total amounts
  */
 export function calculateCategoryTotals(
-  receipts: any[],
+  receipts: { items: unknown }[],
   userMappings: ProductMapping[] | undefined,
   globalMappings: GlobalProductMapping[] | undefined
 ): Record<string, number> {

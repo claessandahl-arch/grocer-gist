@@ -25,7 +25,7 @@ import { MergeGroupsDialog } from "./MergeGroupsDialog";
 
 type ProductGroup = {
   name: string;
-  products: any[];
+  products: { id: string; user_id: string | null; original_name: string; category: string | null }[];
   categories: Set<string>;
   types: Set<string>;
   totalPurchases: number;
