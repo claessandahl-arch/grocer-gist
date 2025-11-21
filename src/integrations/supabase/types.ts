@@ -254,6 +254,25 @@ export type Database = {
       }
     }
     Views: {
+      view_category_breakdown: {
+        Row: {
+          category: string | null
+          month_start: string | null
+          total_spend: number | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
+      view_monthly_stats: {
+        Row: {
+          avg_per_receipt: number | null
+          month_start: string | null
+          receipt_count: number | null
+          total_spend: number | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
       view_price_comparison: {
         Row: {
           avg_price_per_unit: number | null
@@ -263,6 +282,16 @@ export type Database = {
           max_price_per_unit: number | null
           min_price_per_unit: number | null
           quantity_unit: string | null
+        }
+        Relationships: []
+      }
+      view_store_comparison: {
+        Row: {
+          month_start: string | null
+          store_name: string | null
+          total_spend: number | null
+          user_id: string | null
+          visit_count: number | null
         }
         Relationships: []
       }
