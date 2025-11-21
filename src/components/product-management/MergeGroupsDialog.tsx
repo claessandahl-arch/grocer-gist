@@ -20,7 +20,7 @@ import { toast } from "sonner";
 
 type ProductGroup = {
   name: string;
-  products: any[];
+  products: { id: string; user_id: string | null }[];
   categories: Set<string>;
   types: Set<string>;
   totalPurchases: number;
@@ -83,7 +83,7 @@ export function MergeGroupsDialog({
     }: {
       sourceGroupName: string;
       targetGroupName: string;
-      sourceProducts: any[];
+      sourceProducts: { id: string; user_id: string | null }[];
     }) => {
       const {
         data: { user },

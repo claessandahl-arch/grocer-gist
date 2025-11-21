@@ -10,6 +10,7 @@ import { Sparkles, Check, X, RefreshCw, ChevronDown, ChevronUp, Trash2 } from "l
 import { toast } from "sonner";
 import { categoryOptions, categoryNames } from "@/lib/categoryConstants";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ReceiptItem } from "@/types/receipt";
 
 const BATCH_SIZE = 15;
 
@@ -95,7 +96,7 @@ export function AICategorization() {
 
     const productData = new Map<string, ItemOccurrence[]>();
     receipts.forEach(receipt => {
-      const items = (receipt.items as any[]) || [];
+      const items = (receipt.items as unknown as ReceiptItem[]) || [];
       items.forEach((item, itemIndex) => {
         if (item.name) {
           if (!productData.has(item.name)) productData.set(item.name, []);
@@ -149,8 +150,8 @@ export function AICategorization() {
         return { ...product, suggestion, userCategory: suggestion?.category };
       }));
       toast.success(`${suggestions.length} förslag genererade!`);
-    } catch (error: any) {
-      toast.error(`Kunde inte generera förslag: ${error.message}`);
+    } catch (error) {
+      toast.error(`Kunde inte generera förslag: ${(error as Error).message}`);
     } finally {
       setIsGeneratingSuggestions(false);
     }
@@ -196,7 +197,11 @@ export function AICategorization() {
     setCurrentBatch(prev => prev.map((p, i) => {
       if (i === productIndex) {
         const newExcludedIds = new Set(p.excludedItemIds);
-        newExcludedIds.has(itemId) ? newExcludedIds.delete(itemId) : newExcludedIds.add(itemId);
+        if (newExcludedIds.has(itemId)) {
+          newExcludedIds.delete(itemId);
+        } else {
+          newExcludedIds.add(itemId);
+        }
         return { ...p, excludedItemIds: newExcludedIds };
       }
       return p;

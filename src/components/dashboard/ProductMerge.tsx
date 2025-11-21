@@ -5,7 +5,7 @@ import { logger } from "@/lib/logger";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, UseMutationResult } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { categoryOptions, categoryNames } from "@/lib/categoryConstants";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { ReceiptItem } from "@/types/receipt";
 import { useDebouncedCallback } from "use-debounce";
 
 // Calculate similarity score between two strings (0-1)
@@ -82,7 +83,7 @@ const levenshteinDistance = (str1: string, str2: string): number => {
 const SWEDISH_ALPHABET = ['Alla', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'Å', 'Ä', 'Ö', '#'];
 
 // Get categories for products from receipts
-const getProductCategories = (productNames: string[], receipts: any[] | undefined): {
+const getProductCategories = (productNames: string[], receipts: { items: ReceiptItem[] }[] | undefined): {
   commonCategory: string | null;
   uniqueCategories: string[];
 } => {
@@ -93,7 +94,7 @@ const getProductCategories = (productNames: string[], receipts: any[] | undefine
   receipts.forEach(receipt => {
     if (!receipt.items) return;
 
-    receipt.items.forEach((item: any) => {
+    receipt.items.forEach((item: ReceiptItem) => {
       if (productNames.some(p => p.toLowerCase() === item.name?.toLowerCase())) {
         if (item.category) {
           categories.add(item.category);
@@ -118,17 +119,46 @@ type SuggestedMerge = {
   suggestedName: string;
 };
 
+// Type definitions
+interface ProductMapping {
+  id: string;
+  original_name: string;
+  mapped_name: string;
+  category: string;
+  isGlobal: boolean;
+  hasLocalOverride?: boolean;
+  overrideId?: string;
+  user_id?: string | null;
+}
+
+interface GroupStats {
+  totalSpending: number;
+  productCount: number;
+  commonCategory: string | null;
+  uniqueCategories: string[];
+  hasMixedCategories: boolean;
+}
+
+interface ProductData {
+  spending: number;
+  count: number;
+  categories: Set<string>;
+}
+
 // Row component for unmapped products virtual list
 const ProductRow = React.memo<{
   index: number;
   style: React.CSSProperties;
-  products: string[];
-  selectedProducts: string[];
-  handleProductToggle: (product: string) => void;
-  handleAddToExistingGroup: (product: string, mappedName: string) => void;
-  groupNames: string[] | undefined;
-  isPending: boolean;
-}>(({ index, style, products, selectedProducts, handleProductToggle, handleAddToExistingGroup, groupNames, isPending }) => {
+  data: {
+    products: string[];
+    selectedProducts: string[];
+    handleProductToggle: (product: string) => void;
+    handleAddToExistingGroup: (product: string, mappedName: string) => void;
+    groupNames: string[] | undefined;
+    isPending: boolean;
+  };
+}>(({ index, style, data }) => {
+  const { products, selectedProducts, handleProductToggle, handleAddToExistingGroup, groupNames, isPending } = data;
   const product = products[index];
 
   return (
@@ -150,46 +180,48 @@ ProductRow.displayName = "ProductRow";
 const ActiveMergeRow = React.memo<{
   index: number;
   style: React.CSSProperties;
-  items: [string, any[]][];
-  selectedGroups: string[];
-  handleGroupToggle: (groupName: string) => void;
-  editingMergeGroup: Record<string, string>;
-  setEditingMergeGroup: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-  handleRenameMergeGroup: (oldName: string, newName: string) => void;
-  groupStats: Record<string, any>;
-  categoryNames: Record<string, string>;
-  categoryOptions: { value: string; label: string }[];
-  handleUpdateCategory: (mappedName: string, newCategory: string) => void;
-  selectedStandardCategory: Record<string, string>;
-  setSelectedStandardCategory: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-  productIndex: Map<string, any>;
-  expandedGroups: Record<string, boolean>;
-  setExpandedGroups: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
-  updateCategoryOverride: any;
-  removeCategoryOverride: any;
-  deleteMapping: any;
-}>(({
-  index,
-  style,
-  items,
-  selectedGroups,
-  handleGroupToggle,
-  editingMergeGroup,
-  setEditingMergeGroup,
-  handleRenameMergeGroup,
-  groupStats,
-  categoryNames,
-  categoryOptions,
-  handleUpdateCategory,
-  selectedStandardCategory,
-  setSelectedStandardCategory,
-  productIndex,
-  expandedGroups,
-  setExpandedGroups,
-  updateCategoryOverride,
-  removeCategoryOverride,
-  deleteMapping
-}) => {
+  data: {
+    items: [string, ProductMapping[]][];
+    selectedGroups: string[];
+    handleGroupToggle: (groupName: string) => void;
+    editingMergeGroup: Record<string, string>;
+    setEditingMergeGroup: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+    handleRenameMergeGroup: (oldName: string, newName: string) => void;
+    groupStats: Record<string, GroupStats>;
+    categoryNames: Record<string, string>;
+    categoryOptions: { value: string; label: string }[];
+    handleUpdateCategory: (mappedName: string, newCategory: string) => void;
+    selectedStandardCategory: Record<string, string>;
+    setSelectedStandardCategory: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+    productIndex: Map<string, ProductData>;
+    expandedGroups: Record<string, boolean>;
+    setExpandedGroups: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+    updateCategoryOverride: UseMutationResult<unknown, Error, { globalMappingId: string; category: string; }, unknown>;
+    removeCategoryOverride: UseMutationResult<string, Error, string, unknown>;
+    deleteMapping: UseMutationResult<void, Error, string, unknown>;
+  };
+}>(({ index, style, data }) => {
+  const {
+    items,
+    selectedGroups,
+    handleGroupToggle,
+    editingMergeGroup,
+    setEditingMergeGroup,
+    handleRenameMergeGroup,
+    groupStats,
+    categoryNames,
+    categoryOptions,
+    handleUpdateCategory,
+    selectedStandardCategory,
+    setSelectedStandardCategory,
+    productIndex,
+    expandedGroups,
+    setExpandedGroups,
+    updateCategoryOverride,
+    removeCategoryOverride,
+    deleteMapping
+  } = data;
+
   const [mappedName, itemsList] = items[index];
 
   // Use pre-calculated stats including category info
@@ -201,7 +233,7 @@ const ActiveMergeRow = React.memo<{
     hasMixedCategories: false
   };
   const isEditingThis = mappedName in editingMergeGroup;
-  const hasUserMappings = itemsList.some((item: any) => !item.isGlobal);
+  const hasUserMappings = itemsList.some((item) => !item.isGlobal);
   const savedCategory = itemsList[0]?.category;
 
   // Determine category status using pre-calculated values
@@ -268,17 +300,17 @@ const ActiveMergeRow = React.memo<{
                   <div className="flex items-center gap-2 overflow-hidden">
                     <h4 className="font-medium text-base truncate" title={mappedName}>{mappedName}</h4>
                     {/* Group type badge */}
-                    {itemsList.every((item: any) => item.isGlobal) && (
+                    {itemsList.every((item) => item.isGlobal) && (
                       <Badge variant="secondary" className="text-xs shrink-0">
                         Global
                       </Badge>
                     )}
-                    {itemsList.every((item: any) => !item.isGlobal) && (
+                    {itemsList.every((item) => !item.isGlobal) && (
                       <Badge variant="outline" className="text-xs shrink-0">
                         Personlig
                       </Badge>
                     )}
-                    {itemsList.some((item: any) => item.isGlobal) && itemsList.some((item: any) => !item.isGlobal) && (
+                    {itemsList.some((item) => item.isGlobal) && itemsList.some((item) => !item.isGlobal) && (
                       <Badge variant="default" className="text-xs shrink-0">
                         Mixad
                       </Badge>
@@ -397,7 +429,7 @@ const ActiveMergeRow = React.memo<{
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {itemsList.map((item: any) => {
+                {itemsList.map((item) => {
                   const savedCategory = item.category;
                   const productData = productIndex.get(item.original_name);
                   const receiptCategories = (productData?.categories as Set<string>) || new Set<string>();
@@ -671,11 +703,62 @@ export const ProductMerge = React.memo(() => {
     return combined;
   }, [mappings?.userMappings, mappings?.globalMappings, userOverrides]);
 
+  // Group mappings by mapped_name with stats (memoized)
+  const groupedMappings = useMemo(() => {
+    return combinedMappings?.reduce((acc, mapping) => {
+      if (!acc[mapping.mapped_name]) {
+        acc[mapping.mapped_name] = [];
+      }
+      acc[mapping.mapped_name].push(mapping);
+      return acc;
+    }, {} as Record<string, Array<typeof combinedMappings[number]>>);
+  }, [combinedMappings]);
+
+  // Optimized: Pass only group names to ProductListItem instead of entire groupedMappings object
+  const groupNames = useMemo(() => Object.keys(groupedMappings || {}), [groupedMappings]);
+
+  // Filter product groups by selected alphabet letter
+  const filteredGroupedMappings = useMemo(() => {
+    if (!groupedMappings) return {};
+    if (activeGroupsFilter === 'Alla') return groupedMappings;
+
+    const filtered: Record<string, Array<typeof combinedMappings[number]>> = {};
+    Object.entries(groupedMappings).forEach(([mappedName, items]) => {
+      const firstChar = mappedName[0]?.toUpperCase();
+      if (activeGroupsFilter === '#') {
+        // Numbers and symbols
+        if (/[0-9]/.test(firstChar)) {
+          filtered[mappedName] = items;
+        }
+      } else if (firstChar === activeGroupsFilter) {
+        filtered[mappedName] = items;
+      }
+    });
+    return filtered;
+  }, [groupedMappings, activeGroupsFilter]);
+
+  // Count product groups per letter for badge display
+  const groupLetterCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const allGroupNames = Object.keys(groupedMappings || {});
+
+    SWEDISH_ALPHABET.forEach(letter => {
+      if (letter === 'Alla') {
+        counts[letter] = allGroupNames.length;
+      } else if (letter === '#') {
+        counts[letter] = allGroupNames.filter(name => /[0-9]/.test(name[0])).length;
+      } else {
+        counts[letter] = allGroupNames.filter(name => name[0]?.toUpperCase() === letter).length;
+      }
+    });
+    return counts;
+  }, [groupedMappings]);
+
   // Get unique product names from all receipts (memoized)
   const productList = useMemo(() => {
     const uniqueProducts = new Set<string>();
     receipts?.forEach(receipt => {
-      const items = receipt.items as any[] || [];
+      const items = (receipt.items as unknown as ReceiptItem[]) || [];
       items.forEach(item => {
         if (item.name) uniqueProducts.add(item.name);
       });
@@ -878,8 +961,8 @@ export const ProductMerge = React.memo(() => {
 
       // Get all items in this group
       const groupItems = groupedMappings?.[mappedName] || [];
-      const userMappings = groupItems.filter((item: any) => !item.isGlobal);
-      const globalMappings = groupItems.filter((item: any) => item.isGlobal);
+      const userMappings = groupItems.filter((item: ProductMapping) => !item.isGlobal);
+      const globalMappings = groupItems.filter((item: ProductMapping) => item.isGlobal);
 
       let totalUpdated = 0;
 
@@ -888,7 +971,7 @@ export const ProductMerge = React.memo(() => {
         const { error: userError } = await supabase
           .from('product_mappings')
           .update({ category })
-          .in('id', userMappings.map((m: any) => m.id));
+          .in('id', userMappings.map((m: ProductMapping) => m.id));
 
         if (userError) throw userError;
         totalUpdated += userMappings.length;
@@ -899,7 +982,7 @@ export const ProductMerge = React.memo(() => {
         const { error: globalError } = await supabase
           .from('global_product_mappings')
           .update({ category })
-          .in('id', globalMappings.map((m: any) => m.id));
+          .in('id', globalMappings.map((m: ProductMapping) => m.id));
 
         if (globalError) throw globalError;
         totalUpdated += globalMappings.length;
@@ -1034,7 +1117,7 @@ export const ProductMerge = React.memo(() => {
         },
       }
     );
-  }, []); // Stable callback
+  }, [createMapping]); // Stable callback
 
   const handleMerge = () => {
     if (selectedProducts.length < 2) {
@@ -1060,8 +1143,9 @@ export const ProductMerge = React.memo(() => {
       const finalName = editingSuggestion[idx] || suggestion.suggestedName;
       const existingGroup = addToExisting[idx];
 
-      // Get category - use selected category if manually chosen, otherwise use common category
-      const { commonCategory } = getProductCategories(suggestion.products, receipts);
+      // Get category - use selected category if manually chosen, otherwise
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { commonCategory } = getProductCategories(suggestion.products, receipts as any);
       const finalCategory = selectedSuggestionCategory[idx] || commonCategory || null;
 
       const mappingsToCreate = suggestion.products.map(product => ({
@@ -1129,7 +1213,7 @@ export const ProductMerge = React.memo(() => {
     }
   };
 
-  const handleRenameMergeGroup = async (oldName: string, newName: string) => {
+  const handleRenameMergeGroup = useCallback(async (oldName: string, newName: string) => {
     if (!newName.trim() || newName === oldName) {
       setEditingMergeGroup(prev => {
         const next = { ...prev };
@@ -1144,13 +1228,14 @@ export const ProductMerge = React.memo(() => {
       if (!user) throw new Error("Not authenticated");
 
       // Get all items in this group to determine what needs updating
+      // Get all items in this group to determine what needs updating
       const groupItems = groupedMappings?.[oldName] || [];
-      const userMappings = groupItems.filter((item: any) => !item.isGlobal);
-      const globalMappings = groupItems.filter((item: any) => item.isGlobal);
+      const userMappings = groupItems.filter((item: ProductMapping) => !item.isGlobal);
+      const globalMappings = groupItems.filter((item: ProductMapping) => item.isGlobal);
 
       let userUpdateSuccess = false;
       let globalUpdateSuccess = false;
-      let errors: string[] = [];
+      const errors: string[] = [];
 
       // Update user-specific mappings if any exist
       if (userMappings.length > 0) {
@@ -1213,17 +1298,18 @@ export const ProductMerge = React.memo(() => {
       toast.error("Kunde inte uppdatera gruppnamn: " + (error as Error).message);
       logger.error('Rename failed:', error);
     }
-  };
+  }, [groupedMappings, queryClient]);
 
-  const handleUpdateCategory = async (mappedName: string, newCategory: string) => {
+  const handleUpdateCategory = useCallback(async (mappedName: string, newCategory: string) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Ingen användare inloggad");
 
       // Get all items in this group
+      // Get all items in this group
       const groupItems = groupedMappings?.[mappedName] || [];
-      const userMappings = groupItems.filter((item: any) => !item.isGlobal);
-      const globalMappings = groupItems.filter((item: any) => item.isGlobal);
+      const userMappings = groupItems.filter((item: ProductMapping) => !item.isGlobal);
+      const globalMappings = groupItems.filter((item: ProductMapping) => item.isGlobal);
 
       const errors: string[] = [];
       let userUpdateSuccess = false;
@@ -1288,7 +1374,7 @@ export const ProductMerge = React.memo(() => {
     } catch (error) {
       toast.error("Kunde inte uppdatera kategori: " + (error as Error).message);
     }
-  };
+  }, [groupedMappings, queryClient]);
 
   // Merge selected groups mutation
   const mergeGroups = useMutation({
@@ -1336,56 +1422,7 @@ export const ProductMerge = React.memo(() => {
     mergeGroups.mutate();
   };
 
-  // Group mappings by mapped_name with stats (memoized)
-  const groupedMappings = useMemo(() => {
-    return combinedMappings?.reduce((acc, mapping) => {
-      if (!acc[mapping.mapped_name]) {
-        acc[mapping.mapped_name] = [];
-      }
-      acc[mapping.mapped_name].push(mapping);
-      return acc;
-    }, {} as Record<string, Array<typeof combinedMappings[number]>>);
-  }, [combinedMappings]);
 
-  // Optimized: Pass only group names to ProductListItem instead of entire groupedMappings object
-  const groupNames = useMemo(() => Object.keys(groupedMappings || {}), [groupedMappings]);
-
-  // Filter product groups by selected alphabet letter
-  const filteredGroupedMappings = useMemo(() => {
-    if (!groupedMappings) return {};
-    if (activeGroupsFilter === 'Alla') return groupedMappings;
-
-    const filtered: Record<string, Array<typeof combinedMappings[number]>> = {};
-    Object.entries(groupedMappings).forEach(([mappedName, items]) => {
-      const firstChar = mappedName[0]?.toUpperCase();
-      if (activeGroupsFilter === '#') {
-        // Numbers and symbols
-        if (/[0-9]/.test(firstChar)) {
-          filtered[mappedName] = items;
-        }
-      } else if (firstChar === activeGroupsFilter) {
-        filtered[mappedName] = items;
-      }
-    });
-    return filtered;
-  }, [groupedMappings, activeGroupsFilter]);
-
-  // Count product groups per letter for badge display
-  const groupLetterCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    const allGroupNames = Object.keys(groupedMappings || {});
-
-    SWEDISH_ALPHABET.forEach(letter => {
-      if (letter === 'Alla') {
-        counts[letter] = allGroupNames.length;
-      } else if (letter === '#') {
-        counts[letter] = allGroupNames.filter(name => /[0-9]/.test(name[0])).length;
-      } else {
-        counts[letter] = allGroupNames.filter(name => name[0]?.toUpperCase() === letter).length;
-      }
-    });
-    return counts;
-  }, [groupedMappings]);
 
   // Debug log to check how many groups we have (only in development)
   if (import.meta.env.DEV) {
@@ -1401,7 +1438,7 @@ export const ProductMerge = React.memo(() => {
     const index = new Map<string, { spending: number; count: number; categories: Set<string> }>();
 
     receipts?.forEach(receipt => {
-      const receiptItems = receipt.items as any[] || [];
+      const receiptItems = (receipt.items as unknown as ReceiptItem[]) || [];
       receiptItems.forEach(item => {
         if (!item.name) return;
 
@@ -1442,7 +1479,7 @@ export const ProductMerge = React.memo(() => {
       const allCategories = new Set<string>();
 
       // Aggregate stats from the index (O(items in group) instead of O(all receipts × all items))
-      (items as any[]).forEach(item => {
+      (items as { original_name: string }[]).forEach(item => {
         const productData = productIndex.get(item.original_name);
         if (productData) {
           totalSpending += productData.spending;
@@ -1495,15 +1532,15 @@ export const ProductMerge = React.memo(() => {
     selectedGroups,
     handleGroupToggle,
     editingMergeGroup,
+    setEditingMergeGroup,
     handleRenameMergeGroup,
     groupStats,
-    categoryNames,
-    categoryOptions,
     handleUpdateCategory,
     selectedStandardCategory,
+    setSelectedStandardCategory,
     productIndex,
     expandedGroups,
-    // Mutations don't change identity usually, but good to include if they do
+    setExpandedGroups,
     updateCategoryOverride,
     removeCategoryOverride,
     deleteMapping
@@ -1529,7 +1566,8 @@ export const ProductMerge = React.memo(() => {
                 const isEditing = idx in editingSuggestion;
                 const currentName = editingSuggestion[idx] ?? suggestion.suggestedName;
                 const existingMergeGroup = addToExisting[idx];
-                const { commonCategory, uniqueCategories } = getProductCategories(suggestion.products, receipts);
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const { commonCategory, uniqueCategories } = getProductCategories(suggestion.products, receipts as any);
                 const hasMixedCategories = uniqueCategories.length > 1;
                 const selectedCategory = selectedSuggestionCategory[idx];
 
@@ -1727,14 +1765,18 @@ export const ProductMerge = React.memo(() => {
                   rowCount={filteredUnmappedProducts.length}
                   rowHeight={48}
                   rowProps={{
-                    products: filteredUnmappedProducts,
-                    selectedProducts,
-                    handleProductToggle,
-                    handleAddToExistingGroup,
-                    groupNames,
-                    isPending: createMapping.isPending
-                  }}
-                  rowComponent={ProductRow}
+                    data: {
+                      products: filteredUnmappedProducts,
+                      selectedProducts,
+                      handleProductToggle,
+                      handleAddToExistingGroup,
+                      groupNames,
+                      isPending: createMapping.isPending
+                    }
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  } as any}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  rowComponent={ProductRow as any}
                 />
               )}
             </div>
@@ -1859,8 +1901,10 @@ export const ProductMerge = React.memo(() => {
                   defaultHeight={600}
                   rowCount={activeMergeList.length}
                   rowHeight={200}
-                  rowProps={itemData}
-                  rowComponent={ActiveMergeRow}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  rowProps={{ data: itemData } as any}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  rowComponent={ActiveMergeRow as any}
                 />
               </div>
             </CardContent>

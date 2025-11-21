@@ -18,7 +18,7 @@ type Product = {
 
 type ProductGroup = {
   name: string;
-  products: any[];
+  products: unknown[];
   categories: Set<string>;
   types: Set<string>;
 };
@@ -77,7 +77,7 @@ export function UngroupedProductsList({
   // Intersection Observer for infinite scroll
   useEffect(() => {
     if (!loadMoreRef.current) return;
-    
+
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && visibleCount < products.length) {
@@ -99,7 +99,7 @@ export function UngroupedProductsList({
   // Filter products by selected letter
   const filteredProducts = useMemo(() => {
     if (activeFilter === 'Alla') return products;
-    
+
     return products.filter(product => {
       const firstChar = product.original_name[0]?.toUpperCase();
       if (activeFilter === '#') {
@@ -201,8 +201,8 @@ export function UngroupedProductsList({
                     disabled={letterCounts[letter] === 0}
                     className={`
                       px-2 py-1 text-xs font-medium rounded transition-colors min-w-[32px]
-                      ${activeFilter === letter 
-                        ? 'bg-primary text-primary-foreground' 
+                      ${activeFilter === letter
+                        ? 'bg-primary text-primary-foreground'
                         : letterCounts[letter] > 0
                           ? 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
                           : 'bg-muted text-muted-foreground/50 cursor-not-allowed'
@@ -249,58 +249,58 @@ export function UngroupedProductsList({
               ) : (
                 /* Product List */
                 <div className="space-y-2 max-h-[600px] overflow-y-auto">
-                {visibleProducts.map((product) => (
-                  <div
-                    key={product.id}
-                    className="flex items-start gap-3 p-3 rounded-lg border bg-card hover:bg-accent/5 transition-colors"
-                  >
-                    <Checkbox
-                      checked={selectedProducts.includes(product.id)}
-                      onCheckedChange={(checked) => handleSelectProduct(product.id, checked as boolean)}
-                      className="mt-1"
-                    />
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm truncate">
-                            {product.original_name}
-                          </p>
-                          {product.category && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {product.category}
-                            </p>
-                          )}
-                        </div>
-                        <Badge variant={product.type === 'global' ? 'default' : 'outline'} className="shrink-0">
-                          {product.type === 'global' ? (
-                            <><Globe className="h-3 w-3 mr-1" /> Global</>
-                          ) : (
-                            <><User className="h-3 w-3 mr-1" /> User</>
-                          )}
-                        </Badge>
-                      </div>
-
-                      <AssignToGroupDropdown
-                        product={product}
-                        existingGroups={existingGroups}
-                        onAssigned={onRefresh}
-                        onCreateNew={() => {
-                          setSelectedProducts([product.id]);
-                          setCreateDialogOpen(true);
-                        }}
+                  {visibleProducts.map((product) => (
+                    <div
+                      key={product.id}
+                      className="flex items-start gap-3 p-3 rounded-lg border bg-card hover:bg-accent/5 transition-colors"
+                    >
+                      <Checkbox
+                        checked={selectedProducts.includes(product.id)}
+                        onCheckedChange={(checked) => handleSelectProduct(product.id, checked as boolean)}
+                        className="mt-1"
                       />
-                    </div>
-                  </div>
-                ))}
 
-                {/* Load more trigger */}
-                {hasMore && (
-                  <div ref={loadMoreRef} className="text-center py-4 text-sm text-muted-foreground">
-                    Laddar fler produkter...
-                  </div>
-                )}
-              </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm truncate">
+                              {product.original_name}
+                            </p>
+                            {product.category && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {product.category}
+                              </p>
+                            )}
+                          </div>
+                          <Badge variant={product.type === 'global' ? 'default' : 'outline'} className="shrink-0">
+                            {product.type === 'global' ? (
+                              <><Globe className="h-3 w-3 mr-1" /> Global</>
+                            ) : (
+                              <><User className="h-3 w-3 mr-1" /> User</>
+                            )}
+                          </Badge>
+                        </div>
+
+                        <AssignToGroupDropdown
+                          product={product}
+                          existingGroups={existingGroups}
+                          onAssigned={onRefresh}
+                          onCreateNew={() => {
+                            setSelectedProducts([product.id]);
+                            setCreateDialogOpen(true);
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Load more trigger */}
+                  {hasMore && (
+                    <div ref={loadMoreRef} className="text-center py-4 text-sm text-muted-foreground">
+                      Laddar fler produkter...
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}

@@ -9,6 +9,7 @@ import { UngroupedProductsList } from "@/components/product-management/Ungrouped
 import { ProductGroupsList } from "@/components/product-management/ProductGroupsList";
 import { ProductSearchFilter } from "@/components/product-management/ProductSearchFilter";
 import { AutoGrouping } from "@/components/product-management/AutoGrouping";
+import { ReceiptItem } from "@/types/receipt";
 
 export default function ProductManagement() {
   const navigate = useNavigate();
@@ -82,7 +83,7 @@ export default function ProductManagement() {
     const uniqueNames = new Set<string>();
     console.log('[ProductManagement] Processing receipts:', receipts.length);
     receipts.forEach((receipt, idx) => {
-      const items = (receipt.items as any[]) || [];
+      const items = (receipt.items as unknown as ReceiptItem[]) || [];
       console.log(`[ProductManagement] Receipt ${idx + 1}/${receipts.length}: ${items.length} items from ${receipt.store_name || 'unknown store'}`);
       items.forEach(item => {
         if (item.name) uniqueNames.add(item.name);

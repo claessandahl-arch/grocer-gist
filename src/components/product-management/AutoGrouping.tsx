@@ -11,6 +11,7 @@ import { Sparkles, Check, X, RefreshCw, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { categoryOptions, categoryNames } from "@/lib/categoryConstants";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ReceiptItem } from "@/types/receipt";
 
 type ProductCandidate = {
     original_name: string;
@@ -63,7 +64,7 @@ export function AutoGrouping() {
 
             const occurrenceMap = new Map<string, number>();
             receiptItems?.forEach(receipt => {
-                const items = (receipt.items as any[]) || [];
+                const items = (receipt.items as unknown as ReceiptItem[]) || [];
                 items.forEach(item => {
                     if (item.name) {
                         occurrenceMap.set(item.name, (occurrenceMap.get(item.name) || 0) + 1);
@@ -120,8 +121,8 @@ export function AutoGrouping() {
                 toast.success(`${usefulSuggestions.length} förslag genererade!`);
             }
 
-        } catch (error: any) {
-            toast.error(`Kunde inte generera förslag: ${error.message}`);
+        } catch (error) {
+            toast.error(`Kunde inte generera förslag: ${(error as Error).message}`);
         } finally {
             setIsGenerating(false);
         }

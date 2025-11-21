@@ -26,6 +26,8 @@ import {
 import { categories, categoryNames } from "@/lib/categoryConstants";
 import type { ReceiptItem, ParsedReceiptData } from "@/types/receipt";
 import { logger } from "@/lib/logger";
+import { Json } from "@/integrations/supabase/types";
+import { Database } from "@/integrations/supabase/types";
 
 interface Receipt {
   id: string;
@@ -47,11 +49,6 @@ export default function Training() {
   const [monthToDelete, setMonthToDelete] = useState<{ key: string; receipts: Receipt[] } | null>(null);
   const [isDeletingMonth, setIsDeletingMonth] = useState(false);
 
-  useEffect(() => {
-    checkAuth();
-    fetchReceipts();
-  }, []);
-
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
@@ -62,7 +59,7 @@ export default function Training() {
   const fetchReceipts = async () => {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) return;
 
     const { data, error } = await supabase
@@ -82,6 +79,12 @@ export default function Training() {
     }
     setLoading(false);
   };
+
+  useEffect(() => {
+    checkAuth();
+    fetchReceipts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSelectReceipt = (receipt: Receipt) => {
     setSelectedReceipt(receipt);
@@ -117,12 +120,12 @@ export default function Training() {
 
   const saveCorrection = async () => {
     if (!selectedReceipt || !editedData) return;
-    
+
     logger.debug('Saving correction with data:', editedData);
 
     setSaving(true);
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       toast.error('You must be logged in');
       setSaving(false);
@@ -140,8 +143,8 @@ export default function Training() {
           total_amount: selectedReceipt.total_amount,
           receipt_date: selectedReceipt.receipt_date,
           items: selectedReceipt.items
-        } as any,
-        corrected_data: editedData as any,
+        } as unknown as Json,
+        corrected_data: editedData as unknown as Json,
         correction_notes: correctionNotes
       });
 
@@ -159,7 +162,7 @@ export default function Training() {
         store_name: editedData.store_name,
         total_amount: editedData.total_amount,
         receipt_date: editedData.receipt_date,
-        items: editedData.items as any
+        items: editedData.items as unknown as Json
       })
       .eq('id', selectedReceipt.id);
 
@@ -205,8 +208,8 @@ export default function Training() {
         existingMappings?.map(m => [m.original_name.toLowerCase(), m]) || []
       );
 
-      const mappingsToInsert: any[] = [];
-      const mappingsToUpdate: any[] = [];
+      const mappingsToInsert: Database['public']['Tables']['product_mappings']['Insert'][] = [];
+      const mappingsToUpdate: { id: string; category: string }[] = [];
 
       // Process each item
       items.forEach((item: ReceiptItem) => {
@@ -330,24 +333,24 @@ export default function Training() {
 
   const groupReceiptsByMonth = (receipts: Receipt[]) => {
     const grouped: Record<string, Receipt[]> = {};
-    
+
     receipts.forEach(receipt => {
       const date = new Date(receipt.receipt_date);
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      
+
       if (!grouped[monthKey]) {
         grouped[monthKey] = [];
       }
       grouped[monthKey].push(receipt);
     });
-    
+
     // Sort receipts within each month
     Object.keys(grouped).forEach(key => {
-      grouped[key].sort((a, b) => 
+      grouped[key].sort((a, b) =>
         new Date(b.receipt_date).getTime() - new Date(a.receipt_date).getTime()
       );
     });
-    
+
     return grouped;
   };
 
@@ -363,7 +366,7 @@ export default function Training() {
 
   const deleteReceipt = async (receipt: Receipt) => {
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       toast.error('Du måste vara inloggad');
       return;
@@ -401,7 +404,7 @@ export default function Training() {
   const deleteAllReceiptsForMonth = async (receipts: Receipt[]) => {
     setIsDeletingMonth(true);
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       toast.error('Du måste vara inloggad');
       setIsDeletingMonth(false);
@@ -451,7 +454,7 @@ export default function Training() {
       setSelectedReceipt(null);
       setEditedData(null);
     }
-    
+
     setMonthToDelete(null);
     setIsDeletingMonth(false);
   };
@@ -481,268 +484,268 @@ export default function Training() {
           <TabsContent value="receipts" className="space-y-0">
             <div className="grid md:grid-cols-3 gap-6">
               {/* Receipt List */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Your Receipts</CardTitle>
-              <CardDescription>Select a receipt to review and correct</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {loading ? (
-                <p className="text-sm text-muted-foreground">Loading...</p>
-              ) : receipts.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No receipts found</p>
-              ) : (
-                <Accordion type="multiple" defaultValue={[sortedMonthKeys[0]]} className="w-full">
-                  {sortedMonthKeys.map((monthKey) => {
-                    const monthReceipts = groupedReceipts[monthKey];
-                    const monthTotal = calculateMonthTotal(monthReceipts);
-                    
-                    return (
-                      <AccordionItem key={monthKey} value={monthKey}>
-                        <AccordionTrigger className="hover:no-underline">
-                          <div className="flex justify-between items-center w-full pr-4">
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold capitalize">
-                                {formatMonthYear(monthKey)}
-                              </span>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setMonthToDelete({ key: monthKey, receipts: monthReceipts });
-                                }}
-                                className="text-destructive hover:text-destructive hover:bg-destructive/10 h-7 px-2"
-                              >
-                                <Trash2 className="h-4 w-4 mr-1" />
-                                Ta bort alla
-                              </Button>
-                            </div>
-                            <span className="text-sm text-muted-foreground">
-                              {monthReceipts.length} kvitton • {monthTotal.toFixed(2)} kr
-                            </span>
-                          </div>
-                        </AccordionTrigger>
-                        <AccordionContent>
-                          <div className="space-y-2 pt-2">
-                            {monthReceipts.map((receipt) => (
-                              <div key={receipt.id} className="flex gap-2">
-                                <Button
-                                  variant={selectedReceipt?.id === receipt.id ? "default" : "outline"}
-                                  className="flex-1 justify-start"
-                                  onClick={() => handleSelectReceipt(receipt)}
-                                >
-                                  <div className="text-left w-full">
-                                    <div className="font-semibold">{receipt.store_name || 'Unknown Store'}</div>
-                                    <div className="text-xs opacity-70 flex justify-between">
-                                      <span>{receipt.receipt_date || 'No date'}</span>
-                                      <span>{receipt.total_amount?.toFixed(2)} kr</span>
-                                    </div>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Your Receipts</CardTitle>
+                  <CardDescription>Select a receipt to review and correct</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {loading ? (
+                    <p className="text-sm text-muted-foreground">Loading...</p>
+                  ) : receipts.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No receipts found</p>
+                  ) : (
+                    <Accordion type="multiple" defaultValue={[sortedMonthKeys[0]]} className="w-full">
+                      {sortedMonthKeys.map((monthKey) => {
+                        const monthReceipts = groupedReceipts[monthKey];
+                        const monthTotal = calculateMonthTotal(monthReceipts);
+
+                        return (
+                          <AccordionItem key={monthKey} value={monthKey}>
+                            <AccordionTrigger className="hover:no-underline">
+                              <div className="flex justify-between items-center w-full pr-4">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold capitalize">
+                                    {formatMonthYear(monthKey)}
+                                  </span>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setMonthToDelete({ key: monthKey, receipts: monthReceipts });
+                                    }}
+                                    className="text-destructive hover:text-destructive hover:bg-destructive/10 h-7 px-2"
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-1" />
+                                    Ta bort alla
+                                  </Button>
+                                </div>
+                                <span className="text-sm text-muted-foreground">
+                                  {monthReceipts.length} kvitton • {monthTotal.toFixed(2)} kr
+                                </span>
+                              </div>
+                            </AccordionTrigger>
+                            <AccordionContent>
+                              <div className="space-y-2 pt-2">
+                                {monthReceipts.map((receipt) => (
+                                  <div key={receipt.id} className="flex gap-2">
+                                    <Button
+                                      variant={selectedReceipt?.id === receipt.id ? "default" : "outline"}
+                                      className="flex-1 justify-start"
+                                      onClick={() => handleSelectReceipt(receipt)}
+                                    >
+                                      <div className="text-left w-full">
+                                        <div className="font-semibold">{receipt.store_name || 'Unknown Store'}</div>
+                                        <div className="text-xs opacity-70 flex justify-between">
+                                          <span>{receipt.receipt_date || 'No date'}</span>
+                                          <span>{receipt.total_amount?.toFixed(2)} kr</span>
+                                        </div>
+                                      </div>
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => deleteReceipt(receipt)}
+                                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
                                   </div>
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => deleteReceipt(receipt)}
-                                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
+                                ))}
                               </div>
-                            ))}
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
-                    );
-                  })}
-                </Accordion>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Editing Panel */}
-          <Card className="md:col-span-2">
-            <CardHeader>
-              <CardTitle>Review & Correct</CardTitle>
-              <CardDescription>
-                Fix any parsing errors to improve future accuracy
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {!selectedReceipt ? (
-                <p className="text-muted-foreground">Select a receipt to start reviewing</p>
-              ) : (
-                <div className="space-y-6">
-                  {/* Total Savings */}
-                  {editedData?.items && editedData.items.length > 0 && (
-                    <Card className="bg-primary/5 border-primary/20">
-                      <CardContent className="pt-6">
-                        <div className="flex justify-between items-center">
-                          <span className="text-lg font-semibold">Totala besparingar:</span>
-                          <span className="text-2xl font-bold text-primary">
-                            {editedData.items
-                              .reduce((sum: number, item: ReceiptItem) => sum + (item.discount || 0), 0)
-                              .toFixed(2)} kr
-                          </span>
-                        </div>
-                      </CardContent>
-                    </Card>
+                            </AccordionContent>
+                          </AccordionItem>
+                        );
+                      })}
+                    </Accordion>
                   )}
+                </CardContent>
+              </Card>
 
-                  {/* Receipt Image */}
-                  <div>
-                    <Label>Receipt Image</Label>
-                    <a 
-                      href={selectedReceipt.image_url} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="block mt-2 cursor-pointer hover:opacity-80 transition-opacity"
-                    >
-                      <img 
-                        src={selectedReceipt.image_url} 
-                        alt="Receipt" 
-                        className="w-full max-h-64 object-contain border rounded-lg"
-                      />
-                      <p className="text-xs text-muted-foreground mt-1 text-center">Klicka för att öppna i nytt fönster</p>
-                    </a>
-                  </div>
-
-                  {/* Store Info */}
-                  <div className="grid md:grid-cols-3 gap-4">
-                    <div>
-                      <Label>Store Name</Label>
-                      <Input
-                        value={editedData?.store_name || ''}
-                        onChange={(e) => setEditedData({ ...editedData, store_name: e.target.value })}
-                      />
-                    </div>
-                    <div>
-                      <Label>Total Amount</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={editedData?.total_amount || 0}
-                        onChange={(e) => setEditedData({ ...editedData, total_amount: parseFloat(e.target.value) })}
-                      />
-                    </div>
-                    <div>
-                      <Label>Date</Label>
-                      <Input
-                        type="date"
-                        value={editedData?.receipt_date || ''}
-                        onChange={(e) => setEditedData({ ...editedData, receipt_date: e.target.value })}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Items */}
-                  <div>
-                    <div className="flex justify-between items-center mb-4">
-                      <Label>Items</Label>
-                      <Button size="sm" onClick={addItem}>Add Item</Button>
-                    </div>
-                    
-                    <div className="space-y-4 max-h-96 overflow-y-auto">
-                      {editedData?.items?.map((item: ReceiptItem, index: number) => (
-                        <Card key={index} className="p-4">
-                          <div className="space-y-3">
-                            <div>
-                              <Label htmlFor={`item-name-${index}`}>Produktnamn</Label>
-                              <Input
-                                id={`item-name-${index}`}
-                                placeholder="Produktnamn"
-                                value={item.name}
-                                onChange={(e) => updateItem(index, 'name', e.target.value)}
-                              />
+              {/* Editing Panel */}
+              <Card className="md:col-span-2">
+                <CardHeader>
+                  <CardTitle>Review & Correct</CardTitle>
+                  <CardDescription>
+                    Fix any parsing errors to improve future accuracy
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {!selectedReceipt ? (
+                    <p className="text-muted-foreground">Select a receipt to start reviewing</p>
+                  ) : (
+                    <div className="space-y-6">
+                      {/* Total Savings */}
+                      {editedData?.items && editedData.items.length > 0 && (
+                        <Card className="bg-primary/5 border-primary/20">
+                          <CardContent className="pt-6">
+                            <div className="flex justify-between items-center">
+                              <span className="text-lg font-semibold">Totala besparingar:</span>
+                              <span className="text-2xl font-bold text-primary">
+                                {editedData.items
+                                  .reduce((sum: number, item: ReceiptItem) => sum + (item.discount || 0), 0)
+                                  .toFixed(2)} kr
+                              </span>
                             </div>
-                            <div className="grid grid-cols-3 gap-2">
-                              <div>
-                                <Label htmlFor={`item-price-${index}`}>Pris (kr)</Label>
-                                <Input
-                                  id={`item-price-${index}`}
-                                  type="number"
-                                  step="0.01"
-                                  placeholder="Pris"
-                                  value={item.price}
-                                  onChange={(e) => updateItem(index, 'price', parseFloat(e.target.value))}
-                                />
-                              </div>
-                              <div>
-                                <Label htmlFor={`item-quantity-${index}`}>Antal</Label>
-                                <Input
-                                  id={`item-quantity-${index}`}
-                                  type="number"
-                                  placeholder="Antal"
-                                  value={item.quantity}
-                                  onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value))}
-                                />
-                              </div>
-                              <div>
-                                <Label htmlFor={`item-discount-${index}`}>Rabatt (kr)</Label>
-                                <Input
-                                  id={`item-discount-${index}`}
-                                  type="number"
-                                  step="0.01"
-                                  placeholder="0"
-                                  value={item.discount || 0}
-                                  onChange={(e) => updateItem(index, 'discount', parseFloat(e.target.value) || 0)}
-                                />
-                              </div>
-                            </div>
-                            <div>
-                              <Label htmlFor={`item-category-${index}`}>Kategori</Label>
-                              <Select
-                                value={item.category}
-                                onValueChange={(value) => updateItem(index, 'category', value)}
-                              >
-                                <SelectTrigger id={`item-category-${index}`}>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {categories.map((cat) => (
-                                    <SelectItem key={cat} value={cat}>{categoryNames[cat]}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => removeItem(index)}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Ta bort
-                            </Button>
-                          </div>
+                          </CardContent>
                         </Card>
-                      ))}
+                      )}
+
+                      {/* Receipt Image */}
+                      <div>
+                        <Label>Receipt Image</Label>
+                        <a
+                          href={selectedReceipt.image_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block mt-2 cursor-pointer hover:opacity-80 transition-opacity"
+                        >
+                          <img
+                            src={selectedReceipt.image_url}
+                            alt="Receipt"
+                            className="w-full max-h-64 object-contain border rounded-lg"
+                          />
+                          <p className="text-xs text-muted-foreground mt-1 text-center">Klicka för att öppna i nytt fönster</p>
+                        </a>
+                      </div>
+
+                      {/* Store Info */}
+                      <div className="grid md:grid-cols-3 gap-4">
+                        <div>
+                          <Label>Store Name</Label>
+                          <Input
+                            value={editedData?.store_name || ''}
+                            onChange={(e) => setEditedData({ ...editedData, store_name: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <Label>Total Amount</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={editedData?.total_amount || 0}
+                            onChange={(e) => setEditedData({ ...editedData, total_amount: parseFloat(e.target.value) })}
+                          />
+                        </div>
+                        <div>
+                          <Label>Date</Label>
+                          <Input
+                            type="date"
+                            value={editedData?.receipt_date || ''}
+                            onChange={(e) => setEditedData({ ...editedData, receipt_date: e.target.value })}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Items */}
+                      <div>
+                        <div className="flex justify-between items-center mb-4">
+                          <Label>Items</Label>
+                          <Button size="sm" onClick={addItem}>Add Item</Button>
+                        </div>
+
+                        <div className="space-y-4 max-h-96 overflow-y-auto">
+                          {editedData?.items?.map((item: ReceiptItem, index: number) => (
+                            <Card key={index} className="p-4">
+                              <div className="space-y-3">
+                                <div>
+                                  <Label htmlFor={`item-name-${index}`}>Produktnamn</Label>
+                                  <Input
+                                    id={`item-name-${index}`}
+                                    placeholder="Produktnamn"
+                                    value={item.name}
+                                    onChange={(e) => updateItem(index, 'name', e.target.value)}
+                                  />
+                                </div>
+                                <div className="grid grid-cols-3 gap-2">
+                                  <div>
+                                    <Label htmlFor={`item-price-${index}`}>Pris (kr)</Label>
+                                    <Input
+                                      id={`item-price-${index}`}
+                                      type="number"
+                                      step="0.01"
+                                      placeholder="Pris"
+                                      value={item.price}
+                                      onChange={(e) => updateItem(index, 'price', parseFloat(e.target.value))}
+                                    />
+                                  </div>
+                                  <div>
+                                    <Label htmlFor={`item-quantity-${index}`}>Antal</Label>
+                                    <Input
+                                      id={`item-quantity-${index}`}
+                                      type="number"
+                                      placeholder="Antal"
+                                      value={item.quantity}
+                                      onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value))}
+                                    />
+                                  </div>
+                                  <div>
+                                    <Label htmlFor={`item-discount-${index}`}>Rabatt (kr)</Label>
+                                    <Input
+                                      id={`item-discount-${index}`}
+                                      type="number"
+                                      step="0.01"
+                                      placeholder="0"
+                                      value={item.discount || 0}
+                                      onChange={(e) => updateItem(index, 'discount', parseFloat(e.target.value) || 0)}
+                                    />
+                                  </div>
+                                </div>
+                                <div>
+                                  <Label htmlFor={`item-category-${index}`}>Kategori</Label>
+                                  <Select
+                                    value={item.category}
+                                    onValueChange={(value) => updateItem(index, 'category', value)}
+                                  >
+                                    <SelectTrigger id={`item-category-${index}`}>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {categories.map((cat) => (
+                                        <SelectItem key={cat} value={cat}>{categoryNames[cat]}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => removeItem(index)}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Ta bort
+                                </Button>
+                              </div>
+                            </Card>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Notes */}
+                      <div>
+                        <Label>Correction Notes (Optional)</Label>
+                        <Textarea
+                          placeholder="Add notes about what was wrong or tips for this store..."
+                          value={correctionNotes}
+                          onChange={(e) => setCorrectionNotes(e.target.value)}
+                        />
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex gap-2">
+                        <Button onClick={saveCorrection} disabled={saving} className="flex-1">
+                          {saving ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                          Save Correction
+                        </Button>
+                        <Button variant="outline" onClick={() => setSelectedReceipt(null)}>
+                          Cancel
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-
-                  {/* Notes */}
-                  <div>
-                    <Label>Correction Notes (Optional)</Label>
-                    <Textarea
-                      placeholder="Add notes about what was wrong or tips for this store..."
-                      value={correctionNotes}
-                      onChange={(e) => setCorrectionNotes(e.target.value)}
-                    />
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex gap-2">
-                    <Button onClick={saveCorrection} disabled={saving} className="flex-1">
-                      {saving ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                      Save Correction
-                    </Button>
-                    <Button variant="outline" onClick={() => setSelectedReceipt(null)}>
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                  )}
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
 
