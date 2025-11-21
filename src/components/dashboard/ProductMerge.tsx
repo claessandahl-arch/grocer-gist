@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useTransition, useDeferredValue } from "react";
-import { FixedSizeList } from "react-window";
+import { List } from "react-window";
 import { ProductListItem } from "./ProductListItem";
 import { logger } from "@/lib/logger";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -122,26 +122,24 @@ type SuggestedMerge = {
 const ProductRow = React.memo<{
   index: number;
   style: React.CSSProperties;
-  data: {
-    products: string[];
-    selectedProducts: string[];
-    handleProductToggle: (product: string) => void;
-    handleAddToExistingGroup: (product: string, mappedName: string) => void;
-    groupNames: string[] | undefined;
-    isPending: boolean;
-  };
-}>(({ index, style, data }) => {
-  const product = data.products[index];
+  products: string[];
+  selectedProducts: string[];
+  handleProductToggle: (product: string) => void;
+  handleAddToExistingGroup: (product: string, mappedName: string) => void;
+  groupNames: string[] | undefined;
+  isPending: boolean;
+}>(({ index, style, products, selectedProducts, handleProductToggle, handleAddToExistingGroup, groupNames, isPending }) => {
+  const product = products[index];
 
   return (
     <div style={style} className="px-4 py-1">
       <ProductListItem
         product={product}
-        isSelected={data.selectedProducts.includes(product)}
-        onToggle={data.handleProductToggle}
-        onAddToGroup={data.handleAddToExistingGroup}
-        groupNames={data.groupNames}
-        isPending={data.isPending}
+        isSelected={selectedProducts.includes(product)}
+        onToggle={handleProductToggle}
+        onAddToGroup={handleAddToExistingGroup}
+        groupNames={groupNames}
+        isPending={isPending}
       />
     </div>
   );
@@ -152,41 +150,47 @@ ProductRow.displayName = "ProductRow";
 const ActiveMergeRow = React.memo<{
   index: number;
   style: React.CSSProperties;
-  data: {
-    items: [string, any[]][];
-    selectedGroups: string[];
-    handleGroupToggle: (groupName: string) => void;
-    editingMergeGroup: Record<string, string>;
-    setEditingMergeGroup: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-    handleRenameMergeGroup: (oldName: string, newName: string) => void;
-    groupStats: Record<string, any>;
-    categoryNames: Record<string, string>;
-    categoryOptions: { value: string; label: string }[];
-    handleUpdateCategory: (mappedName: string, newCategory: string) => void;
-    selectedStandardCategory: Record<string, string>;
-    setSelectedStandardCategory: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-    productIndex: Map<string, any>;
-    expandedGroups: Record<string, boolean>;
-    setExpandedGroups: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
-    updateCategoryOverride: any;
-    removeCategoryOverride: any;
-    deleteMapping: any;
-  };
-}>(({ index, style, data }) => {
-  const [mappedName, items] = data.items[index];
-  const {
-    selectedGroups,
-    handleGroupToggle,
-    editingMergeGroup,
-    setEditingMergeGroup,
-    handleRenameMergeGroup,
-    groupStats,
-    categoryNames,
-    categoryOptions,
-    handleUpdateCategory,
-    selectedStandardCategory,
-    setSelectedStandardCategory
-  } = data;
+  items: [string, any[]][];
+  selectedGroups: string[];
+  handleGroupToggle: (groupName: string) => void;
+  editingMergeGroup: Record<string, string>;
+  setEditingMergeGroup: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  handleRenameMergeGroup: (oldName: string, newName: string) => void;
+  groupStats: Record<string, any>;
+  categoryNames: Record<string, string>;
+  categoryOptions: { value: string; label: string }[];
+  handleUpdateCategory: (mappedName: string, newCategory: string) => void;
+  selectedStandardCategory: Record<string, string>;
+  setSelectedStandardCategory: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  productIndex: Map<string, any>;
+  expandedGroups: Record<string, boolean>;
+  setExpandedGroups: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  updateCategoryOverride: any;
+  removeCategoryOverride: any;
+  deleteMapping: any;
+}>(({
+  index,
+  style,
+  items,
+  selectedGroups,
+  handleGroupToggle,
+  editingMergeGroup,
+  setEditingMergeGroup,
+  handleRenameMergeGroup,
+  groupStats,
+  categoryNames,
+  categoryOptions,
+  handleUpdateCategory,
+  selectedStandardCategory,
+  setSelectedStandardCategory,
+  productIndex,
+  expandedGroups,
+  setExpandedGroups,
+  updateCategoryOverride,
+  removeCategoryOverride,
+  deleteMapping
+}) => {
+  const [mappedName, itemsList] = items[index];
 
   // Use pre-calculated stats including category info
   const stats = groupStats[mappedName] || {
@@ -197,8 +201,8 @@ const ActiveMergeRow = React.memo<{
     hasMixedCategories: false
   };
   const isEditingThis = mappedName in editingMergeGroup;
-  const hasUserMappings = items.some((item: any) => !item.isGlobal);
-  const savedCategory = items[0]?.category;
+  const hasUserMappings = itemsList.some((item: any) => !item.isGlobal);
+  const savedCategory = itemsList[0]?.category;
 
   // Determine category status using pre-calculated values
   const commonCategory = stats.commonCategory;
@@ -264,17 +268,17 @@ const ActiveMergeRow = React.memo<{
                   <div className="flex items-center gap-2 overflow-hidden">
                     <h4 className="font-medium text-base truncate" title={mappedName}>{mappedName}</h4>
                     {/* Group type badge */}
-                    {items.every((item: any) => item.isGlobal) && (
+                    {itemsList.every((item: any) => item.isGlobal) && (
                       <Badge variant="secondary" className="text-xs shrink-0">
                         Global
                       </Badge>
                     )}
-                    {items.every((item: any) => !item.isGlobal) && (
+                    {itemsList.every((item: any) => !item.isGlobal) && (
                       <Badge variant="outline" className="text-xs shrink-0">
                         Personlig
                       </Badge>
                     )}
-                    {items.some((item: any) => item.isGlobal) && items.some((item: any) => !item.isGlobal) && (
+                    {itemsList.some((item: any) => item.isGlobal) && itemsList.some((item: any) => !item.isGlobal) && (
                       <Badge variant="default" className="text-xs shrink-0">
                         Mixad
                       </Badge>
@@ -362,7 +366,7 @@ const ActiveMergeRow = React.memo<{
                   )}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  {items.length} varianter • {stats.productCount} köp • {stats.totalSpending.toFixed(2)} kr totalt
+                  {itemsList.length} varianter • {stats.productCount} köp • {stats.totalSpending.toFixed(2)} kr totalt
                 </div>
               </div>
             )}
@@ -370,17 +374,17 @@ const ActiveMergeRow = React.memo<{
         </div>
 
         <Collapsible
-          open={data.expandedGroups[mappedName] ?? false}
-          onOpenChange={(open) => data.setExpandedGroups(prev => ({ ...prev, [mappedName]: open }))}
+          open={expandedGroups[mappedName] ?? false}
+          onOpenChange={(open) => setExpandedGroups(prev => ({ ...prev, [mappedName]: open }))}
         >
           <CollapsibleTrigger asChild>
             <Button variant="ghost" size="sm" className="w-full justify-start gap-2 mt-2 h-8">
-              {data.expandedGroups[mappedName] ? (
+              {expandedGroups[mappedName] ? (
                 <ChevronDown className="h-4 w-4" />
               ) : (
                 <ChevronRight className="h-4 w-4" />
               )}
-              {data.expandedGroups[mappedName] ? 'Dölj' : 'Visa'} produkter
+              {expandedGroups[mappedName] ? 'Dölj' : 'Visa'} produkter
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent>
@@ -393,9 +397,9 @@ const ActiveMergeRow = React.memo<{
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {items.map((item: any) => {
+                {itemsList.map((item: any) => {
                   const savedCategory = item.category;
-                  const productData = data.productIndex.get(item.original_name);
+                  const productData = productIndex.get(item.original_name);
                   const receiptCategories = (productData?.categories as Set<string>) || new Set<string>();
                   const receiptCategoriesArray = Array.from(receiptCategories);
 
@@ -428,12 +432,12 @@ const ActiveMergeRow = React.memo<{
                             <Select
                               value={item.category || ""}
                               onValueChange={(newCategory) => {
-                                data.updateCategoryOverride.mutate({
+                                updateCategoryOverride.mutate({
                                   globalMappingId: item.id,
                                   category: newCategory
                                 });
                               }}
-                              disabled={data.updateCategoryOverride.isPending}
+                              disabled={updateCategoryOverride.isPending}
                             >
                               <SelectTrigger className="w-[200px] h-8">
                                 <SelectValue placeholder="Välj kategori" />
@@ -457,9 +461,9 @@ const ActiveMergeRow = React.memo<{
                                       variant="outline"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        data.removeCategoryOverride.mutate(item.overrideId!);
+                                        removeCategoryOverride.mutate(item.overrideId!);
                                       }}
-                                      disabled={data.removeCategoryOverride.isPending}
+                                      disabled={removeCategoryOverride.isPending}
                                       className="w-full"
                                     >
                                       Återställ
@@ -483,8 +487,8 @@ const ActiveMergeRow = React.memo<{
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => data.deleteMapping.mutate(item.id)}
-                          disabled={data.deleteMapping.isPending || item.isGlobal}
+                          onClick={() => deleteMapping.mutate(item.id)}
+                          disabled={deleteMapping.isPending || item.isGlobal}
                           title={item.isGlobal ? "Kan inte ta bort globala mappningar" : "Ta bort mappning"}
                         >
                           <Trash2 className={`h-4 w-4 ${item.isGlobal ? 'opacity-50' : ''}`} />
@@ -1718,12 +1722,11 @@ export const ProductMerge = React.memo(() => {
                   Inga produkter börjar med "{activeFilter}"
                 </p>
               ) : (
-                <FixedSizeList
-                  height={400}
-                  itemCount={filteredUnmappedProducts.length}
-                  itemSize={48}
-                  width="100%"
-                  itemData={{
+                <List
+                  defaultHeight={400}
+                  rowCount={filteredUnmappedProducts.length}
+                  rowHeight={48}
+                  rowProps={{
                     products: filteredUnmappedProducts,
                     selectedProducts,
                     handleProductToggle,
@@ -1731,7 +1734,7 @@ export const ProductMerge = React.memo(() => {
                     groupNames,
                     isPending: createMapping.isPending
                   }}
-                  children={ProductRow}
+                  rowComponent={ProductRow}
                 />
               )}
             </div>
@@ -1852,13 +1855,12 @@ export const ProductMerge = React.memo(() => {
               </div>
 
               <div className="space-y-4 h-[600px]">
-                <FixedSizeList
-                  height={600}
-                  itemCount={activeMergeList.length}
-                  itemSize={200}
-                  width="100%"
-                  itemData={itemData}
-                  children={ActiveMergeRow}
+                <List
+                  defaultHeight={600}
+                  rowCount={activeMergeList.length}
+                  rowHeight={200}
+                  rowProps={itemData}
+                  rowComponent={ActiveMergeRow}
                 />
               </div>
             </CardContent>
