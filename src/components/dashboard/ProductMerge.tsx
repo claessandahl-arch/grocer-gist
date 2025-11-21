@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useTransition, useDeferredValue } from "react";
-import { List } from "react-window";
+import { FixedSizeList } from "react-window";
 import { ProductListItem } from "./ProductListItem";
 import { logger } from "@/lib/logger";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,28 +23,28 @@ import { useDebouncedCallback } from "use-debounce";
 const calculateSimilarity = (str1: string, str2: string): number => {
   const s1 = str1.toLowerCase().trim();
   const s2 = str2.toLowerCase().trim();
-  
+
   // If strings are identical, return 1
   if (s1 === s2) return 1;
-  
+
   // Check if one string contains the other
   if (s1.includes(s2) || s2.includes(s1)) return 0.8;
-  
+
   // Simple token-based similarity
   const tokens1 = s1.split(/\s+/);
   const tokens2 = s2.split(/\s+/);
-  
+
   const commonTokens = tokens1.filter(t => tokens2.includes(t)).length;
   const totalTokens = Math.max(tokens1.length, tokens2.length);
-  
+
   if (commonTokens > 0) {
     return commonTokens / totalTokens;
   }
-  
+
   // Levenshtein distance for similar strings
   const maxLen = Math.max(s1.length, s2.length);
   if (maxLen === 0) return 1;
-  
+
   const distance = levenshteinDistance(s1, s2);
   return 1 - distance / maxLen;
 };
@@ -82,17 +82,17 @@ const levenshteinDistance = (str1: string, str2: string): number => {
 const SWEDISH_ALPHABET = ['Alla', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'Å', 'Ä', 'Ö', '#'];
 
 // Get categories for products from receipts
-const getProductCategories = (productNames: string[], receipts: any[] | undefined): { 
-  commonCategory: string | null; 
-  uniqueCategories: string[]; 
+const getProductCategories = (productNames: string[], receipts: any[] | undefined): {
+  commonCategory: string | null;
+  uniqueCategories: string[];
 } => {
   if (!receipts) return { commonCategory: null, uniqueCategories: [] };
-  
+
   const categories = new Set<string>();
-  
+
   receipts.forEach(receipt => {
     if (!receipt.items) return;
-    
+
     receipt.items.forEach((item: any) => {
       if (productNames.some(p => p.toLowerCase() === item.name?.toLowerCase())) {
         if (item.category) {
@@ -101,14 +101,14 @@ const getProductCategories = (productNames: string[], receipts: any[] | undefine
       }
     });
   });
-  
+
   const uniqueCategories = Array.from(categories);
-  
+
   // If all products have the same category, return it
   if (uniqueCategories.length === 1) {
     return { commonCategory: uniqueCategories[0], uniqueCategories };
   }
-  
+
   return { commonCategory: null, uniqueCategories };
 };
 
@@ -118,33 +118,391 @@ type SuggestedMerge = {
   suggestedName: string;
 };
 
-// Row component for virtual list (react-window v2 API)
+// Row component for unmapped products virtual list
 const ProductRow = React.memo<{
   index: number;
-  products: string[];
-  selectedProducts: string[];
-  handleProductToggle: (product: string) => void;
-  handleAddToExistingGroup: (product: string, mappedName: string) => void;
-  groupNames: string[] | undefined;
-  isPending: boolean;
-}>(({ index, products, selectedProducts, handleProductToggle, handleAddToExistingGroup, groupNames, isPending }) => {
-  const product = products[index];
+  style: React.CSSProperties;
+  data: {
+    products: string[];
+    selectedProducts: string[];
+    handleProductToggle: (product: string) => void;
+    handleAddToExistingGroup: (product: string, mappedName: string) => void;
+    groupNames: string[] | undefined;
+    isPending: boolean;
+  };
+}>(({ index, style, data }) => {
+  const product = data.products[index];
 
   return (
-    <div className="px-4 py-1">
+    <div style={style} className="px-4 py-1">
       <ProductListItem
         product={product}
-        isSelected={selectedProducts.includes(product)}
-        onToggle={handleProductToggle}
-        onAddToGroup={handleAddToExistingGroup}
-        groupNames={groupNames}
-        isPending={isPending}
+        isSelected={data.selectedProducts.includes(product)}
+        onToggle={data.handleProductToggle}
+        onAddToGroup={data.handleAddToExistingGroup}
+        groupNames={data.groupNames}
+        isPending={data.isPending}
       />
     </div>
   );
 });
-
 ProductRow.displayName = "ProductRow";
+
+// Row component for Active Merges virtual list
+const ActiveMergeRow = React.memo<{
+  index: number;
+  style: React.CSSProperties;
+  data: {
+    items: [string, any[]][];
+    selectedGroups: string[];
+    handleGroupToggle: (groupName: string) => void;
+    editingMergeGroup: Record<string, string>;
+    setEditingMergeGroup: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+    handleRenameMergeGroup: (oldName: string, newName: string) => void;
+    groupStats: Record<string, any>;
+    categoryNames: Record<string, string>;
+    categoryOptions: { value: string; label: string }[];
+    handleUpdateCategory: (mappedName: string, newCategory: string) => void;
+    selectedStandardCategory: Record<string, string>;
+    setSelectedStandardCategory: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+    productIndex: Map<string, any>;
+    expandedGroups: Record<string, boolean>;
+    setExpandedGroups: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+    updateCategoryOverride: any;
+    removeCategoryOverride: any;
+    deleteMapping: any;
+  };
+}>(({ index, style, data }) => {
+  const [mappedName, items] = data.items[index];
+  const {
+    selectedGroups,
+    handleGroupToggle,
+    editingMergeGroup,
+    setEditingMergeGroup,
+    handleRenameMergeGroup,
+    groupStats,
+    categoryNames,
+    categoryOptions,
+    handleUpdateCategory,
+    selectedStandardCategory,
+    setSelectedStandardCategory
+  } = data;
+
+  // Use pre-calculated stats including category info
+  const stats = groupStats[mappedName] || {
+    totalSpending: 0,
+    productCount: 0,
+    commonCategory: null,
+    uniqueCategories: [],
+    hasMixedCategories: false
+  };
+  const isEditingThis = mappedName in editingMergeGroup;
+  const hasUserMappings = items.some((item: any) => !item.isGlobal);
+  const savedCategory = items[0]?.category;
+
+  // Determine category status using pre-calculated values
+  const commonCategory = stats.commonCategory;
+  const uniqueCategories = stats.uniqueCategories;
+  const hasMixedCategories = stats.hasMixedCategories;
+  const categoryMatch = savedCategory === commonCategory;
+  const hasCommonCategory = commonCategory !== null;
+
+  return (
+    <div style={style} className="px-1 py-2">
+      <div className="border rounded-md p-4 h-full overflow-hidden flex flex-col">
+        <div className="flex items-start gap-3 mb-2">
+          <Checkbox
+            id={`group-${mappedName}`}
+            checked={selectedGroups.includes(mappedName)}
+            onCheckedChange={() => handleGroupToggle(mappedName)}
+          />
+          <div className="flex-1 min-w-0">
+            {isEditingThis ? (
+              <div className="flex items-center gap-2 mb-2">
+                <Input
+                  value={editingMergeGroup[mappedName]}
+                  onChange={(e) => setEditingMergeGroup(prev => ({ ...prev, [mappedName]: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleRenameMergeGroup(mappedName, editingMergeGroup[mappedName]);
+                    }
+                    if (e.key === 'Escape') {
+                      setEditingMergeGroup(prev => {
+                        const next = { ...prev };
+                        delete next[mappedName];
+                        return next;
+                      });
+                    }
+                  }}
+                  className="flex-1"
+                  placeholder="Nytt namn för gruppen"
+                  autoFocus
+                />
+                <Button
+                  size="sm"
+                  onClick={() => handleRenameMergeGroup(mappedName, editingMergeGroup[mappedName])}
+                  disabled={!editingMergeGroup[mappedName]?.trim()}
+                >
+                  Spara
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setEditingMergeGroup(prev => {
+                    const next = { ...prev };
+                    delete next[mappedName];
+                    return next;
+                  })}
+                >
+                  Avbryt
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 overflow-hidden">
+                    <h4 className="font-medium text-base truncate" title={mappedName}>{mappedName}</h4>
+                    {/* Group type badge */}
+                    {items.every((item: any) => item.isGlobal) && (
+                      <Badge variant="secondary" className="text-xs shrink-0">
+                        Global
+                      </Badge>
+                    )}
+                    {items.every((item: any) => !item.isGlobal) && (
+                      <Badge variant="outline" className="text-xs shrink-0">
+                        Personlig
+                      </Badge>
+                    )}
+                    {items.some((item: any) => item.isGlobal) && items.some((item: any) => !item.isGlobal) && (
+                      <Badge variant="default" className="text-xs shrink-0">
+                        Mixad
+                      </Badge>
+                    )}
+                  </div>
+                  {/* Edit button now shown for ALL groups */}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setEditingMergeGroup(prev => ({
+                      ...prev,
+                      [mappedName]: mappedName
+                    }))}
+                    className="h-7 text-xs shrink-0"
+                  >
+                    Byt namn
+                  </Button>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {savedCategory ? (
+                    <>
+                      <Badge variant={hasCommonCategory && categoryMatch ? "default" : "secondary"}
+                        className={hasCommonCategory && categoryMatch ? "bg-green-600" : ""}>
+                        {categoryNames[savedCategory] || savedCategory}
+                      </Badge>
+                      {hasCommonCategory && !categoryMatch && (
+                        <Badge variant="outline" className="text-orange-600 border-orange-600">
+                          Produkter i kvitton: {categoryNames[commonCategory] || commonCategory}
+                        </Badge>
+                      )}
+                      {hasMixedCategories && (
+                        <Badge variant="outline" className="text-orange-600 border-orange-600">
+                          Blandade kategorier: {uniqueCategories.map(cat => categoryNames[cat] || cat).join(', ')}
+                        </Badge>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {hasCommonCategory && (
+                        <Badge variant="outline" className="text-blue-600 border-blue-600">
+                          Förslag: {categoryNames[commonCategory] || commonCategory}
+                        </Badge>
+                      )}
+                      {hasMixedCategories && (
+                        <Badge variant="outline" className="text-orange-600 border-orange-600">
+                          Blandade kategorier: {uniqueCategories.map(cat => categoryNames[cat] || cat).join(', ')}
+                        </Badge>
+                      )}
+                    </>
+                  )}
+                  {/* Category standardization UI for mixed categories */}
+                  {hasMixedCategories && hasUserMappings && (
+                    <div className="w-full mt-2 p-3 border border-orange-200 rounded-md bg-orange-50">
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor={`std-category-${mappedName}`} className="text-sm font-medium whitespace-nowrap">
+                          Standardisera till:
+                        </Label>
+                        <Select
+                          value={selectedStandardCategory[mappedName] || ""}
+                          onValueChange={(value) => setSelectedStandardCategory(prev => ({
+                            ...prev,
+                            [mappedName]: value
+                          }))}
+                        >
+                          <SelectTrigger id={`std-category-${mappedName}`} className="w-[200px]">
+                            <SelectValue placeholder="Välj kategori" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {categoryOptions.map(opt => (
+                              <SelectItem key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          size="sm"
+                          onClick={() => handleUpdateCategory(mappedName, selectedStandardCategory[mappedName])}
+                          disabled={!selectedStandardCategory[mappedName]}
+                        >
+                          Uppdatera
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {items.length} varianter • {stats.productCount} köp • {stats.totalSpending.toFixed(2)} kr totalt
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <Collapsible
+          open={data.expandedGroups[mappedName] ?? false}
+          onOpenChange={(open) => data.setExpandedGroups(prev => ({ ...prev, [mappedName]: open }))}
+        >
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" size="sm" className="w-full justify-start gap-2 mt-2 h-8">
+              {data.expandedGroups[mappedName] ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+              {data.expandedGroups[mappedName] ? 'Dölj' : 'Visa'} produkter
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <Table className="mt-2">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Originalnamn</TableHead>
+                  <TableHead>Kategori</TableHead>
+                  <TableHead className="w-[100px]">Åtgärd</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.map((item: any) => {
+                  const savedCategory = item.category;
+                  const productData = data.productIndex.get(item.original_name);
+                  const receiptCategories = (productData?.categories as Set<string>) || new Set<string>();
+                  const receiptCategoriesArray = Array.from(receiptCategories);
+
+                  let displayCategories: string[] = [];
+                  if (savedCategory) {
+                    displayCategories = [savedCategory];
+                    receiptCategoriesArray.forEach(cat => {
+                      if (cat !== savedCategory && !displayCategories.includes(cat)) {
+                        displayCategories.push(cat);
+                      }
+                    });
+                  } else {
+                    displayCategories = receiptCategoriesArray;
+                  }
+
+                  const hasConflict = savedCategory && receiptCategories.size > 0 && !receiptCategories.has(savedCategory);
+                  const categoryMismatch = commonCategory && savedCategory && savedCategory !== commonCategory;
+
+                  return (
+                    <TableRow key={item.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          {item.original_name}
+                          {item.isGlobal && <Badge variant="outline" className="text-xs">Global</Badge>}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {item.isGlobal ? (
+                          <div className="flex items-center gap-2">
+                            <Select
+                              value={item.category || ""}
+                              onValueChange={(newCategory) => {
+                                data.updateCategoryOverride.mutate({
+                                  globalMappingId: item.id,
+                                  category: newCategory
+                                });
+                              }}
+                              disabled={data.updateCategoryOverride.isPending}
+                            >
+                              <SelectTrigger className="w-[200px] h-8">
+                                <SelectValue placeholder="Välj kategori" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {categoryOptions.map(opt => (
+                                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {item.hasLocalOverride && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Info className="h-4 w-4 text-blue-500 cursor-help flex-shrink-0" />
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-xs">
+                                    <p className="text-sm mb-2">Du har anpassat kategorin lokalt.</p>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        data.removeCategoryOverride.mutate(item.overrideId!);
+                                      }}
+                                      disabled={data.removeCategoryOverride.isPending}
+                                      className="w-full"
+                                    >
+                                      Återställ
+                                    </Button>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            <span className={categoryMismatch ? "text-orange-600" : ""}>
+                              {displayCategories.length > 0 ? displayCategories.map(cat => categoryNames[cat] || cat).join(', ') : "Okategoriserad"}
+                            </span>
+                            {hasConflict && <span title="Kategorikonflikt" className="cursor-help text-blue-600">ℹ️</span>}
+                            {categoryMismatch && <span title="Avviker från grupp" className="cursor-help">⚠️</span>}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => data.deleteMapping.mutate(item.id)}
+                          disabled={data.deleteMapping.isPending || item.isGlobal}
+                          title={item.isGlobal ? "Kan inte ta bort globala mappningar" : "Ta bort mappning"}
+                        >
+                          <Trash2 className={`h-4 w-4 ${item.isGlobal ? 'opacity-50' : ''}`} />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CollapsibleContent>
+        </Collapsible>
+      </div>
+    </div>
+  );
+});
+
+ActiveMergeRow.displayName = "ActiveMergeRow";
 
 export const ProductMerge = React.memo(() => {
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
@@ -164,9 +522,13 @@ export const ProductMerge = React.memo(() => {
   const [receiptLimit, setReceiptLimit] = useState(100); // Pagination limit
   const [activeFilter, setActiveFilter] = useState<string>('Alla'); // Alphabet filter for unmapped products
   const [activeGroupsFilter, setActiveGroupsFilter] = useState<string>('Alla'); // Alphabet filter for product groups
+  const [visibleSuggestions, setVisibleSuggestions] = useState(10); // Pagination for suggestions
 
   // Use transition for non-urgent updates to prevent blocking UI
   const [isPending, startTransition] = useTransition();
+
+  // ... (rest of the component state and hooks remain the same until the return statement)
+
 
   const queryClient = useQueryClient();
 
@@ -418,18 +780,18 @@ export const ProductMerge = React.memo(() => {
 
   // Create mapping mutation
   const createMapping = useMutation({
-    mutationFn: async (params: { 
-      original_name: string; 
-      mapped_name: string; 
-      category: string; 
-      user_id: string | null; 
+    mutationFn: async (params: {
+      original_name: string;
+      mapped_name: string;
+      category: string;
+      user_id: string | null;
     } | string[]) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
       // Handle both array of products and single mapping object
       let mappingsToCreate;
-      
+
       if (Array.isArray(params)) {
         // Original behavior for batch create
         mappingsToCreate = params.map(product => ({
@@ -449,10 +811,10 @@ export const ProductMerge = React.memo(() => {
             .eq('mapped_name', params.mapped_name)
             .eq('user_id', user.id)
             .limit(1);
-          
+
           finalCategory = existingMappings?.[0]?.category || null;
         }
-        
+
         mappingsToCreate = [{
           user_id: user.id,
           original_name: params.original_name,
@@ -693,7 +1055,7 @@ export const ProductMerge = React.memo(() => {
 
       const finalName = editingSuggestion[idx] || suggestion.suggestedName;
       const existingGroup = addToExisting[idx];
-      
+
       // Get category - use selected category if manually chosen, otherwise use common category
       const { commonCategory } = getProductCategories(suggestion.products, receipts);
       const finalCategory = selectedSuggestionCategory[idx] || commonCategory || null;
@@ -858,7 +1220,7 @@ export const ProductMerge = React.memo(() => {
       const groupItems = groupedMappings?.[mappedName] || [];
       const userMappings = groupItems.filter((item: any) => !item.isGlobal);
       const globalMappings = groupItems.filter((item: any) => item.isGlobal);
-      
+
       const errors: string[] = [];
       let userUpdateSuccess = false;
       let globalUpdateSuccess = false;
@@ -901,14 +1263,14 @@ export const ProductMerge = React.memo(() => {
       }
 
       await queryClient.invalidateQueries({ queryKey: ['product-mappings'] });
-      
+
       // Clear editing state
       setEditingCategory(prev => {
         const next = { ...prev };
         delete next[mappedName];
         return next;
       });
-      
+
       // Show appropriate success message
       if (userUpdateSuccess && globalUpdateSuccess) {
         toast.success(`Kategori uppdaterad! (${userMappings.length} användar + ${globalMappings.length} globala)`);
@@ -917,7 +1279,7 @@ export const ProductMerge = React.memo(() => {
       } else if (globalUpdateSuccess) {
         toast.success(`Kategori uppdaterad för globala mappningar! (${globalMappings.length})`);
       }
-      
+
       logger.debug('Category updated:', { mappedName, newCategory, userCount: userMappings.length, globalCount: globalMappings.length });
     } catch (error) {
       toast.error("Kunde inte uppdatera kategori: " + (error as Error).message);
@@ -1100,6 +1462,49 @@ export const ProductMerge = React.memo(() => {
     return stats;
   }, [groupedMappings, productIndex]);
 
+  // Prepare data for virtualization
+  const activeMergeList = useMemo(() => Object.entries(filteredGroupedMappings), [filteredGroupedMappings]);
+
+  // Bundle data for the row component
+  const itemData = useMemo(() => ({
+    items: activeMergeList,
+    selectedGroups,
+    handleGroupToggle,
+    editingMergeGroup,
+    setEditingMergeGroup,
+    handleRenameMergeGroup,
+    groupStats,
+    categoryNames,
+    categoryOptions,
+    handleUpdateCategory,
+    selectedStandardCategory,
+    setSelectedStandardCategory,
+    // New props for collapsible table
+    productIndex,
+    expandedGroups,
+    setExpandedGroups,
+    updateCategoryOverride,
+    removeCategoryOverride,
+    deleteMapping
+  }), [
+    activeMergeList,
+    selectedGroups,
+    handleGroupToggle,
+    editingMergeGroup,
+    handleRenameMergeGroup,
+    groupStats,
+    categoryNames,
+    categoryOptions,
+    handleUpdateCategory,
+    selectedStandardCategory,
+    productIndex,
+    expandedGroups,
+    // Mutations don't change identity usually, but good to include if they do
+    updateCategoryOverride,
+    removeCategoryOverride,
+    deleteMapping
+  ]);
+
   return (
     <div className="space-y-6">
       {/* Suggested merges */}
@@ -1116,14 +1521,14 @@ export const ProductMerge = React.memo(() => {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {suggestedMerges.map((suggestion, idx) => {
+              {suggestedMerges.slice(0, visibleSuggestions).map((suggestion, idx) => {
                 const isEditing = idx in editingSuggestion;
                 const currentName = editingSuggestion[idx] ?? suggestion.suggestedName;
                 const existingMergeGroup = addToExisting[idx];
                 const { commonCategory, uniqueCategories } = getProductCategories(suggestion.products, receipts);
                 const hasMixedCategories = uniqueCategories.length > 1;
                 const selectedCategory = selectedSuggestionCategory[idx];
-                
+
                 return (
                   <div key={idx} className="border rounded-lg p-4 space-y-3">
                     <div className="flex items-start gap-4">
@@ -1151,7 +1556,7 @@ export const ProductMerge = React.memo(() => {
                             <div key={i}>• {product}</div>
                           ))}
                         </div>
-                        
+
                         <div className="space-y-2">
                           <Label htmlFor={`suggestion-name-${idx}`} className="text-sm font-medium">
                             Produktnamn:
@@ -1193,9 +1598,9 @@ export const ProductMerge = React.memo(() => {
                           </Label>
                           <Select
                             value={existingMergeGroup || "new"}
-                            onValueChange={(value) => setAddToExisting(prev => 
-                              value === "new" 
-                                ? { ...prev, [idx]: "" } 
+                            onValueChange={(value) => setAddToExisting(prev =>
+                              value === "new"
+                                ? { ...prev, [idx]: "" }
                                 : { ...prev, [idx]: value }
                             )}
                           >
@@ -1213,13 +1618,13 @@ export const ProductMerge = React.memo(() => {
                           </Select>
                         </div>
                       </div>
-                      
+
                       <div className="flex flex-col gap-2">
                         <Button
                           size="sm"
                           onClick={() => handleAcceptSuggestion(suggestion, idx)}
                           disabled={
-                            createMapping.isPending || 
+                            createMapping.isPending ||
                             (!currentName.trim() && !existingMergeGroup) ||
                             (hasMixedCategories && !selectedCategory)
                           }
@@ -1238,6 +1643,19 @@ export const ProductMerge = React.memo(() => {
                   </div>
                 );
               })}
+
+              {visibleSuggestions < suggestedMerges.length && (
+                <div className="flex justify-center pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setVisibleSuggestions(prev => prev + 10)}
+                    className="w-full max-w-xs"
+                  >
+                    <ChevronDown className="mr-2 h-4 w-4" />
+                    Visa fler förslag ({suggestedMerges.length - visibleSuggestions} kvar)
+                  </Button>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -1300,23 +1718,20 @@ export const ProductMerge = React.memo(() => {
                   Inga produkter börjar med "{activeFilter}"
                 </p>
               ) : (
-                <List
-                  rowCount={filteredUnmappedProducts.length}
-                  rowHeight={48}
-                  defaultHeight={400}
-                  rowComponent={(props) => (
-                    <ProductRow
-                      {...props}
-                      products={filteredUnmappedProducts}
-                      selectedProducts={selectedProducts}
-                      handleProductToggle={handleProductToggle}
-                      handleAddToExistingGroup={handleAddToExistingGroup}
-                      groupNames={groupNames}
-                      isPending={createMapping.isPending}
-                    />
-                  )}
-                  rowProps={{}}
-                  style={{ width: '100%' }}
+                <FixedSizeList
+                  height={400}
+                  itemCount={filteredUnmappedProducts.length}
+                  itemSize={48}
+                  width="100%"
+                  itemData={{
+                    products: filteredUnmappedProducts,
+                    selectedProducts,
+                    handleProductToggle,
+                    handleAddToExistingGroup,
+                    groupNames,
+                    isPending: createMapping.isPending
+                  }}
+                  children={ProductRow}
                 />
               )}
             </div>
@@ -1436,431 +1851,16 @@ export const ProductMerge = React.memo(() => {
                 ))}
               </div>
 
-              {Object.keys(filteredGroupedMappings).length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <p>Inga produktgrupper börjar med "{activeGroupsFilter}"</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                {Object.entries(filteredGroupedMappings).map(([mappedName, items]: [string, any[]]) => {
-                  // Use pre-calculated stats including category info
-                  const stats = groupStats[mappedName] || { 
-                    totalSpending: 0, 
-                    productCount: 0,
-                    commonCategory: null,
-                    uniqueCategories: [],
-                    hasMixedCategories: false
-                  };
-                  const isEditingThis = mappedName in editingMergeGroup;
-                  const hasUserMappings = items.some((item: any) => !item.isGlobal);
-                  const savedCategory = items[0]?.category;
-                  
-                  // Determine category status using pre-calculated values
-                  const commonCategory = stats.commonCategory;
-                  const uniqueCategories = stats.uniqueCategories;
-                  const hasMixedCategories = stats.hasMixedCategories;
-                  const categoryMatch = savedCategory === commonCategory;
-                  const hasCommonCategory = commonCategory !== null;
-                  
-                  return (
-                    <div key={mappedName} className="border rounded-md p-4">
-                      <div className="flex items-start gap-3 mb-2">
-                        <Checkbox
-                          id={`group-${mappedName}`}
-                          checked={selectedGroups.includes(mappedName)}
-                          onCheckedChange={() => handleGroupToggle(mappedName)}
-                        />
-                        <div className="flex-1">
-                          {isEditingThis ? (
-                            <div className="flex items-center gap-2 mb-2">
-                              <Input
-                                value={editingMergeGroup[mappedName]}
-                                onChange={(e) => handleEditingMergeGroupChange(mappedName, e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    handleRenameMergeGroup(mappedName, editingMergeGroup[mappedName]);
-                                  }
-                                  if (e.key === 'Escape') {
-                                    setEditingMergeGroup(prev => {
-                                      const next = { ...prev };
-                                      delete next[mappedName];
-                                      return next;
-                                    });
-                                  }
-                                }}
-                                className="flex-1"
-                                placeholder="Nytt namn för gruppen"
-                                autoFocus
-                              />
-                              <Button
-                                size="sm"
-                                onClick={() => handleRenameMergeGroup(mappedName, editingMergeGroup[mappedName])}
-                                disabled={!editingMergeGroup[mappedName]?.trim()}
-                              >
-                                Spara
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setEditingMergeGroup(prev => {
-                                  const next = { ...prev };
-                                  delete next[mappedName];
-                                  return next;
-                                })}
-                              >
-                                Avbryt
-                              </Button>
-                            </div>
-                          ) : (
-                            <div className="space-y-2">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <h4 className="font-medium text-base">{mappedName}</h4>
-                                  {/* Group type badge */}
-                                  {items.every((item: any) => item.isGlobal) && (
-                                    <Badge variant="secondary" className="text-xs">
-                                      Global
-                                    </Badge>
-                                  )}
-                                  {items.every((item: any) => !item.isGlobal) && (
-                                    <Badge variant="outline" className="text-xs">
-                                      Personlig
-                                    </Badge>
-                                  )}
-                                  {items.some((item: any) => item.isGlobal) && items.some((item: any) => !item.isGlobal) && (
-                                    <Badge variant="default" className="text-xs">
-                                      Mixad
-                                    </Badge>
-                                  )}
-                                </div>
-                                {/* Edit button now shown for ALL groups */}
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => setEditingMergeGroup(prev => ({
-                                    ...prev,
-                                    [mappedName]: mappedName
-                                  }))}
-                                  className="h-7 text-xs"
-                                >
-                                  Byt namn
-                                </Button>
-                              </div>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                {savedCategory ? (
-                                  <>
-                                    <Badge variant={hasCommonCategory && categoryMatch ? "default" : "secondary"} 
-                                      className={hasCommonCategory && categoryMatch ? "bg-green-600" : ""}>
-                                      {categoryNames[savedCategory] || savedCategory}
-                                    </Badge>
-                                    {hasCommonCategory && !categoryMatch && (
-                                      <Badge variant="outline" className="text-orange-600 border-orange-600">
-                                        Produkter i kvitton: {categoryNames[commonCategory] || commonCategory}
-                                      </Badge>
-                                    )}
-                                    {hasMixedCategories && (
-                                      <Badge variant="outline" className="text-orange-600 border-orange-600">
-                                        Blandade kategorier: {uniqueCategories.map(cat => categoryNames[cat] || cat).join(', ')}
-                                      </Badge>
-                                    )}
-                                  </>
-                                ) : (
-                                  <>
-                                    {hasCommonCategory && (
-                                      <Badge variant="outline" className="text-blue-600 border-blue-600">
-                                        Förslag: {categoryNames[commonCategory] || commonCategory}
-                                      </Badge>
-                                    )}
-                                    {hasMixedCategories && (
-                                      <Badge variant="outline" className="text-orange-600 border-orange-600">
-                                        Blandade kategorier: {uniqueCategories.map(cat => categoryNames[cat] || cat).join(', ')}
-                                      </Badge>
-                                    )}
-                                  </>
-                                )}
-                                {/* Category standardization UI for mixed categories */}
-                                {hasMixedCategories && hasUserMappings && (
-                                  <div className="w-full mt-2 p-3 border border-orange-200 rounded-md bg-orange-50">
-                                    <div className="flex items-center gap-2">
-                                      <Label htmlFor={`std-category-${mappedName}`} className="text-sm font-medium whitespace-nowrap">
-                                        Standardisera till:
-                                      </Label>
-                                      <Select
-                                        value={selectedStandardCategory[mappedName] || ""}
-                                        onValueChange={(value) => setSelectedStandardCategory(prev => ({
-                                          ...prev,
-                                          [mappedName]: value
-                                        }))}
-                                      >
-                                        <SelectTrigger id={`std-category-${mappedName}`} className="w-[200px]">
-                                          <SelectValue placeholder="Välj kategori" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          {categoryOptions.map(opt => {
-                                            // Count how many products have this category
-                                            const count = items.filter((item: any) => {
-                                              const pd = productIndex.get(item.original_name);
-                                              return pd?.categories.has(opt.value);
-                                            }).length;
-
-                                            return (
-                                              <SelectItem key={opt.value} value={opt.value}>
-                                                {opt.label}
-                                                {count > 0 && ` (${count})`}
-                                              </SelectItem>
-                                            );
-                                          })}
-                                        </SelectContent>
-                                      </Select>
-
-                                      <Button
-                                        size="sm"
-                                        onClick={() => {
-                                          standardizeCategory.mutate({
-                                            mappedName,
-                                            category: selectedStandardCategory[mappedName]
-                                          });
-                                          // Clear selection after mutation
-                                          setSelectedStandardCategory(prev => {
-                                            const next = { ...prev };
-                                            delete next[mappedName];
-                                            return next;
-                                          });
-                                        }}
-                                        disabled={!selectedStandardCategory[mappedName] || standardizeCategory.isPending}
-                                      >
-                                        Tillämpa på alla produkter
-                                      </Button>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                              {editingCategory[mappedName] !== undefined && (
-                                <div className="flex items-center gap-2 mt-2">
-                                  <Select 
-                                    value={editingCategory[mappedName]} 
-                                    onValueChange={(value) => setEditingCategory(prev => ({ 
-                                      ...prev, 
-                                      [mappedName]: value 
-                                    }))}
-                                  >
-                                    <SelectTrigger className="w-[200px]">
-                                      <SelectValue placeholder="Välj kategori" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {categoryOptions.map(({ value, label }) => (
-                                        <SelectItem key={value} value={value}>
-                                          {label}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                  <Button
-                                    size="sm"
-                                    onClick={() => handleUpdateCategory(mappedName, editingCategory[mappedName])}
-                                    disabled={!editingCategory[mappedName]}
-                                  >
-                                    Spara
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => setEditingCategory(prev => {
-                                      const next = { ...prev };
-                                      delete next[mappedName];
-                                      return next;
-                                    })}
-                                  >
-                                    Avbryt
-                                  </Button>
-                                </div>
-                              )}
-                              <div className="flex gap-4 text-sm text-muted-foreground">
-                                <span>{items.length} {items.length === 1 ? 'variant' : 'varianter'}</span>
-                                <span>•</span>
-                                <span>{stats.productCount} köp</span>
-                                <span>•</span>
-                                <span className="font-medium">{stats.totalSpending.toFixed(0)} kr totalt</span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    <Collapsible
-                      open={expandedGroups[mappedName] ?? false}
-                      onOpenChange={(open) => setExpandedGroups(prev => ({ ...prev, [mappedName]: open }))}
-                    >
-                      <CollapsibleTrigger asChild>
-                        <Button variant="ghost" size="sm" className="w-full justify-start gap-2 mt-2">
-                          {expandedGroups[mappedName] ? (
-                            <ChevronDown className="h-4 w-4" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4" />
-                          )}
-                          {expandedGroups[mappedName] ? 'Dölj' : 'Visa'} produkter
-                        </Button>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                        <Table className="mt-2">
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Originalnamn</TableHead>
-                          <TableHead>Kategori</TableHead>
-                          <TableHead className="w-[100px]">Åtgärd</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {items.map(item => {
-                          // Get saved category from mapping
-                          const savedCategory = item.category;
-
-                          // Get receipt categories from productIndex
-                          const productData = productIndex.get(item.original_name);
-                          const receiptCategories = productData?.categories || new Set<string>();
-                          const receiptCategoriesArray = Array.from(receiptCategories);
-
-                          // Determine display categories (saved first, then receipt categories)
-                          let displayCategories: string[] = [];
-                          if (savedCategory) {
-                            displayCategories = [savedCategory];
-                            // Add other receipt categories if they differ (show all per user preference)
-                            receiptCategoriesArray.forEach(cat => {
-                              if (cat !== savedCategory && !displayCategories.includes(cat)) {
-                                displayCategories.push(cat);
-                              }
-                            });
-                          } else {
-                            // No saved category, show all receipt categories
-                            displayCategories = receiptCategoriesArray;
-                          }
-
-                          // Check for conflicts
-                          const hasConflict = savedCategory &&
-                                            receiptCategories.size > 0 &&
-                                            !receiptCategories.has(savedCategory);
-
-                          // Check if this item's category differs from group's common category
-                          const categoryMismatch = commonCategory &&
-                                                  savedCategory &&
-                                                  savedCategory !== commonCategory;
-
-                          return (
-                            <TableRow key={item.id}>
-                              <TableCell>
-                                <div className="flex items-center gap-2">
-                                  {item.original_name}
-                                  {item.isGlobal && (
-                                    <Badge variant="outline" className="text-xs">
-                                      Global
-                                    </Badge>
-                                  )}
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                {item.isGlobal ? (
-                                  // Global product with editable dropdown
-                                  <div className="flex items-center gap-2">
-                                    <Select
-                                      value={item.category || ""}
-                                      onValueChange={(newCategory) => {
-                                        updateCategoryOverride.mutate({
-                                          globalMappingId: item.id,
-                                          category: newCategory
-                                        });
-                                      }}
-                                      disabled={updateCategoryOverride.isPending}
-                                    >
-                                      <SelectTrigger className="w-[200px]">
-                                        <SelectValue placeholder="Välj kategori" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {categoryOptions.map(opt => (
-                                          <SelectItem key={opt.value} value={opt.value}>
-                                            {opt.label}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-
-                                    {/* Local override indicator */}
-                                    {item.hasLocalOverride && (
-                                      <TooltipProvider>
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <Info className="h-4 w-4 text-blue-500 cursor-help flex-shrink-0" />
-                                          </TooltipTrigger>
-                                          <TooltipContent className="max-w-xs">
-                                            <p className="text-sm mb-2">
-                                              Du har anpassat kategorin lokalt. Andra användare ser fortfarande den globala kategorin.
-                                            </p>
-                                            <Button
-                                              size="sm"
-                                              variant="outline"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                removeCategoryOverride.mutate(item.overrideId!);
-                                              }}
-                                              disabled={removeCategoryOverride.isPending}
-                                              className="w-full"
-                                            >
-                                              Återställ till global kategori
-                                            </Button>
-                                          </TooltipContent>
-                                        </Tooltip>
-                                      </TooltipProvider>
-                                    )}
-                                  </div>
-                                ) : (
-                                  // User mapping - keep existing logic
-                                  <div className="flex items-center gap-1">
-                                    <span className={categoryMismatch ? "text-orange-600" : ""}>
-                                      {displayCategories.length > 0
-                                        ? displayCategories.map(cat => categoryNames[cat] || cat).join(', ')
-                                        : "Okategoriserad"}
-                                    </span>
-                                    {hasConflict && (
-                                      <span
-                                        title={`Sparad kategori: ${categoryNames[savedCategory] || savedCategory}\nKategorier i kvitton: ${receiptCategoriesArray.map(c => categoryNames[c] || c).join(', ')}`}
-                                        className="cursor-help text-blue-600"
-                                      >
-                                        ℹ️
-                                      </span>
-                                    )}
-                                    {categoryMismatch && (
-                                      <span
-                                        title={`Avviker från gruppens kategori: ${categoryNames[commonCategory] || commonCategory}`}
-                                        className="cursor-help"
-                                      >
-                                        ⚠️
-                                      </span>
-                                    )}
-                                  </div>
-                                )}
-                              </TableCell>
-                              <TableCell>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => deleteMapping.mutate(item.id)}
-                                disabled={deleteMapping.isPending || item.isGlobal}
-                                title={item.isGlobal ? "Kan inte ta bort globala mappningar" : "Ta bort mappning"}
-                              >
-                                  <Trash2 className={`h-4 w-4 ${item.isGlobal ? 'opacity-50' : ''}`} />
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                      </CollapsibleContent>
-                    </Collapsible>
-                  </div>
-                );
-                })}
+              <div className="space-y-4 h-[600px]">
+                <FixedSizeList
+                  height={600}
+                  itemCount={activeMergeList.length}
+                  itemSize={200}
+                  width="100%"
+                  itemData={itemData}
+                  children={ActiveMergeRow}
+                />
               </div>
-              )}
             </CardContent>
           </Card>
 
