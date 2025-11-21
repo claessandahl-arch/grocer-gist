@@ -214,253 +214,252 @@ const Upload = () => {
 
               return publicUrl;
             })
-            })
           );
 
-// Upload original PDF if it exists
-let pdfUrl = null;
-const originalPdf = originalPdfs[baseFilename];
+          // Upload original PDF if it exists
+          let pdfUrl = null;
+          const originalPdf = originalPdfs[baseFilename];
 
-if (originalPdf) {
-  const pdfFileName = `${userId}/${Date.now()}_${sanitizeFilename(baseFilename)}.pdf`;
-  logger.debug(`Uploading original PDF: ${pdfFileName}`);
+          if (originalPdf) {
+            const pdfFileName = `${userId}/${Date.now()}_${sanitizeFilename(baseFilename)}.pdf`;
+            logger.debug(`Uploading original PDF: ${pdfFileName}`);
 
-  const { error: pdfUploadError } = await supabase.storage
-    .from('receipts')
-    .upload(pdfFileName, originalPdf);
+            const { error: pdfUploadError } = await supabase.storage
+              .from('receipts')
+              .upload(pdfFileName, originalPdf);
 
-  if (pdfUploadError) {
-    logger.error('PDF upload error (continuing with images only):', pdfUploadError);
-  } else {
-    const { data: { publicUrl } } = supabase.storage
-      .from('receipts')
-      .getPublicUrl(pdfFileName);
-    pdfUrl = publicUrl;
-  }
-}
+            if (pdfUploadError) {
+              logger.error('PDF upload error (continuing with images only):', pdfUploadError);
+            } else {
+              const { data: { publicUrl } } = supabase.storage
+                .from('receipts')
+                .getPublicUrl(pdfFileName);
+              pdfUrl = publicUrl;
+            }
+          }
 
-// Call AI once with all image URLs and optional PDF URL
-const { data: parsedData, error: functionError } = await supabase.functions.invoke('parse-receipt', {
-  body: { imageUrls: imageUrls, originalFilename: baseFilename, pdfUrl: pdfUrl }
-});
+          // Call AI once with all image URLs and optional PDF URL
+          const { data: parsedData, error: functionError } = await supabase.functions.invoke('parse-receipt', {
+            body: { imageUrls: imageUrls, originalFilename: baseFilename, pdfUrl: pdfUrl }
+          });
 
-if (functionError || !parsedData) {
-  errorCount++;
-  toast.error(`Misslyckades: ${baseFilename}`);
-  return;
-}
+          if (functionError || !parsedData) {
+            errorCount++;
+            toast.error(`Misslyckades: ${baseFilename}`);
+            return;
+          }
 
-// Check for duplicates with fuzzy store name matching
-// Normalize store names to handle variations like "ICA" vs "ICA Nära"
-const normalizedStoreName = parsedData.store_name.toLowerCase().trim();
+          // Check for duplicates with fuzzy store name matching
+          // Normalize store names to handle variations like "ICA" vs "ICA Nära"
+          const normalizedStoreName = parsedData.store_name.toLowerCase().trim();
 
-const { data: existingReceipts } = await supabase
-  .from('receipts')
-  .select('id, store_name')
-  .eq('user_id', userId)
-  .eq('receipt_date', parsedData.receipt_date)
-  .eq('total_amount', parsedData.total_amount);
+          const { data: existingReceipts } = await supabase
+            .from('receipts')
+            .select('id, store_name')
+            .eq('user_id', userId)
+            .eq('receipt_date', parsedData.receipt_date)
+            .eq('total_amount', parsedData.total_amount);
 
-// Check if any existing receipt has a similar store name
-const isDuplicate = existingReceipts && existingReceipts.length > 0 && existingReceipts.some(receipt => {
-  const existingStoreName = receipt.store_name?.toLowerCase().trim() || '';
-  // Check if store names match or if one contains the other
-  return existingStoreName === normalizedStoreName ||
-    existingStoreName.includes(normalizedStoreName) ||
-    normalizedStoreName.includes(existingStoreName);
-});
+          // Check if any existing receipt has a similar store name
+          const isDuplicate = existingReceipts && existingReceipts.length > 0 && existingReceipts.some(receipt => {
+            const existingStoreName = receipt.store_name?.toLowerCase().trim() || '';
+            // Check if store names match or if one contains the other
+            return existingStoreName === normalizedStoreName ||
+              existingStoreName.includes(normalizedStoreName) ||
+              normalizedStoreName.includes(existingStoreName);
+          });
 
-if (isDuplicate) {
-  duplicateCount++;
-  toast.warning(`Duplikat: ${parsedData.store_name} ${parsedData.receipt_date}`);
-  return;
-}
+          if (isDuplicate) {
+            duplicateCount++;
+            toast.warning(`Duplikat: ${parsedData.store_name} ${parsedData.receipt_date}`);
+            return;
+          }
 
-// Insert one receipt with multiple image URLs
-const { error: insertError } = await supabase.from('receipts').insert({
-  user_id: userId,
-  image_url: imageUrls[0],
-  image_urls: imageUrls,
-  store_name: parsedData.store_name,
-  total_amount: parsedData.total_amount,
-  receipt_date: parsedData.receipt_date,
-  items: parsedData.items
-});
+          // Insert one receipt with multiple image URLs
+          const { error: insertError } = await supabase.from('receipts').insert({
+            user_id: userId,
+            image_url: imageUrls[0],
+            image_urls: imageUrls,
+            store_name: parsedData.store_name,
+            total_amount: parsedData.total_amount,
+            receipt_date: parsedData.receipt_date,
+            items: parsedData.items
+          });
 
-if (insertError) {
-  errorCount++;
-  toast.error(`Misslyckades spara: ${baseFilename}`);
-  return;
-}
+          if (insertError) {
+            errorCount++;
+            toast.error(`Misslyckades spara: ${baseFilename}`);
+            return;
+          }
 
-successCount++;
+          successCount++;
         } catch (error) {
-  errorCount++;
-  logger.error('Upload error for', baseFilename, ':', error);
-  toast.error(`Fel: ${baseFilename}`);
-}
+          errorCount++;
+          logger.error('Upload error for', baseFilename, ':', error);
+          toast.error(`Fel: ${baseFilename}`);
+        }
       });
 
-await Promise.all(uploadPromises);
+      await Promise.all(uploadPromises);
 
-setPreviewFiles([]);
-setOriginalPdfs({});
+      setPreviewFiles([]);
+      setOriginalPdfs({});
 
-// Show summary message
-if (successCount > 0) {
-  toast.success(`${successCount} kvitto${successCount > 1 ? 'n' : ''} uppladdade!`);
-  setUploadedFiles(prev => [...prev, ...Object.keys(groupedBySource).slice(0, successCount)]);
-}
-if (duplicateCount > 0) {
-  toast.info(`${duplicateCount} duplikat hoppades över`);
-}
-if (errorCount > 0 && successCount === 0) {
-  toast.error(`${errorCount} kvitton misslyckades`);
-}
+      // Show summary message
+      if (successCount > 0) {
+        toast.success(`${successCount} kvitto${successCount > 1 ? 'n' : ''} uppladdade!`);
+        setUploadedFiles(prev => [...prev, ...Object.keys(groupedBySource).slice(0, successCount)]);
+      }
+      if (duplicateCount > 0) {
+        toast.info(`${duplicateCount} duplikat hoppades över`);
+      }
+      if (errorCount > 0 && successCount === 0) {
+        toast.error(`${errorCount} kvitton misslyckades`);
+      }
     } catch (error) {
-  logger.error('Upload error:', error);
-  toast.error("Något gick fel vid uppladdning");
-} finally {
-  setUploading(false);
-}
+      logger.error('Upload error:', error);
+      toast.error("Något gick fel vid uppladdning");
+    } finally {
+      setUploading(false);
+    }
   };
 
-const removePreview = (index: number) => {
-  setPreviewFiles(prev => prev.filter((_, i) => i !== index));
-};
+  const removePreview = (index: number) => {
+    setPreviewFiles(prev => prev.filter((_, i) => i !== index));
+  };
 
-return (
-  <div className="min-h-screen bg-gradient-hero">
-    <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-      <div className="container mx-auto px-4 py-4">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard")}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <h1 className="text-2xl font-bold text-foreground">Upload Receipts</h1>
+  return (
+    <div className="min-h-screen bg-gradient-hero">
+      <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard")}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <h1 className="text-2xl font-bold text-foreground">Upload Receipts</h1>
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
 
-    <main className="container mx-auto px-4 py-12">
-      <div className="max-w-2xl mx-auto space-y-6">
-        <Card className="shadow-soft border-2 border-dashed border-primary/30 hover:border-primary/60 transition-colors">
-          <CardHeader>
-            <CardTitle>Upload Your Receipts</CardTitle>
-            <CardDescription>
-              Upload images or PDFs - PDFs will be converted to JPG for preview
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <label
-              htmlFor="file-upload"
-              className="flex flex-col items-center justify-center w-full h-64 cursor-pointer bg-secondary/50 rounded-lg hover:bg-secondary transition-colors"
-            >
-              <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                <UploadIcon className="h-12 w-12 text-primary mb-4" />
-                <p className="mb-2 text-sm font-medium text-foreground">
-                  Click to select files
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  PNG, JPG, or PDF (MAX. 10MB)
-                </p>
-              </div>
-              <input
-                id="file-upload"
-                type="file"
-                className="hidden"
-                multiple
-                accept="image/png,image/jpeg,image/jpg,application/pdf"
-                onChange={handleFileSelect}
-                disabled={converting || uploading || !userId}
-              />
-            </label>
-
-            {converting && (
-              <div className="mt-4 flex flex-col items-center justify-center gap-4">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="text-sm text-muted-foreground">Converting PDF to JPG...</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {previewFiles.length > 0 && (
-          <Card className="shadow-card">
+      <main className="container mx-auto px-4 py-12">
+        <div className="max-w-2xl mx-auto space-y-6">
+          <Card className="shadow-soft border-2 border-dashed border-primary/30 hover:border-primary/60 transition-colors">
             <CardHeader>
-              <CardTitle>Preview & Confirm</CardTitle>
-              <CardDescription>Review converted images before uploading</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4">
-                {previewFiles.map((file, index) => (
-                  <div key={index} className="relative border rounded-lg p-4">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="absolute top-2 right-2"
-                      onClick={() => removePreview(index)}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                    <p className="text-sm font-medium mb-2">{file.name}</p>
-                    <img
-                      src={file.preview}
-                      alt={file.name}
-                      className="max-w-full h-auto rounded border"
-                    />
-                  </div>
-                ))}
-              </div>
-              <Button
-                onClick={handleUpload}
-                className="w-full"
-                disabled={uploading || !userId}
-              >
-                {uploading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  `Upload ${previewFiles.length} file${previewFiles.length > 1 ? 's' : ''}`
-                )}
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {uploadedFiles.length > 0 && (
-          <Card className="shadow-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CheckCircle2 className="h-5 w-5 text-accent" />
-                Uploaded Receipts
-              </CardTitle>
+              <CardTitle>Upload Your Receipts</CardTitle>
+              <CardDescription>
+                Upload images or PDFs - PDFs will be converted to JPG for preview
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <ul className="space-y-2">
-                {uploadedFiles.map((file, idx) => (
-                  <li key={idx} className="flex items-center gap-3 p-3 bg-secondary/50 rounded-lg">
-                    <FileText className="h-5 w-5 text-primary flex-shrink-0" />
-                    <span className="text-sm text-foreground flex-1">{file}</span>
-                    <CheckCircle2 className="h-5 w-5 text-accent flex-shrink-0" />
-                  </li>
-                ))}
-              </ul>
-              <Button
-                onClick={() => navigate("/dashboard")}
-                className="w-full mt-4"
+              <label
+                htmlFor="file-upload"
+                className="flex flex-col items-center justify-center w-full h-64 cursor-pointer bg-secondary/50 rounded-lg hover:bg-secondary transition-colors"
               >
-                View Dashboard
-              </Button>
+                <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                  <UploadIcon className="h-12 w-12 text-primary mb-4" />
+                  <p className="mb-2 text-sm font-medium text-foreground">
+                    Click to select files
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    PNG, JPG, or PDF (MAX. 10MB)
+                  </p>
+                </div>
+                <input
+                  id="file-upload"
+                  type="file"
+                  className="hidden"
+                  multiple
+                  accept="image/png,image/jpeg,image/jpg,application/pdf"
+                  onChange={handleFileSelect}
+                  disabled={converting || uploading || !userId}
+                />
+              </label>
+
+              {converting && (
+                <div className="mt-4 flex flex-col items-center justify-center gap-4">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <p className="text-sm text-muted-foreground">Converting PDF to JPG...</p>
+                </div>
+              )}
             </CardContent>
           </Card>
-        )}
-      </div>
-    </main>
-  </div>
-);
+
+          {previewFiles.length > 0 && (
+            <Card className="shadow-card">
+              <CardHeader>
+                <CardTitle>Preview & Confirm</CardTitle>
+                <CardDescription>Review converted images before uploading</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4">
+                  {previewFiles.map((file, index) => (
+                    <div key={index} className="relative border rounded-lg p-4">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="absolute top-2 right-2"
+                        onClick={() => removePreview(index)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                      <p className="text-sm font-medium mb-2">{file.name}</p>
+                      <img
+                        src={file.preview}
+                        alt={file.name}
+                        className="max-w-full h-auto rounded border"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <Button
+                  onClick={handleUpload}
+                  className="w-full"
+                  disabled={uploading || !userId}
+                >
+                  {uploading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    `Upload ${previewFiles.length} file${previewFiles.length > 1 ? 's' : ''}`
+                  )}
+                </Button>
+              </CardContent>
+            </Card >
+          )}
+
+          {uploadedFiles.length > 0 && (
+            <Card className="shadow-card">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CheckCircle2 className="h-5 w-5 text-accent" />
+                  Uploaded Receipts
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-2">
+                  {uploadedFiles.map((file, idx) => (
+                    <li key={idx} className="flex items-center gap-3 p-3 bg-secondary/50 rounded-lg">
+                      <FileText className="h-5 w-5 text-primary flex-shrink-0" />
+                      <span className="text-sm text-foreground flex-1">{file}</span>
+                      <CheckCircle2 className="h-5 w-5 text-accent flex-shrink-0" />
+                    </li>
+                  ))}
+                </ul>
+                <Button
+                  onClick={() => navigate("/dashboard")}
+                  className="w-full mt-4"
+                >
+                  View Dashboard
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </main>
+    </div>
+  );
 };
 
 export default Upload;
