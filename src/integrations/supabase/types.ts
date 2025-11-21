@@ -271,8 +271,8 @@ export type Database = {
       extract_unit_info: {
         Args: { product_name: string }
         Returns: {
-          amount: number
-          unit: string
+          quantity_amount: number
+          quantity_unit: string
         }[]
       }
     }
