@@ -72,6 +72,22 @@ export default function Diagnostics() {
         enabled: !!user,
     });
 
+    // Fetch receipt count
+    const { data: receiptCount = 0, isLoading: loadingReceipts } = useQuery({
+        queryKey: ['diagnostics-receipt-count', user?.id],
+        queryFn: async () => {
+            if (!user) return 0;
+            const { count, error } = await supabase
+                .from('receipts')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', user.id);
+
+            if (error) throw error;
+            return count || 0;
+        },
+        enabled: !!user,
+    });
+
     // Mutation to delete a single mapping by ID
     const deleteSingleMapping = useMutation({
         mutationFn: async (id: string) => {
@@ -92,21 +108,7 @@ export default function Diagnostics() {
         }
     });
 
-    // Fetch receipt count
-    const { data: receiptCount = 0, isLoading: loadingReceipts } = useQuery({
-        queryKey: ['diagnostics-receipt-count', user?.id],
-        queryFn: async () => {
-            if (!user) return 0;
-            const { count, error } = await supabase
-                .from('receipts')
-                .select('*', { count: 'exact', head: true })
-                .eq('user_id', user.id);
 
-            if (error) throw error;
-            return count || 0;
-        },
-        enabled: !!user,
-    });
 
     // Mutation to delete empty mappings
     const deleteEmptyMappings = useMutation({
