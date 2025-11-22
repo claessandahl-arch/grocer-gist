@@ -260,7 +260,9 @@ serve(async (req) => {
         const pdfResponse = await fetch(pdfUrl);
         if (pdfResponse.ok) {
           const pdfBuffer = await pdfResponse.arrayBuffer();
-          const data = await pdf(Buffer.from(pdfBuffer));
+          // Deno doesn't have Buffer global - use Uint8Array instead
+          const uint8Array = new Uint8Array(pdfBuffer);
+          const data = await pdf(uint8Array);
           if (data.text) {
             rawPdfText = data.text; // Store raw text
             pdfText = `\n\n--- EXTRACTED TEXT FROM PDF ---\n${data.text}\n-------------------------------\n`;
@@ -270,9 +272,12 @@ serve(async (req) => {
           } else {
             console.log('⚠️ PDF has no text layer - will rely on OCR from image');
           }
+        } else {
+          console.error(`❌ Failed to fetch PDF: ${pdfResponse.status} ${pdfResponse.statusText}`);
         }
       } catch (e) {
         console.error('❌ Error extracting text from raw PDF:', e);
+        console.error('Error details:', e instanceof Error ? e.message : String(e));
       }
     } else {
       console.log('⚠️ No pdfUrl provided - will rely on OCR from images');
@@ -291,15 +296,20 @@ serve(async (req) => {
             const pdfResponse = await fetch(url);
             if (pdfResponse.ok) {
               const pdfBuffer = await pdfResponse.arrayBuffer();
-              const data = await pdf(Buffer.from(pdfBuffer));
+              // Deno doesn't have Buffer global - use Uint8Array instead
+              const uint8Array = new Uint8Array(pdfBuffer);
+              const data = await pdf(uint8Array);
               if (data.text) {
                 rawPdfText += data.text; // Store raw text
                 pdfText += `\n\n--- EXTRACTED TEXT FROM PDF PAGE ---\n${data.text}\n------------------------------------\n`;
-                console.log('Successfully extracted text from PDF image');
+                console.log('✅ Successfully extracted text from PDF image');
               }
+            } else {
+              console.error(`❌ Failed to fetch PDF from images: ${pdfResponse.status} ${pdfResponse.statusText}`);
             }
           } catch (e) {
-            console.error('Error extracting text from PDF image:', e);
+            console.error('❌ Error extracting text from PDF image:', e);
+            console.error('Error details:', e instanceof Error ? e.message : String(e));
           }
         }
       }
