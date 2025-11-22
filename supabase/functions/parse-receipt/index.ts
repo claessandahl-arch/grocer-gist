@@ -39,6 +39,7 @@ function parseICAReceiptText(text: string): { items: ParsedItem[]; store_name?: 
 
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
     console.log('📊 Total lines after filtering:', lines.length);
+    console.log('📊 First 10 lines:', lines.slice(0, 10));
 
     // Try to find store name (usually at the top)
     let storeName = 'ICA';
@@ -53,22 +54,40 @@ function parseICAReceiptText(text: string): { items: ParsedItem[]; store_name?: 
     let i = 0;
 
     // Skip header row (Beskrivning, Artikelnummer, etc.)
+    console.log('🔍 Looking for first line with 8-13 digit article number...');
     while (i < lines.length && !lines[i].match(/\d{8,13}/)) {
+      console.log(`  Line ${i}: "${lines[i]}" - No article number found`);
       i++;
     }
 
+    if (i >= lines.length) {
+      console.log('❌ No lines with article numbers found in entire text!');
+      console.log('📄 All lines:', lines);
+      return null;
+    }
+
+    console.log(`✓ Found first article number at line ${i}: "${lines[i]}"`);
+    console.log(`📝 Will process ${lines.length - i} lines for products`);
+
     while (i < lines.length) {
       const line = lines[i];
+      console.log(`\n🔍 Processing line ${i}: "${line}"`);
 
       // Product line pattern: has 8-13 digit article number
       const articleMatch = line.match(/(\d{8,13})/);
 
       if (articleMatch) {
+        console.log(`  ✓ Found article number: ${articleMatch[1]}`);
+
         // This is a product line
         const parts = line.split(/\s+/);
+        console.log(`  📦 Split into ${parts.length} parts:`, parts);
+
         const articleIdx = parts.findIndex(p => /^\d{8,13}$/.test(p));
+        console.log(`  📍 Article number at index: ${articleIdx}`);
 
         if (articleIdx === -1) {
+          console.log(`  ❌ Article number not found as separate part (might be embedded)`);
           i++;
           continue;
         }
@@ -77,11 +96,16 @@ function parseICAReceiptText(text: string): { items: ParsedItem[]; store_name?: 
         const nameParts = parts.slice(0, articleIdx);
         const articleNumber = parts[articleIdx];
         const remaining = parts.slice(articleIdx + 1);
+        console.log(`  📝 Name parts:`, nameParts);
+        console.log(`  🔢 Article: ${articleNumber}`);
+        console.log(`  💰 Remaining parts:`, remaining);
 
         // Find numeric values: [unit_price, quantity, (unit), summa]
         const numbers = remaining.filter(p => /^-?\d+[,.]?\d*$/.test(p.replace(',', '.')));
+        console.log(`  💵 Found ${numbers.length} numeric values:`, numbers);
 
         if (numbers.length < 3) {
+          console.log(`  ❌ Not enough numbers (need at least 3, got ${numbers.length})`);
           i++;
           continue;
         }
@@ -130,6 +154,8 @@ function parseICAReceiptText(text: string): { items: ParsedItem[]; store_name?: 
         // Calculate final price
         const finalPrice = discount > 0 ? summa - discount : summa;
 
+        console.log(`  ✅ Created item: ${productName} (${quantity}x ${finalPrice} kr${discount > 0 ? `, discount: ${discount}` : ''})`);
+
         // Add item (categorization will be done by AI later)
         items.push({
           name: productName,
@@ -142,6 +168,8 @@ function parseICAReceiptText(text: string): { items: ParsedItem[]; store_name?: 
 
         i = j;
       } else {
+        console.log(`  ⏭️  No article number, skipping`);
+
         // Line without article number - might be pant, plastkasse, etc.
         // Simple pattern: Name Price Quantity Total
         const parts = line.split(/\s+/);
