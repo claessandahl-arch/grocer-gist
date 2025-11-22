@@ -23,8 +23,6 @@ interface ParsedItem {
   article_number?: string;
   price: number;
   quantity: number;
-  quantity_unit?: string;
-  unit_price?: number;
   category: string;
   discount?: number;
 }
@@ -620,159 +618,138 @@ ${originalFilename ? `\n📁 FILENAME HINT: The original filename is "${original
    - Usually 8-13 digits (e.g., "8008343200134")
    - Helps with product identification and matching
 
-8. WEIGHTED ITEMS & UNIT PRICES (CRITICAL):
-   - Extract "Pris" column as `unit_price`.
-   - Extract "Mängd" column unit as `quantity_unit` (e.g., "kg", "st", "lit").
-   - **Logic for Weighted Items**:
-     - If `Mängd` says "1" (or integer) BUT `Summa` != `Pris`, it is likely a WEIGHTED item where the quantity is hidden in the price calculation.
-     - **Formula**: `quantity` = `Summa` / `unit_price`.
-     - Set `quantity_unit` to "kg" (or appropriate unit).
-   
-   **Example (Weighted Item):**
-   - Receipt: `Apelsin ... 26, 95 ... 1,00 st ... 19, 89`
-   - Analysis: Summa (19.89) != Pris (26.95). This is NOT 1 item. It is ~0.74 kg.
-   - Calculation: 19.89 / 26.95 = 0.738
-   - Output: `{ name: "Apelsin", price: 19.89, quantity: 0.738, quantity_unit: "kg", unit_price: 26.95 }`
-
-   **Example (Standard Item):**
-   - Receipt: `Mjölk ... 12, 95 ... 2,00 st ... 25, 90`
-   - Analysis: 2 * 12.95 = 25.90. Matches.
-   - Output: `{ name: "Mjölk", price: 25.90, quantity: 2, quantity_unit: "st", unit_price: 12.95 }`
-
 ${storeContext}
 
 🎯 OUTPUT FORMAT:
 Return ONLY the function call with properly formatted JSON. No additional text or explanation. Make sure all numbers are actual numbers, not strings.`;
 
-// Build content for AI request
-const userContent = [
-  {
-    type: "text",
-    text: promptText
-  },
-  ...imagesToProcess.map((url: string) => ({
-    type: "image_url",
-    image_url: { url }
-  }))
-];
-
-const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({
-    model: 'google/gemini-2.5-flash',
-    messages: [
+    // Build content for AI request
+    const userContent = [
       {
-        role: 'system',
-        content: 'You are a receipt parser. Extract structured data from receipt images including store name, total amount, date, and itemized list with prices and categories. For multi-page receipts, combine all items into a single receipt. Return valid JSON only.'
+        type: "text",
+        text: promptText
       },
-      {
-        role: 'user',
-        content: userContent
-      }
-    ],
-    tools: [
-      {
-        type: "function",
-        function: {
-          name: "parse_receipt",
-          description: "Parse receipt and extract structured data",
-          parameters: {
-            type: "object",
-            properties: {
-              store_name: {
-                type: "string",
-                description: "Name of the store (brand/chain name, not location)"
-              },
-              total_amount: {
-                type: "number",
-                description: "Total amount on receipt"
-              },
-              receipt_date: {
-                type: "string",
-                description: "Date in YYYY-MM-DD format"
-              },
-              items: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    name: { type: "string" },
-                    article_number: { type: "string", description: "GTIN/EAN/Article number (usually 8-13 digits)" },
-                    price: { type: "number", description: "Final total price for this line item (after discount)" },
-                    quantity: { type: "number", description: "Quantity or Weight. For weighted items, calculate: Summa / Unit Price" },
-                    quantity_unit: { type: "string", description: "Unit of measure (e.g., 'kg', 'st', 'lit', 'g')" },
-                    unit_price: { type: "number", description: "Price per unit (from 'Pris' column)" },
-                    category: { type: "string" },
-                    discount: { type: "number" }
-                  },
-                  required: ["name", "price", "quantity", "category"]
-                }
-              }
-            },
-            required: ["store_name", "total_amount", "receipt_date", "items"]
+      ...imagesToProcess.map((url: string) => ({
+        type: "image_url",
+        image_url: { url }
+      }))
+    ];
+
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a receipt parser. Extract structured data from receipt images including store name, total amount, date, and itemized list with prices and categories. For multi-page receipts, combine all items into a single receipt. Return valid JSON only.'
+          },
+          {
+            role: 'user',
+            content: userContent
           }
+        ],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "parse_receipt",
+              description: "Parse receipt and extract structured data",
+              parameters: {
+                type: "object",
+                properties: {
+                  store_name: {
+                    type: "string",
+                    description: "Name of the store (brand/chain name, not location)"
+                  },
+                  total_amount: {
+                    type: "number",
+                    description: "Total amount on receipt"
+                  },
+                  receipt_date: {
+                    type: "string",
+                    description: "Date in YYYY-MM-DD format"
+                  },
+                  items: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        name: { type: "string" },
+                        article_number: { type: "string", description: "GTIN/EAN/Article number (usually 8-13 digits)" },
+                        price: { type: "number" },
+                        quantity: { type: "number" },
+                        category: { type: "string" },
+                        discount: { type: "number" }
+                      },
+                      required: ["name", "price", "quantity", "category"]
+                    }
+                  }
+                },
+                required: ["store_name", "total_amount", "receipt_date", "items"]
+              }
+            }
+          }
+        ],
+        tool_choice: {
+          type: "function",
+          function: { name: "parse_receipt" }
         }
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('AI gateway error:', response.status, errorText);
+
+      if (response.status === 429) {
+        return new Response(
+          JSON.stringify({ error: 'Rate limit exceeded. Please try again in a moment.' }),
+          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
-    ],
-    tool_choice: {
-      type: "function",
-      function: { name: "parse_receipt" }
+
+      if (response.status === 402) {
+        return new Response(
+          JSON.stringify({ error: 'AI credits depleted. Please add credits in your workspace settings.' }),
+          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      throw new Error(`AI gateway returned ${response.status}: ${errorText}`);
     }
-  }),
-});
 
-if (!response.ok) {
-  const errorText = await response.text();
-  console.error('AI gateway error:', response.status, errorText);
+    const data = await response.json();
+    console.log('AI response:', JSON.stringify(data, null, 2));
 
-  if (response.status === 429) {
+    const functionCall = data.choices?.[0]?.message?.tool_calls?.[0]?.function;
+    if (!functionCall) {
+      throw new Error('No function call in AI response');
+    }
+
+    const parsedData = JSON.parse(functionCall.arguments);
+    console.log('Parsed receipt data:', JSON.stringify(parsedData, null, 2));
+
+    // Add debug info to AI response
+    parsedData._debug = {
+      method: 'ai_parser',
+      debugLog: debugLog
+    };
+
     return new Response(
-      JSON.stringify({ error: 'Rate limit exceeded. Please try again in a moment.' }),
-      { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify(parsedData),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-  }
-
-  if (response.status === 402) {
-    return new Response(
-      JSON.stringify({ error: 'AI credits depleted. Please add credits in your workspace settings.' }),
-      { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-
-  throw new Error(`AI gateway returned ${response.status}: ${errorText}`);
-}
-
-const data = await response.json();
-console.log('AI response:', JSON.stringify(data, null, 2));
-
-const functionCall = data.choices?.[0]?.message?.tool_calls?.[0]?.function;
-if (!functionCall) {
-  throw new Error('No function call in AI response');
-}
-
-const parsedData = JSON.parse(functionCall.arguments);
-console.log('Parsed receipt data:', JSON.stringify(parsedData, null, 2));
-
-// Add debug info to AI response
-parsedData._debug = {
-  method: 'ai_parser',
-  debugLog: debugLog
-};
-
-return new Response(
-  JSON.stringify(parsedData),
-  { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-);
 
   } catch (error) {
-  console.error('Error in parse-receipt function:', error);
-  return new Response(
-    JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error occurred' }),
-    { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-  );
-}
+    console.error('Error in parse-receipt function:', error);
+    return new Response(
+      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error occurred' }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
 });
