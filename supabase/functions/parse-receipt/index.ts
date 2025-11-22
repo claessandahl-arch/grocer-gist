@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import pdf from "npm:pdf-parse@1.1.1";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -250,192 +249,15 @@ serve(async (req) => {
       console.log('Could not fetch store patterns:', e);
     }
 
-    let pdfText = '';
-    let rawPdfText = ''; // Store raw text for structured parsing
     const debugLog: string[] = []; // Track what happens for debugging
+    
+    console.log('⚠️ PDF text extraction removed - relying on AI vision for parsing');
+    debugLog.push('ℹ️ PDF parsing removed, using AI vision only');
 
-    // Priority 1: Use provided raw PDF URL
-    if (pdfUrl) {
-      debugLog.push(`✓ pdfUrl provided: ${pdfUrl.substring(0, 100)}...`);
-      try {
-        console.log('Using provided raw PDF URL for text extraction...');
-        debugLog.push('→ Fetching PDF from URL...');
-        const pdfResponse = await fetch(pdfUrl);
-        debugLog.push(`→ PDF fetch status: ${pdfResponse.status} ${pdfResponse.statusText}`);
-
-        if (pdfResponse.ok) {
-          const pdfBuffer = await pdfResponse.arrayBuffer();
-          debugLog.push(`→ PDF buffer size: ${pdfBuffer.byteLength} bytes`);
-
-          // Deno doesn't have Buffer global - use Uint8Array instead
-          const uint8Array = new Uint8Array(pdfBuffer);
-          debugLog.push('→ Converting to Uint8Array...');
-
-          const data = await pdf(uint8Array);
-          debugLog.push(`→ pdf-parse completed, text length: ${data.text?.length || 0}`);
-
-          if (data.text) {
-            rawPdfText = data.text; // Store raw text
-            pdfText = `\n\n--- EXTRACTED TEXT FROM PDF ---\n${data.text}\n-------------------------------\n`;
-            console.log('✅ Successfully extracted text from raw PDF');
-            console.log('📄 PDF Text Length:', data.text.length, 'characters');
-            console.log('📄 First 500 chars:', data.text.substring(0, 500));
-            debugLog.push(`✓ PDF text extracted: ${data.text.length} characters`);
-            debugLog.push(`✓ First 100 chars: ${data.text.substring(0, 100)}`);
-          } else {
-            console.log('⚠️ PDF has no text layer - will rely on OCR from image');
-            debugLog.push('✗ PDF has no text layer');
-          }
-        } else {
-          console.error(`❌ Failed to fetch PDF: ${pdfResponse.status} ${pdfResponse.statusText}`);
-          debugLog.push(`✗ Failed to fetch PDF: ${pdfResponse.status}`);
-        }
-      } catch (e) {
-        const errorMsg = e instanceof Error ? e.message : String(e);
-        console.error('❌ Error extracting text from raw PDF:', e);
-        console.error('Error details:', errorMsg);
-        debugLog.push(`✗ PDF extraction error: ${errorMsg}`);
-      }
-    } else {
-      console.log('⚠️ No pdfUrl provided - will rely on OCR from images');
-      debugLog.push('✗ No pdfUrl provided');
-    }
-
-    // Priority 2: Fallback to checking image URLs (legacy behavior)
-    if (!pdfText) {
-      // Check if any of the images are PDFs and extract text
-      for (const url of imagesToProcess) {
-        const isPdf = url.toLowerCase().endsWith('.pdf') ||
-          (originalFilename && originalFilename.toLowerCase().endsWith('.pdf'));
-
-        if (isPdf) {
-          try {
-            console.log('Detected PDF in images, fetching content for text extraction...');
-            const pdfResponse = await fetch(url);
-            if (pdfResponse.ok) {
-              const pdfBuffer = await pdfResponse.arrayBuffer();
-              // Deno doesn't have Buffer global - use Uint8Array instead
-              const uint8Array = new Uint8Array(pdfBuffer);
-              const data = await pdf(uint8Array);
-              if (data.text) {
-                rawPdfText += data.text; // Store raw text
-                pdfText += `\n\n--- EXTRACTED TEXT FROM PDF PAGE ---\n${data.text}\n------------------------------------\n`;
-                console.log('✅ Successfully extracted text from PDF image');
-              }
-            } else {
-              console.error(`❌ Failed to fetch PDF from images: ${pdfResponse.status} ${pdfResponse.statusText}`);
-            }
-          } catch (e) {
-            console.error('❌ Error extracting text from PDF image:', e);
-            console.error('Error details:', e instanceof Error ? e.message : String(e));
-          }
-        }
-      }
-    }
-
-    // Try structured parsing first if we have raw PDF text
-    if (rawPdfText) {
-      console.log('🔍 Trying structured parsing with raw PDF text...');
-      debugLog.push('→ Attempting structured parsing...');
-      const structuredResult = parseICAReceiptText(rawPdfText);
-
-      if (structuredResult && structuredResult.items && structuredResult.items.length > 0) {
-        console.log('🎯 Using structured parsing results instead of AI!');
-        debugLog.push(`✓ Structured parsing succeeded: ${structuredResult.items.length} items`);
-
-        // Use AI only for categorization
-        // Build a simple prompt to categorize the items
-        const categorizationPrompt = `Categorize these Swedish grocery items into ONE of these categories:
-- frukt_gront (Fruit, vegetables, salad)
-- mejeri (Milk, cheese, yogurt, butter)
-- kott_fagel_chark (Meat, chicken, deli meats)
-- brod_bageri (Bread, pasta, pastries, baked goods)
-- drycker (Drinks, juice, soda)
-- sotsaker_snacks (Candy, chips, snacks)
-- fardigmat (Ready meals, frozen food)
-- hushall_hygien (Household products, cleaning, hygiene)
-- delikatess (Delicatessen, specialty items)
-- pant (Bottle deposit/return)
-- other (Anything else)
-
-Items to categorize:
-${structuredResult.items.map((item, idx) => `${idx + 1}. ${item.name}`).join('\n')}
-
-Return a JSON array of categories in the same order: ["category1", "category2", ...]`;
-
-        try {
-          // Call AI just for categorization
-          const categorizationResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              model: 'google/gemini-2.5-flash',
-              messages: [
-                { role: 'user', content: categorizationPrompt }
-              ],
-            }),
-          });
-
-          if (categorizationResponse.ok) {
-            const catData = await categorizationResponse.json();
-            const catText = catData.choices?.[0]?.message?.content || '';
-            const categories = JSON.parse(catText.match(/\[.*\]/)?.[0] || '[]');
-
-            // Apply categories to items
-            structuredResult.items.forEach((item, idx) => {
-              if (categories[idx]) {
-                item.category = categories[idx];
-              }
-            });
-          }
-        } catch (e) {
-          console.log('⚠️ Categorization failed, using defaults:', e);
-        }
-
-        // Calculate total amount
-        const totalAmount = structuredResult.items.reduce((sum, item) => sum + item.price, 0);
-
-        // Try to extract date from filename
-        let receiptDate = new Date().toISOString().split('T')[0];
-        if (originalFilename) {
-          const dateMatch = originalFilename.match(/(\d{4})-(\d{2})-(\d{2})/);
-          if (dateMatch) {
-            receiptDate = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`;
-          }
-        }
-
-        console.log('📦 Returning structured parsing results');
-        return new Response(
-          JSON.stringify({
-            store_name: structuredResult.store_name || 'ICA',
-            total_amount: totalAmount,
-            receipt_date: receiptDate,
-            items: structuredResult.items,
-            _debug: {
-              method: 'structured_parser',
-              debugLog: debugLog,
-              items_found: structuredResult.items.length,
-              pdf_text_length: rawPdfText.length
-            }
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      } else {
-        debugLog.push('✗ Structured parsing returned no items or failed');
-      }
-    } else {
-      debugLog.push('✗ No rawPdfText available for structured parsing');
-    }
-
-    console.log('⚠️ Structured parsing not available, falling back to AI...');
-    debugLog.push('→ Falling back to AI parser...');
+    console.log('⚠️ Using AI parser (structured parsing removed)...');
+    debugLog.push('→ Using AI parser...');
 
     const promptText = `Parse this ${imagesToProcess.length > 1 ? imagesToProcess.length + '-page ' : ''}grocery receipt${imagesToProcess.length > 1 ? '. Combine information from ALL pages into a single receipt. The images are in page order.' : ''} and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), category, and discount (as number, optional).
-
-${pdfText ? `\n📜 TEXT LAYER EXTRACTED FROM PDF:\n${pdfText}\n\n⚠️ CRITICAL: Use the extracted text above as the PRIMARY source of truth. The text layer is 100% accurate. DO NOT rely on OCR from images. Copy product names EXACTLY as they appear in the extracted text.\n` : ''}
 
 🔴 TOP PRIORITY - ICA RECEIPT PARSING RULES:
 
