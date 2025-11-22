@@ -239,7 +239,7 @@ const Upload = () => {
           }
 
           // Call AI once with all image URLs and optional PDF URL
-          logger.debug(`📤 Calling parse-receipt with:`, {
+          console.log(`📤 Calling parse-receipt with:`, {
             imageCount: imageUrls.length,
             hasPdfUrl: !!pdfUrl,
             filename: baseFilename
@@ -250,17 +250,17 @@ const Upload = () => {
           });
 
           if (functionError || !parsedData) {
-            logger.error(`❌ Parse error for ${baseFilename}:`, functionError);
+            console.error(`❌ Parse error for ${baseFilename}:`, functionError);
             errorCount++;
             toast.error(`Misslyckades: ${baseFilename}`);
             return;
           }
 
           // Log the parsed data so we can see what the AI returned
-          logger.debug(`📥 Parsed receipt data for ${baseFilename}:`, parsedData);
-          logger.debug(`📊 Items found:`, parsedData.items?.length || 0);
+          console.log(`📥 Parsed receipt data for ${baseFilename}:`, parsedData);
+          console.log(`📊 Items found:`, parsedData.items?.length || 0);
           parsedData.items?.forEach((item: any, idx: number) => {
-            logger.debug(`  ${idx + 1}. ${item.name} - ${item.quantity}x ${item.price} kr${item.discount ? ` (discount: ${item.discount} kr)` : ''}`);
+            console.log(`  ${idx + 1}. ${item.name} - ${item.quantity}x ${item.price} kr${item.discount ? ` (discount: ${item.discount} kr)` : ''}`);
           });
 
           // Check for duplicates with fuzzy store name matching
