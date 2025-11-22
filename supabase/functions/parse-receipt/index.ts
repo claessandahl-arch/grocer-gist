@@ -621,23 +621,23 @@ ${originalFilename ? `\n📁 FILENAME HINT: The original filename is "${original
    - Helps with product identification and matching
 
 8. WEIGHTED ITEMS & UNIT PRICES (CRITICAL):
-   - Extract "Pris" column as `unit_price`.
-   - Extract "Mängd" column unit as `quantity_unit` (e.g., "kg", "st", "lit").
-   - **Logic for Weighted Items**:
-     - If `Mängd` says "1" (or integer) BUT `Summa` != `Pris`, it is likely a WEIGHTED item where the quantity is hidden in the price calculation.
-     - **Formula**: `quantity` = `Summa` / `unit_price`.
-     - Set `quantity_unit` to "kg" (or appropriate unit).
+   - Extract Pris column as unit_price.
+   - Extract Mangd column unit as quantity_unit (e.g., kg, st, lit).
+   - Logic for Weighted Items:
+     - If Mangd says 1 (or integer) BUT Summa != Pris, it is likely a WEIGHTED item where the quantity is hidden in the price calculation.
+     - Formula: quantity = Summa / unit_price.
+     - Set quantity_unit to kg (or appropriate unit).
    
-   **Example (Weighted Item):**
-   - Receipt: `Apelsin ... 26, 95 ... 1,00 st ... 19, 89`
+   Example (Weighted Item):
+   - Receipt: Apelsin ... 26, 95 ... 1,00 st ... 19, 89
    - Analysis: Summa (19.89) != Pris (26.95). This is NOT 1 item. It is ~0.74 kg.
    - Calculation: 19.89 / 26.95 = 0.738
-   - Output: `{ name: "Apelsin", price: 19.89, quantity: 0.738, quantity_unit: "kg", unit_price: 26.95 }`
+   - Output: { name: "Apelsin", price: 19.89, quantity: 0.738, quantity_unit: "kg", unit_price: 26.95 }
 
-   **Example (Standard Item):**
-   - Receipt: `Mjölk ... 12, 95 ... 2,00 st ... 25, 90`
+   Example (Standard Item):
+   - Receipt: Mjolk ... 12, 95 ... 2,00 st ... 25, 90
    - Analysis: 2 * 12.95 = 25.90. Matches.
-   - Output: `{ name: "Mjölk", price: 25.90, quantity: 2, quantity_unit: "st", unit_price: 12.95 }`
+   - Output: { name: "Mjolk", price: 25.90, quantity: 2, quantity_unit: "st", unit_price: 12.95 }
 
 ${storeContext}
 
