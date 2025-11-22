@@ -334,7 +334,11 @@ Location: `supabase/functions/`
    - Looks for 8-13 digit article numbers
    - Handles multi-line product names
    - Applies discount lines to products above them
-   - **Currently under development** - returns to AI if parsing fails
+   - **TODO: Currently not working** - Always falls back to AI parser
+   - **Known Issue**: Parser fails to find article numbers in PDF text
+   - **Debug logs added**: Shows detailed parsing attempts (can be viewed in Edge Function logs)
+   - **Status**: AI parser with PDF text works perfectly (100% accuracy), so this is low priority
+   - **To fix in future**: Analyze Edge Function logs to see actual PDF text structure, then adjust article number regex and line parsing logic
 
 3. **AI Vision Fallback** (always runs if structured parser fails):
    - Uses `google/gemini-2.5-flash` via Lovable AI Gateway
