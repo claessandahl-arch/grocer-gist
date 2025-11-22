@@ -31,7 +31,8 @@ This project is actively developed with Lovable.ai:
 4. **Never force push** - Avoid `git push --force` or `git push -f` at all times
 5. **Pull latest changes** - Always run `git pull` before starting work
 6. **Sync frequently** - Keep your local repository in sync with remote
-7. **Database Access** - You CANNOT access the database directly. It is managed by Lovable Cloud. Use migrations for schema changes.
+7. **Verify Build** - ALWAYS run `npm run build` locally before pushing. This catches syntax errors that break Lovable preview.
+8. **Database Access** - You CANNOT access the database directly. It is managed by Lovable Cloud. Use migrations for schema changes.
 
 Example workflow:
 ```bash
@@ -575,3 +576,9 @@ When testing the upload functionality:
    - Understand: Category correction priority system
    - Check: User mappings and global mappings
    - Use: DataManagement page to correct categories
+
+6. **Lovable Preview Error / Build Failed**
+   - **Symptom**: Lovable shows "Preview has not been built yet" or build error logs.
+   - **Cause**: Syntax errors or type errors in the code (e.g., duplicated braces `}}`) that break the build.
+   - **Solution**: Run `npm run build` locally. If it fails, fix the errors before pushing.
+   - **Prevention**: Never push code that hasn't passed a local build check.
