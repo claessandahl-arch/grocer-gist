@@ -215,6 +215,19 @@ Example 3 - Standalone discount line:
    - pant (Bottle deposit/return)
    - other (Anything else)
 
+7. ICA / SWEDISH RECEIPT LOGIC:
+   - "Pris" column often shows the *Final Unit Price* (after discount).
+   - "Summa" column often shows the *Original Line Total* (before discount).
+   - Discount is often on the next line (e.g., "Rummo pasta -20,90").
+   - LOGIC:
+     1. Identify the item line (e.g., "Linguine... 65,90").
+     2. Identify the discount line below it (e.g., "-20,90").
+     3. price = (Summa - Discount). Example: 65.90 - 20.90 = 45.00.
+     4. discount = 20.90.
+     5. quantity = 2.
+     (Check: 45.00 / 2 = 22.50, which matches the "Pris" column).
+   - ALWAYS extract article_number (Artikelnummer) if available (e.g., "8008343200134").
+
 ${storeContext}
 
 🎯 OUTPUT FORMAT:
@@ -277,6 +290,7 @@ Return ONLY the function call with properly formatted JSON. No additional text o
                       type: "object",
                       properties: {
                         name: { type: "string" },
+                        article_number: { type: "string", description: "GTIN/EAN/Article number (usually 8-13 digits)" },
                         price: { type: "number" },
                         quantity: { type: "number" },
                         category: { type: "string" },
