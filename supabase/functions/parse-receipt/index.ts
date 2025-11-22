@@ -236,6 +236,7 @@ serve(async (req) => {
     }
 
     let pdfText = '';
+    let rawPdfText = ''; // Store raw text for structured parsing
 
     // Priority 1: Use provided raw PDF URL
     if (pdfUrl) {
@@ -246,6 +247,7 @@ serve(async (req) => {
           const pdfBuffer = await pdfResponse.arrayBuffer();
           const data = await pdf(Buffer.from(pdfBuffer));
           if (data.text) {
+            rawPdfText = data.text; // Store raw text
             pdfText = `\n\n--- EXTRACTED TEXT FROM PDF ---\n${data.text}\n-------------------------------\n`;
             console.log('✅ Successfully extracted text from raw PDF');
             console.log('📄 PDF Text Length:', data.text.length, 'characters');
@@ -276,6 +278,7 @@ serve(async (req) => {
               const pdfBuffer = await pdfResponse.arrayBuffer();
               const data = await pdf(Buffer.from(pdfBuffer));
               if (data.text) {
+                rawPdfText += data.text; // Store raw text
                 pdfText += `\n\n--- EXTRACTED TEXT FROM PDF PAGE ---\n${data.text}\n------------------------------------\n`;
                 console.log('Successfully extracted text from PDF image');
               }
@@ -287,9 +290,10 @@ serve(async (req) => {
       }
     }
 
-    // Try structured parsing first if we have PDF text
-    if (pdfText) {
-      const structuredResult = parseICAReceiptText(pdfText);
+    // Try structured parsing first if we have raw PDF text
+    if (rawPdfText) {
+      console.log('🔍 Trying structured parsing with raw PDF text...');
+      const structuredResult = parseICAReceiptText(rawPdfText);
 
       if (structuredResult && structuredResult.items && structuredResult.items.length > 0) {
         console.log('🎯 Using structured parsing results instead of AI!');
