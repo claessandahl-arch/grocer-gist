@@ -18,6 +18,162 @@ interface StorePattern {
   };
 }
 
+interface ParsedItem {
+  name: string;
+  article_number?: string;
+  price: number;
+  quantity: number;
+  category: string;
+  discount?: number;
+}
+
+/**
+ * Parse structured ICA receipt text directly
+ * Returns null if parsing fails (fall back to AI)
+ */
+function parseICAReceiptText(text: string): { items: ParsedItem[]; store_name?: string; total_amount?: number; receipt_date?: string } | null {
+  try {
+    console.log('🔧 Attempting structured parsing of ICA receipt...');
+
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+    // Try to find store name (usually at the top)
+    let storeName = 'ICA';
+    for (const line of lines.slice(0, 10)) {
+      if (line.includes('ICA')) {
+        storeName = line.trim();
+        break;
+      }
+    }
+
+    const items: ParsedItem[] = [];
+    let i = 0;
+
+    // Skip header row (Beskrivning, Artikelnummer, etc.)
+    while (i < lines.length && !lines[i].match(/\d{8,13}/)) {
+      i++;
+    }
+
+    while (i < lines.length) {
+      const line = lines[i];
+
+      // Product line pattern: has 8-13 digit article number
+      const articleMatch = line.match(/(\d{8,13})/);
+
+      if (articleMatch) {
+        // This is a product line
+        const parts = line.split(/\s+/);
+        const articleIdx = parts.findIndex(p => /^\d{8,13}$/.test(p));
+
+        if (articleIdx === -1) {
+          i++;
+          continue;
+        }
+
+        // Extract components
+        const nameParts = parts.slice(0, articleIdx);
+        const articleNumber = parts[articleIdx];
+        const remaining = parts.slice(articleIdx + 1);
+
+        // Find numeric values: [unit_price, quantity, (unit), summa]
+        const numbers = remaining.filter(p => /^-?\d+[,.]?\d*$/.test(p.replace(',', '.')));
+
+        if (numbers.length < 3) {
+          i++;
+          continue;
+        }
+
+        const unitPrice = parseFloat(numbers[0].replace(',', '.'));
+        const quantity = parseFloat(numbers[1].replace(',', '.'));
+        const summa = parseFloat(numbers[numbers.length - 1].replace(',', '.'));
+
+        let productName = nameParts.join(' ').replace(/^\*/, '').trim();
+        let discount = 0;
+
+        // Check next line(s) for name continuation or discount
+        let j = i + 1;
+        while (j < lines.length) {
+          const nextLine = lines[j];
+
+          // If next line has article number, it's a new product
+          if (nextLine.match(/\d{8,13}/)) {
+            break;
+          }
+
+          // Check if it's a discount line (contains negative number)
+          const negativeMatch = nextLine.match(/-(\d+[,.]?\d*)/);
+          if (negativeMatch) {
+            discount = parseFloat(negativeMatch[1].replace(',', '.'));
+
+            // Check if there's text before the negative number (continuation of name)
+            const beforeNegative = nextLine.substring(0, nextLine.indexOf('-')).trim();
+            if (beforeNegative && !beforeNegative.match(/^\d/)) {
+              productName += ' ' + beforeNegative;
+            }
+
+            j++;
+            break;
+          }
+
+          // If no negative number, it might be name continuation
+          if (!nextLine.match(/^\d/) && nextLine.length > 0) {
+            productName += ' ' + nextLine;
+            j++;
+          } else {
+            break;
+          }
+        }
+
+        // Calculate final price
+        const finalPrice = discount > 0 ? summa - discount : summa;
+
+        // Add item (categorization will be done by AI later)
+        items.push({
+          name: productName,
+          article_number: articleNumber,
+          price: finalPrice,
+          quantity: quantity,
+          category: 'other', // Will be categorized by AI
+          discount: discount > 0 ? discount : undefined
+        });
+
+        i = j;
+      } else {
+        // Line without article number - might be pant, plastkasse, etc.
+        // Simple pattern: Name Price Quantity Total
+        const parts = line.split(/\s+/);
+        const numbers = parts.filter(p => /^-?\d+[,.]?\d*$/.test(p.replace(',', '.')));
+
+        if (numbers.length >= 2) {
+          const name = parts.slice(0, parts.length - numbers.length).join(' ');
+          const quantity = parseFloat(numbers[numbers.length - 2].replace(',', '.'));
+          const total = parseFloat(numbers[numbers.length - 1].replace(',', '.'));
+
+          items.push({
+            name: name,
+            price: total,
+            quantity: quantity,
+            category: name.toLowerCase().includes('pant') ? 'pant' : 'other'
+          });
+        }
+
+        i++;
+      }
+    }
+
+    console.log(`✅ Structured parsing succeeded: ${items.length} items`);
+    items.forEach((item, idx) => {
+      console.log(`  ${idx + 1}. ${item.name} - ${item.quantity}x ${item.price} kr${item.discount ? ` (discount: ${item.discount} kr)` : ''}`);
+    });
+
+    return { items, store_name: storeName };
+
+  } catch (e) {
+    console.error('❌ Structured parsing failed:', e);
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -130,6 +286,92 @@ serve(async (req) => {
         }
       }
     }
+
+    // Try structured parsing first if we have PDF text
+    if (pdfText) {
+      const structuredResult = parseICAReceiptText(pdfText);
+
+      if (structuredResult && structuredResult.items && structuredResult.items.length > 0) {
+        console.log('🎯 Using structured parsing results instead of AI!');
+
+        // Use AI only for categorization
+        // Build a simple prompt to categorize the items
+        const categorizationPrompt = `Categorize these Swedish grocery items into ONE of these categories:
+- frukt_gront (Fruit, vegetables, salad)
+- mejeri (Milk, cheese, yogurt, butter)
+- kott_fagel_chark (Meat, chicken, deli meats)
+- brod_bageri (Bread, pasta, pastries, baked goods)
+- drycker (Drinks, juice, soda)
+- sotsaker_snacks (Candy, chips, snacks)
+- fardigmat (Ready meals, frozen food)
+- hushall_hygien (Household products, cleaning, hygiene)
+- delikatess (Delicatessen, specialty items)
+- pant (Bottle deposit/return)
+- other (Anything else)
+
+Items to categorize:
+${structuredResult.items.map((item, idx) => `${idx + 1}. ${item.name}`).join('\n')}
+
+Return a JSON array of categories in the same order: ["category1", "category2", ...]`;
+
+        try {
+          // Call AI just for categorization
+          const categorizationResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'google/gemini-2.5-flash',
+              messages: [
+                { role: 'user', content: categorizationPrompt }
+              ],
+            }),
+          });
+
+          if (categorizationResponse.ok) {
+            const catData = await categorizationResponse.json();
+            const catText = catData.choices?.[0]?.message?.content || '';
+            const categories = JSON.parse(catText.match(/\[.*\]/)?.[0] || '[]');
+
+            // Apply categories to items
+            structuredResult.items.forEach((item, idx) => {
+              if (categories[idx]) {
+                item.category = categories[idx];
+              }
+            });
+          }
+        } catch (e) {
+          console.log('⚠️ Categorization failed, using defaults:', e);
+        }
+
+        // Calculate total amount
+        const totalAmount = structuredResult.items.reduce((sum, item) => sum + item.price, 0);
+
+        // Try to extract date from filename
+        let receiptDate = new Date().toISOString().split('T')[0];
+        if (originalFilename) {
+          const dateMatch = originalFilename.match(/(\d{4})-(\d{2})-(\d{2})/);
+          if (dateMatch) {
+            receiptDate = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`;
+          }
+        }
+
+        console.log('📦 Returning structured parsing results');
+        return new Response(
+          JSON.stringify({
+            store_name: structuredResult.store_name || 'ICA',
+            total_amount: totalAmount,
+            receipt_date: receiptDate,
+            items: structuredResult.items
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    console.log('⚠️ Structured parsing not available, falling back to AI...');
 
     const promptText = `Parse this ${imagesToProcess.length > 1 ? imagesToProcess.length + '-page ' : ''}grocery receipt${imagesToProcess.length > 1 ? '. Combine information from ALL pages into a single receipt. The images are in page order.' : ''} and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), category, and discount (as number, optional).
 
