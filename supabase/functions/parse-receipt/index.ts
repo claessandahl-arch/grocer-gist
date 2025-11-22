@@ -215,18 +215,22 @@ Example 3 - Standalone discount line:
    - pant (Bottle deposit/return)
    - other (Anything else)
 
-7. ICA / SWEDISH RECEIPT LOGIC:
-   - "Pris" column often shows the *Final Unit Price* (after discount).
-   - "Summa" column often shows the *Original Line Total* (before discount).
-   - Discount is often on the next line (e.g., "Rummo pasta -20,90").
-   - LOGIC:
-     1. Identify the item line (e.g., "Linguine... 65,90").
-     2. Identify the discount line below it (e.g., "-20,90").
-     3. price = (Summa - Discount). Example: 65.90 - 20.90 = 45.00.
-     4. discount = 20.90.
-     5. quantity = 2.
-     (Check: 45.00 / 2 = 22.50, which matches the "Pris" column).
-   - ALWAYS extract article_number (Artikelnummer) if available (e.g., "8008343200134").
+7. ICA / SWEDISH RECEIPT LOGIC (CRITICAL):
+   - **NO HALLUCINATIONS**: Use the EXACT item name from the text. Do NOT rename "Linguine" to "Lasagne". Do NOT add words that are not there.
+   - **MULTI-LINE ITEMS**: If an item name is split (e.g., Line 1: "Linguine", Line 2: "Rummo pasta"), MERGE them into one name: "Linguine Rummo pasta".
+   - **DISCOUNT / PRICE LOGIC**:
+     - "Pris" column = Final Unit Price.
+     - "Summa" column = Original Line Total (before discount).
+     - Discount is on the next line (e.g., "-20,90").
+     - CALCULATION:
+       1. Identify Item Line: "Linguine Rummo pasta... 2 st... 65,90" (Summa).
+       2. Identify Discount Line: "-20,90".
+       3. Total Line Cost = 65.90 - 20.90 = 45.00.
+       4. Quantity = 2.
+       5. Unit Price = 45.00 / 2 = 22.50.
+       6. Discount Amount = 20.90.
+     - RESULT: { name: "Linguine Rummo pasta", price: 22.50, quantity: 2, discount: 20.90, article_number: "8008343200134" }
+   - **ARTICLE NUMBERS**: ALWAYS extract article_number (GTIN/EAN) if available (e.g., "8008343200134"). It is often on the same line or the line below.
 
 ${storeContext}
 
