@@ -55,6 +55,43 @@ export default function Diagnostics() {
         enabled: !!user,
     });
 
+    // Fetch ALL user mappings for manual inspection
+    const { data: allUserMappings = [], isLoading: loadingAllMappings } = useQuery({
+        queryKey: ['diagnostics-all-mappings', user?.id],
+        queryFn: async () => {
+            if (!user) return [];
+            const { data, error } = await supabase
+                .from('product_mappings')
+                .select('*')
+                .eq('user_id', user.id)
+                .order('original_name');
+
+            if (error) throw error;
+            return data;
+        },
+        enabled: !!user,
+    });
+
+    // Mutation to delete a single mapping by ID
+    const deleteSingleMapping = useMutation({
+        mutationFn: async (id: string) => {
+            const { error } = await supabase
+                .from('product_mappings')
+                .delete()
+                .eq('id', id);
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            toast.success("Koppling borttagen");
+            queryClient.invalidateQueries({ queryKey: ['diagnostics-empty-mappings'] });
+            queryClient.invalidateQueries({ queryKey: ['diagnostics-all-mappings'] });
+            queryClient.invalidateQueries({ queryKey: ['user-product-mappings'] });
+        },
+        onError: (error) => {
+            toast.error("Kunde inte ta bort: " + error.message);
+        }
+    });
+
     // Fetch receipt count
     const { data: receiptCount = 0, isLoading: loadingReceipts } = useQuery({
         queryKey: ['diagnostics-receipt-count', user?.id],
@@ -228,6 +265,62 @@ export default function Diagnostics() {
                                 <Button variant="outline" disabled>
                                     Kommer snart
                                 </Button>
+                            </div>
+
+                            {/* Raw Data Inspector */}
+                            <div className="mt-8 pt-8 border-t">
+                                <h3 className="text-lg font-semibold mb-4">Manuell Inspektion (Raw Data)</h3>
+                                <p className="text-sm text-muted-foreground mb-4">
+                                    Här visas ALLA dina personliga produktkopplingar direkt från databasen.
+                                    Om du ser produkter här som du vill ta bort, klicka på soptunnan.
+                                </p>
+
+                                {loadingAllMappings ? (
+                                    <p>Laddar...</p>
+                                ) : (
+                                    <div className="border rounded-md overflow-hidden">
+                                        <table className="w-full text-sm text-left">
+                                            <thead className="bg-muted">
+                                                <tr>
+                                                    <th className="p-2">Originalnamn</th>
+                                                    <th className="p-2">Mappat namn (Grupp)</th>
+                                                    <th className="p-2">Åtgärd</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y">
+                                                {allUserMappings.map((m) => (
+                                                    <tr key={m.id} className="hover:bg-muted/50">
+                                                        <td className="p-2 font-medium">{m.original_name}</td>
+                                                        <td className="p-2 font-mono text-xs">
+                                                            {m.mapped_name === null ? 'NULL' : `"${m.mapped_name}"`}
+                                                        </td>
+                                                        <td className="p-2">
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-100"
+                                                                onClick={() => {
+                                                                    if (confirm(`Ta bort "${m.original_name}" permanent?`)) {
+                                                                        deleteSingleMapping.mutate(m.id);
+                                                                    }
+                                                                }}
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                                {allUserMappings.length === 0 && (
+                                                    <tr>
+                                                        <td colSpan={3} className="p-4 text-center text-muted-foreground">
+                                                            Inga personliga kopplingar hittades.
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
                             </div>
                         </CardContent>
                     </Card>
