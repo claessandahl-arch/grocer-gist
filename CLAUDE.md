@@ -334,7 +334,15 @@ Location: `supabase/functions/`
    - Looks for 8-13 digit article numbers
    - Handles multi-line product names
    - Applies discount lines to products above them
-   - **Currently under development** - returns to AI if parsing fails
+   - **TODO: Currently not working** - Always falls back to AI parser
+   - **Known Issue**: Parser fails to find article numbers in ICA PDF text format
+   - **Debug logs added**: Comprehensive logging in `parseICAReceiptText()` (view in Edge Function logs)
+   - **Current Status**: AI parser with PDF text achieves 100% accuracy, so this is LOW PRIORITY
+   - **To fix in future**:
+     1. Check Supabase Edge Function logs after upload to see detailed parsing output
+     2. Analyze actual PDF text structure (how ICA formats product lines)
+     3. Adjust article number regex in `parseICAReceiptText()` to match real format
+     4. Update line parsing logic to handle ICA's specific layout
 
 3. **AI Vision Fallback** (always runs if structured parser fails):
    - Uses `google/gemini-2.5-flash` via Lovable AI Gateway
