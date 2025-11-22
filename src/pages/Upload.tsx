@@ -258,6 +258,15 @@ const Upload = () => {
 
           // Log the parsed data so we can see what the AI returned
           console.log(`📥 Parsed receipt data for ${baseFilename}:`, parsedData);
+
+          // Show debug info if available
+          if (parsedData._debug) {
+            console.log(`🔍 Parser method used: ${parsedData._debug.method || 'unknown'}`);
+            console.log(`🔍 Debug info:`, parsedData._debug);
+          } else {
+            console.log(`⚠️ No debug info - likely using AI parser`);
+          }
+
           console.log(`📊 Items found:`, parsedData.items?.length || 0);
           parsedData.items?.forEach((item: any, idx: number) => {
             console.log(`  ${idx + 1}. ${item.name} - ${item.quantity}x ${item.price} kr${item.discount ? ` (discount: ${item.discount} kr)` : ''}`);

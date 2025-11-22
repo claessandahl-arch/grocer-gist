@@ -31,11 +31,14 @@ interface ParsedItem {
  * Parse structured ICA receipt text directly
  * Returns null if parsing fails (fall back to AI)
  */
-function parseICAReceiptText(text: string): { items: ParsedItem[]; store_name?: string; total_amount?: number; receipt_date?: string } | null {
+function parseICAReceiptText(text: string): { items: ParsedItem[]; store_name?: string; total_amount?: number; receipt_date?: string; _debug?: any } | null {
   try {
     console.log('🔧 Attempting structured parsing of ICA receipt...');
+    console.log('📄 Input text length:', text.length);
+    console.log('📄 First 200 chars:', text.substring(0, 200));
 
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    console.log('📊 Total lines after filtering:', lines.length);
 
     // Try to find store name (usually at the top)
     let storeName = 'ICA';
@@ -166,10 +169,22 @@ function parseICAReceiptText(text: string): { items: ParsedItem[]; store_name?: 
       console.log(`  ${idx + 1}. ${item.name} - ${item.quantity}x ${item.price} kr${item.discount ? ` (discount: ${item.discount} kr)` : ''}`);
     });
 
-    return { items, store_name: storeName };
+    return {
+      items,
+      store_name: storeName,
+      _debug: {
+        method: 'structured_parser',
+        lines_processed: lines.length,
+        items_found: items.length
+      }
+    };
 
   } catch (e) {
-    console.error('❌ Structured parsing failed:', e);
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    const errorStack = e instanceof Error ? e.stack : undefined;
+    console.error('❌ Structured parsing failed:', errorMessage);
+    console.error('Stack:', errorStack);
+    console.error('Text that failed:', text.substring(0, 500));
     return null;
   }
 }
