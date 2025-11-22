@@ -6,12 +6,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a grocery receipt tracking application that uses AI to parse receipt images and PDFs, extract structured data, and provide spending insights. The app is built with React, TypeScript, Vite, shadcn-ui, and Supabase.
 
-**Project Stats:**
-- ~13,754 lines of TypeScript/TSX code
-- 24 SQL migration files (1,229 lines)
-- 3 Supabase Edge Functions
-- 50+ shadcn-ui components
-- 9 main application routes
 
 ## Lovable Integration
 
@@ -20,6 +14,37 @@ This project is actively developed with Lovable.ai:
 - Changes via Lovable auto-commit to this repo
 - Local changes pushed to repo sync with Lovable
 - AI Gateway uses Lovable API key for Gemini access
+
+### Working with Lovable on Edge Functions
+
+**CRITICAL LEARNINGS:**
+
+1. **Edge Function Deployment**: When you merge PRs that change Edge Functions, Lovable does NOT automatically redeploy them. You must explicitly ask Lovable to deploy.
+
+2. **How to Request Deployment**:
+   ```
+   Deploy the [function-name] Edge Function from PR #[number]
+
+   [Brief explanation of what changed and why]
+
+   Please deploy the Edge Function to Lovable Cloud.
+   ```
+
+3. **Lovable May Misunderstand Technical Issues**:
+   - If Lovable suggests removing dependencies or code, verify the suggestion is correct
+   - Example: Lovable incorrectly claimed `pdf-parse` npm package "isn't compatible with Deno"
+   - Reality: npm packages ARE compatible with Deno using `npm:` import prefix
+   - Always verify technical claims before accepting removals
+
+4. **Preventing Incorrect Removals**:
+   - When requesting deployment, be explicit about NOT removing things
+   - Example: "Deploy the parse-receipt Edge Function. Do NOT remove pdf-parse - it's compatible with Deno via npm: imports"
+   - Include evidence if Lovable questions compatibility
+
+5. **Edge Function Updates Don't Appear Immediately**:
+   - Frontend changes deploy automatically
+   - Edge Function changes require manual deployment request
+   - May take a few minutes after deployment to see changes
 
 ## Git Workflow
 
@@ -82,40 +107,17 @@ npm preview
 
 ## Architecture
 
-### Project Structure
+### Key Routes
 
-**Source Directory (`src/`):**
-- `/components/` - Organized by feature (dashboard, datamanagement, product-management, training, ui)
-- `/pages/` - Route components (Index, Dashboard, Upload, Training, DataManagement, ProductManagement, PriceComparison, DiagnosticTool, Auth, NotFound)
-- `/lib/` - Utility functions and constants (categoryConstants, categoryUtils, logger, utils)
-- `/types/` - TypeScript type definitions (receipt.ts, dashboardTypes.ts)
-- `/integrations/` - Supabase client and generated types
-- `/hooks/` - Custom React hooks (use-toast, use-mobile)
-
-**Supabase Directory:**
-- `/functions/` - 3 Edge Functions (parse-receipt, suggest-categories, suggest-product-groups)
-- `/migrations/` - 24 SQL migration files
-
-### Navigation & Routes
-
-The application has the following routes (all lazy-loaded for performance):
-
-- `/` - Landing page (Index)
-- `/dashboard` - Analytics dashboard with monthly navigation
-- `/upload` - Receipt upload with PDF conversion
-- `/training` - Manual correction interface with ProductMerge and AICategorization
-- `/datamanagement` - Bulk category editing and product management
-- `/product-management` - Product grouping and merging with AI assistance
-- `/price-comparison` - Unit price comparison across stores
-- `/diagnostic` - Diagnostic tool for troubleshooting
-- `/auth` - Authentication page
-- `*` - 404 Not Found (must be last route)
-
-**Navigation Component Features:**
-- Mobile-responsive with hamburger menu
-- User dropdown with email and logout
-- Auth state listening via Supabase
-- Hides on /auth page
+- `/` - Landing page
+- `/dashboard` - Analytics with monthly navigation
+- `/upload` - Receipt upload (images/PDFs)
+- `/training` - Manual correction interface
+- `/datamanagement` - Bulk category editing
+- `/product-management` - Product grouping/merging
+- `/price-comparison` - Unit price analysis
+- `/auth` - Authentication
+- `*` - 404 (must be last route)
 
 ### Core Data Flow
 
@@ -312,22 +314,40 @@ Location: `supabase/functions/`
 
 ### 1. parse-receipt
 
-**Purpose:** Parse receipt images using AI (Gemini 2.5 Flash)
+**Purpose:** Parse receipt images and PDFs using hybrid approach (PDF text extraction + AI vision)
 
 **Input:**
 - `imageUrls` (array) or legacy `imageUrl` (single string)
+- `pdfUrl` (optional) - Direct URL to raw PDF file for text extraction
 - `originalFilename` (optional) - for date hint extraction
 
-**Features:**
-- Multi-page receipt support
-- **Direct PDF text extraction** (hybrid approach: uses text layer if available)
-- Store pattern learning from `store_patterns` table
-- Sophisticated prompt engineering for accurate extraction
-- **Swedish abbreviation rules** (st, kg, pant, rabatt)
-- Discount/rebate handling (negative amounts applied to previous product)
-- Multi-line product name detection
-- Never creates items with negative prices
-- Category mapping to 14 Swedish categories
+**Processing Strategy (Priority Order):**
+
+1. **PDF Text Extraction** (if `pdfUrl` provided):
+   - Uses `npm:pdf-parse@1.1.1` library (Deno-compatible via npm: prefix)
+   - Passes `Uint8Array` to pdf-parse (NOT `Buffer` - Deno doesn't have Buffer global)
+   - Extracts perfect text from PDF layer (1144 characters typical)
+   - Attempts structured parsing with `parseICAReceiptText()` function
+
+2. **Structured Parser** (if PDF text available):
+   - Code-based parsing for 100% accuracy
+   - Looks for 8-13 digit article numbers
+   - Handles multi-line product names
+   - Applies discount lines to products above them
+   - **Currently under development** - returns to AI if parsing fails
+
+3. **AI Vision Fallback** (always runs if structured parser fails):
+   - Uses `google/gemini-2.5-flash` via Lovable AI Gateway
+   - Receives PDF text in prompt for improved accuracy
+   - Applies learned patterns from `store_patterns` table
+   - Handles multi-line names, discounts, Swedish abbreviations
+
+**Key Implementation Details:**
+
+- **pdf-parse IS Deno compatible**: Uses npm: import prefix, works perfectly
+- **Debug logging**: Returns `_debug.debugLog` array showing each step
+- **Error resilience**: Falls back to AI if PDF extraction or structured parsing fails
+- **Swedish receipt format handling**: st, kg, pant, rabatt, multi-line names
 
 **Output:**
 ```typescript
@@ -342,13 +362,12 @@ Location: `supabase/functions/`
     category: string;
     discount?: number;
   }>;
+  _debug?: {
+    method: 'structured_parser' | 'ai_parser';
+    debugLog: string[];
+  };
 }
 ```
-
-**Error Handling:**
-- Rate limits (429) from AI gateway
-- Credit depletion (402)
-- Invalid image formats
 
 **Environment Variables:**
 - `LOVABLE_API_KEY` - For AI gateway access
