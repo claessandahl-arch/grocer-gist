@@ -127,7 +127,47 @@ serve(async (req) => {
 
     const promptText = `Parse this ${imagesToProcess.length > 1 ? imagesToProcess.length + '-page ' : ''}grocery receipt${imagesToProcess.length > 1 ? '. Combine information from ALL pages into a single receipt. The images are in page order.' : ''} and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), category, and discount (as number, optional).
 
-${pdfText ? `\n📜 TEXT LAYER EXTRACTED FROM PDF:\n${pdfText}\n\n⚠️ INSTRUCTION: Use the extracted text above as the PRIMARY source of truth for item names and prices, as it is more accurate than OCR. Use the image only for visual confirmation or if the text is garbled.\n` : ''}
+${pdfText ? `\n📜 TEXT LAYER EXTRACTED FROM PDF:\n${pdfText}\n\n⚠️ CRITICAL: Use the extracted text above as the PRIMARY source of truth. The text layer is 100% accurate. DO NOT rely on OCR from images. Copy product names EXACTLY as they appear in the extracted text.\n` : ''}
+
+🔴 TOP PRIORITY - ICA RECEIPT PARSING RULES:
+
+For ICA/Swedish receipts, the layout is typically:
+[*][Product Name] [Article#] [Qty] [Pris/unit] [Summa]
+[Discount name if any]                          [-Amount]
+
+CRITICAL RULES:
+1. Lines starting with "*" are products WITH ACTIVE DISCOUNTS
+2. The "Summa" column = TOTAL before discount (e.g., 65.90 for 2×22.50 + 20.90)
+3. The next line after a product = DISCOUNT LINE (e.g., -20.90)
+4. FINAL PRICE = Summa - Discount (e.g., 65.90 - 20.90 = 45.00)
+5. ALWAYS check for discount lines immediately after products
+
+MANDATORY STEPS FOR EACH PRODUCT:
+Step 1: Read product line → Extract name from PDF text EXACTLY
+Step 2: Look at next line → If it has a negative amount, IT IS A DISCOUNT
+Step 3: Calculate: final_price = summa_value - abs(discount_value)
+Step 4: Create ONE item with: name, price=final_price, discount=abs(discount_value)
+
+REAL EXAMPLE FROM ICA RECEIPT:
+  PDF Text:
+  "*Linguine                 8008343200134  2,00  22,50     65,90"
+  "Rummo pasta"
+  "                                                        -20,90"
+
+  CORRECT PARSING:
+  {
+    name: "Linguine Rummo pasta",
+    article_number: "8008343200134",
+    quantity: 2,
+    price: 45.00,        // 65.90 - 20.90 = 45.00
+    discount: 20.90,     // abs(-20.90)
+    category: "brod_bageri"
+  }
+
+  WRONG PARSING (DO NOT DO THIS):
+  ❌ name: "Lasagne" (wrong product - you misread it!)
+  ❌ price: 65.90 (this is BEFORE discount, not the final price)
+  ❌ discount: missing (you MUST capture the -20.90)
 
 🏪 STORE NAME RULE:
 - Extract the FULL STORE NAME including branch/location (e.g., "ICA Nära Älvsjö", "Willys Hemma", "Coop Konsum")
@@ -139,37 +179,81 @@ ${originalFilename ? `\n📁 FILENAME HINT: The original filename is "${original
 🚨 CRITICAL PARSING RULES - MUST FOLLOW EXACTLY:
 
 1. MULTI-LINE PRODUCT NAMES:
-   ✅ Products can span multiple lines where the second line continues the product name
-   ✅ If a line has NO price/quantity but follows a product line, it's likely part of the product name
-   ✅ Combine the lines into ONE product with the full name
-   
-   Example:
-   *Juicy Melba    7340131603507    21,00    1,00 st    22,95
-   Nocco                                                  -5,90
-   
-   ❌ WRONG: Two items: "Juicy Melba" and "Nocco"
-   ✅ CORRECT: One item: "Juicy Melba Nocco" with price 17.05 (22.95 - 5.90) and discount 5.90
+   ✅ Products often span 2-3 lines in ICA receipts:
+      - Line 1: "*Linguine" (starts the name, has article#, qty, unit price, summa)
+      - Line 2: "Rummo pasta" (continues the name, NO numbers)
+      - Line 3: "-20,90" (discount, negative amount ONLY)
 
-2. DISCOUNT RULES:
-   ❌ NEVER create items with NEGATIVE prices (e.g., -25.00)
-   ❌ NEVER create separate items for discount lines containing keywords: "rabatt", "special", "2för", "2f", "-KR", "-kr", "kampanj"
-   ✅ When you see a negative amount line:
-      - If the line also contains text without prices/quantity, it's likely continuing the product name from above
-      - The negative amount is the DISCOUNT on the product
-      - DO NOT create a separate item for the discount line
-   
-3. How to correctly handle discounts:
-   - Look at the product line ABOVE the discount line
-   - If the next line has text and a negative amount, combine the names
-   - Original price = the total price shown on the product line
-   - Discount = absolute value of the negative amount (convert to positive number)
-   - Final price = original price - discount
-   - Create ONE item with: name=(combined product name), price=(final price), discount=(discount amount as positive number)
-   
-4. Pattern recognition:
-   - Lines with only text + negative amount = likely part of product name + discount
-   - Lines with discount keywords + negative amount = discount on previous product
-   - These ALL mean: apply discount to the product ABOVE
+   ✅ ALWAYS combine lines until you see:
+      - A line with article number/barcode (next product starts), OR
+      - A line with only a negative amount (discount line)
+
+   Example from ICA:
+   "*Linguine                 8008343200134  2,00  22,50     65,90"
+   "Rummo pasta"
+   "                                                        -20,90"
+
+   ✅ CORRECT PARSING:
+   - Line 1+2 = Product name: "Linguine Rummo pasta"
+   - Line 3 = Discount: 20.90 kr
+   - Final item: { name: "Linguine Rummo pasta", quantity: 2, price: 45.00, discount: 20.90 }
+
+   ❌ WRONG: Creating separate items for "Linguine" and "Rummo pasta"
+   ❌ WRONG: Using "Lasagne" or any other product name not in the text
+   ❌ WRONG: Ignoring the -20,90 discount line
+
+2. DISCOUNT DETECTION - MANDATORY ALGORITHM:
+
+   FOR EVERY PRODUCT LINE, YOU MUST:
+
+   Step A: After reading a product line, peek at the NEXT line
+   Step B: Check if next line contains ONLY:
+           - Whitespace + negative number (e.g., "                    -20,90")
+           - OR discount keywords + negative number (e.g., "rabatt -20,90")
+   Step C: If YES → This is a DISCOUNT line:
+           - discount = abs(negative_amount)
+           - price = summa_from_product_line - discount
+           - Attach discount to the product
+           - DO NOT create separate item for this line
+   Step D: If NO → Next line is a new product or continuation of name
+
+   DISCOUNT LINE PATTERNS (all mean: subtract from product above):
+   ✅ "                                                        -20,90"
+   ✅ "Rummo pasta                                            -20,90"
+   ✅ "rabatt                                                 -10,00"
+   ✅ "2för90 rabatt                                          -25,00"
+   ✅ "-KR 10.00                                              -10,00"
+
+   CRITICAL: Lines starting with "*" = products WITH discounts coming on next line!
+
+   ❌ NEVER create items with NEGATIVE prices
+   ❌ NEVER create separate items for discount lines
+   ❌ NEVER ignore discount lines - they MUST be captured
+
+3. COMBINING MULTI-LINE NAMES WITH DISCOUNTS:
+
+   Pattern: Product name can span multiple lines BEFORE the discount line
+
+   Example:
+   Line 1: "*Linguine                 8008343200134  2,00  22,50     65,90"
+   Line 2: "Rummo pasta"                  ← continuation of name (no numbers)
+   Line 3: "                                                        -20,90"  ← discount
+
+   PARSING LOGIC:
+   1. Read Line 1 → Product starts: "Linguine", summa=65.90, qty=2
+   2. Read Line 2 → No article#/qty → Part of name! Append: "Linguine Rummo pasta"
+   3. Read Line 3 → Negative number only → DISCOUNT! discount=20.90
+   4. Calculate: price = 65.90 - 20.90 = 45.00
+   5. OUTPUT: { name: "Linguine Rummo pasta", quantity: 2, price: 45.00, discount: 20.90 }
+
+4. VALIDATION CHECKLIST (before returning results):
+
+   ✓ Did you check EVERY product line for a discount on the next line?
+   ✓ Are ALL discount values stored as positive numbers in the "discount" field?
+   ✓ Are ALL final prices calculated as: summa - discount?
+   ✓ Did you copy product names EXACTLY from the PDF text?
+   ✓ Are there NO items with negative prices?
+   ✓ Did you combine multi-line product names correctly?
    
 5. SWEDISH ABBREVIATIONS & CONTEXT:
    - "st" = styck (piece/quantity). Example: "2 st" means quantity 2.
@@ -178,28 +262,6 @@ ${originalFilename ? `\n📁 FILENAME HINT: The original filename is "${original
    - "rabatt" = discount.
    - "moms" = tax (ignore line).
    - "öresavrundning" = rounding (ignore line).
-📋 REAL EXAMPLES - CORRECT PARSING:
-
-Example 1 - Multi-line product name:
-  *Juicy Melba    7340131603507    21,00    1,00 st    22,95
-  Nocco                                                  -5,90
-
-❌ WRONG: { name: "Juicy Melba", price: 22.95 }, { name: "Nocco", price: -5.90 }
-✅ CORRECT: { name: "Juicy Melba Nocco", price: 17.05, quantity: 1, discount: 5.90 }
-
-Example 2 - Discount keyword:
-  Nocco BCAA Dr Pepper           69.95
-  2för90 rabatt                  -25.00
-
-❌ WRONG: Two items
-✅ CORRECT: { name: "Nocco BCAA Dr Pepper", price: 44.95, quantity: 1, discount: 25.00 }
-
-Example 3 - Standalone discount line:
-  Lätta 70% 500g                 40.00
-  -KR 10.00                      -10.00
-
-❌ WRONG: Two items with one having negative price
-✅ CORRECT: { name: "Lätta 70% 500g", price: 30.00, quantity: 1, discount: 10.00 }
 
 6. CATEGORY MAPPING:
    Categorize each item into ONE of these Swedish categories:
@@ -215,18 +277,10 @@ Example 3 - Standalone discount line:
    - pant (Bottle deposit/return)
    - other (Anything else)
 
-7. ICA / SWEDISH RECEIPT LOGIC:
-   - "Pris" column often shows the *Final Unit Price* (after discount).
-   - "Summa" column often shows the *Original Line Total* (before discount).
-   - Discount is often on the next line (e.g., "Rummo pasta -20,90").
-   - LOGIC:
-     1. Identify the item line (e.g., "Linguine... 65,90").
-     2. Identify the discount line below it (e.g., "-20,90").
-     3. price = (Summa - Discount). Example: 65.90 - 20.90 = 45.00.
-     4. discount = 20.90.
-     5. quantity = 2.
-     (Check: 45.00 / 2 = 22.50, which matches the "Pris" column).
-   - ALWAYS extract article_number (Artikelnummer) if available (e.g., "8008343200134").
+7. ARTICLE NUMBERS:
+   - ALWAYS extract article_number (Artikelnummer/GTIN/EAN) if visible
+   - Usually 8-13 digits (e.g., "8008343200134")
+   - Helps with product identification and matching
 
 ${storeContext}
 
