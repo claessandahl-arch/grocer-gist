@@ -239,15 +239,29 @@ const Upload = () => {
           }
 
           // Call AI once with all image URLs and optional PDF URL
+          logger.debug(`📤 Calling parse-receipt with:`, {
+            imageCount: imageUrls.length,
+            hasPdfUrl: !!pdfUrl,
+            filename: baseFilename
+          });
+
           const { data: parsedData, error: functionError } = await supabase.functions.invoke('parse-receipt', {
             body: { imageUrls: imageUrls, originalFilename: baseFilename, pdfUrl: pdfUrl }
           });
 
           if (functionError || !parsedData) {
+            logger.error(`❌ Parse error for ${baseFilename}:`, functionError);
             errorCount++;
             toast.error(`Misslyckades: ${baseFilename}`);
             return;
           }
+
+          // Log the parsed data so we can see what the AI returned
+          logger.debug(`📥 Parsed receipt data for ${baseFilename}:`, parsedData);
+          logger.debug(`📊 Items found:`, parsedData.items?.length || 0);
+          parsedData.items?.forEach((item: any, idx: number) => {
+            logger.debug(`  ${idx + 1}. ${item.name} - ${item.quantity}x ${item.price} kr${item.discount ? ` (discount: ${item.discount} kr)` : ''}`);
+          });
 
           // Check for duplicates with fuzzy store name matching
           // Normalize store names to handle variations like "ICA" vs "ICA Nära"

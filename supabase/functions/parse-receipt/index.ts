@@ -91,12 +91,18 @@ serve(async (req) => {
           const data = await pdf(Buffer.from(pdfBuffer));
           if (data.text) {
             pdfText = `\n\n--- EXTRACTED TEXT FROM PDF ---\n${data.text}\n-------------------------------\n`;
-            console.log('Successfully extracted text from raw PDF');
+            console.log('✅ Successfully extracted text from raw PDF');
+            console.log('📄 PDF Text Length:', data.text.length, 'characters');
+            console.log('📄 First 500 chars:', data.text.substring(0, 500));
+          } else {
+            console.log('⚠️ PDF has no text layer - will rely on OCR from image');
           }
         }
       } catch (e) {
-        console.error('Error extracting text from raw PDF:', e);
+        console.error('❌ Error extracting text from raw PDF:', e);
       }
+    } else {
+      console.log('⚠️ No pdfUrl provided - will rely on OCR from images');
     }
 
     // Priority 2: Fallback to checking image URLs (legacy behavior)
