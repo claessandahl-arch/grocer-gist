@@ -41,15 +41,32 @@ export default function Diagnostics() {
         queryFn: async () => {
             if (!user) return [];
 
-            // Find mappings where mapped_name is null or empty string
+            // Fetch all user mappings and filter client-side to be safe
             const { data, error } = await supabase
                 .from('product_mappings')
                 .select('*')
-                .eq('user_id', user.id)
-                .or('mapped_name.is.null,mapped_name.eq.""');
+                .eq('user_id', user.id);
 
             if (error) throw error;
-            return data;
+
+            // Filter for empty or whitespace-only mapped_names
+            return data.filter(m => !m.mapped_name || m.mapped_name.trim() === '');
+        },
+        enabled: !!user,
+    });
+
+    // Fetch receipt count
+    const { data: receiptCount = 0, isLoading: loadingReceipts } = useQuery({
+        queryKey: ['diagnostics-receipt-count', user?.id],
+        queryFn: async () => {
+            if (!user) return 0;
+            const { count, error } = await supabase
+                .from('receipts')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', user.id);
+
+            if (error) throw error;
+            return count || 0;
         },
         enabled: !!user,
     });
@@ -59,11 +76,15 @@ export default function Diagnostics() {
         mutationFn: async () => {
             if (!user) throw new Error("Not authenticated");
 
+            // Delete the specific IDs we found
+            const idsToDelete = emptyMappings.map(m => m.id);
+
+            if (idsToDelete.length === 0) return;
+
             const { error } = await supabase
                 .from('product_mappings')
                 .delete()
-                .eq('user_id', user.id)
-                .or('mapped_name.is.null,mapped_name.eq.""');
+                .in('id', idsToDelete);
 
             if (error) throw error;
         },
@@ -163,6 +184,31 @@ export default function Diagnostics() {
                                         </AlertDialogFooter>
                                     </AlertDialogContent>
                                 </AlertDialog>
+                            </div>
+
+                            {/* Receipt Count Check */}
+                            <div className="flex items-center justify-between p-4 border rounded-lg bg-card/50 mt-4">
+                                <div className="space-y-1">
+                                    <h3 className="font-medium">Antal kvitton</h3>
+                                    <p className="text-sm text-muted-foreground">
+                                        Kontrollera att alla kvitton är raderade.
+                                    </p>
+                                    <div className="flex items-center gap-2 mt-2">
+                                        {loadingReceipts ? (
+                                            <p className="text-xs text-muted-foreground">Laddar...</p>
+                                        ) : receiptCount > 0 ? (
+                                            <span className="text-sm font-medium text-orange-600 flex items-center gap-1">
+                                                <AlertTriangle className="h-3 w-3" />
+                                                {receiptCount} kvitton finns kvar i databasen
+                                            </span>
+                                        ) : (
+                                            <span className="text-sm font-medium text-green-600 flex items-center gap-1">
+                                                <CheckCircle className="h-3 w-3" />
+                                                0 kvitton (Systemet är tomt)
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
 
                             {/* Corrupted Categories Tool (Migrated from old DiagnosticTool) */}
