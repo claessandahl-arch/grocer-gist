@@ -531,15 +531,47 @@ ${originalFilename ? `\n📁 FILENAME HINT: The original filename is "${original
 
 🚨 CRITICAL PARSING RULES - MUST FOLLOW EXACTLY:
 
-1. MULTI-LINE PRODUCT NAMES:
+1. MULTI-LINE PRODUCT NAMES - COMPREHENSIVE DETECTION:
+
+   ⭐ GOLDEN RULE: If a line contains text but NO price/article number/quantity data, it is a CONTINUATION of the previous product name.
+
    ✅ Products often span 2-3 lines in ICA receipts:
       - Line 1: "*Linguine" (starts the name, has article#, qty, unit price, summa)
       - Line 2: "Rummo pasta" (continues the name, NO numbers)
       - Line 3: "-20,90" (discount, negative amount ONLY)
 
+   ✅ FLAVOR/BRAND ON SECOND LINE PATTERN:
+      Sometimes the flavor or brand appears on the second line:
+
+      Example 1 - "Blood Orange Nocco":
+      Line 1: "*Blood Orange              7350073321017  1,00  20,00     40,00"
+      Line 2: "Nocco"                     ← Brand name, NO price data
+      Line 3: "                                                         -5,90"
+
+      ✅ CORRECT: { name: "Blood Orange Nocco", quantity: 1, price: 34.10, discount: 5.90 }
+      ❌ WRONG: Creating TWO items - "Blood Orange" (40 kr) and "Nocco" (0 kr)
+
+      Example 2 - "Juicy Melba Nocco":
+      Line 1: "*Juicy Melba               7350073321024  1,00  20,00     40,00"
+      Line 2: "Nocco"
+
+      ✅ CORRECT: { name: "Juicy Melba Nocco", quantity: 1, price: 40.00 }
+      ❌ WRONG: Splitting into two separate products
+
+   ✅ DETECTION ALGORITHM - Apply to EVERY line:
+      1. Read a line with product data (article#, qty, price)
+      2. Peek at NEXT line
+      3. Does next line have ONLY text (no numbers except possibly in middle of words)?
+         → YES: It's a name continuation! Append to current product name
+      4. After appending, peek at the line AFTER that
+      5. Is it a discount line (negative number)?
+         → YES: Apply discount to the combined product
+      6. Continue until you hit a new product (article#) or discount line
+
    ✅ ALWAYS combine lines until you see:
       - A line with article number/barcode (next product starts), OR
-      - A line with only a negative amount (discount line)
+      - A line with only a negative amount (discount line), OR
+      - A line with price/quantity columns (next product starts)
 
    Example from ICA:
    "*Linguine                 8008343200134  2,00  22,50     65,90"
@@ -552,8 +584,10 @@ ${originalFilename ? `\n📁 FILENAME HINT: The original filename is "${original
    - Final item: { name: "Linguine Rummo pasta", quantity: 2, price: 45.00, discount: 20.90 }
 
    ❌ WRONG: Creating separate items for "Linguine" and "Rummo pasta"
+   ❌ WRONG: Creating an item "Nocco" with 0 kr price
    ❌ WRONG: Using "Lasagne" or any other product name not in the text
    ❌ WRONG: Ignoring the -20,90 discount line
+   ❌ WRONG: Not combining "Blood Orange" with "Nocco" on the next line
 
 2. DISCOUNT DETECTION - MANDATORY ALGORITHM:
 
@@ -587,9 +621,22 @@ ${originalFilename ? `\n📁 FILENAME HINT: The original filename is "${original
 
    Pattern: Product name can span multiple lines BEFORE the discount line
 
-   Example:
+   Example 1 - Brand/flavor on second line:
+   Line 1: "*Blood Orange              7350073321017  1,00  20,00     40,00"
+   Line 2: "Nocco"                     ← brand name (no numbers!)
+   Line 3: "                                                         -5,90"  ← discount
+
+   PARSING LOGIC:
+   1. Read Line 1 → Product starts: "Blood Orange", summa=40.00, qty=1
+   2. Read Line 2 → Text only, no numbers → Part of name! Append: "Blood Orange Nocco"
+   3. Read Line 3 → Negative number only → DISCOUNT! discount=5.90
+   4. Calculate: price = 40.00 - 5.90 = 34.10
+   5. OUTPUT: { name: "Blood Orange Nocco", quantity: 1, price: 34.10, discount: 5.90 }
+   ❌ WRONG: Creating "Blood Orange" (40 kr) and "Nocco" (0 kr) as separate items
+
+   Example 2 - Traditional multi-line with discount:
    Line 1: "*Linguine                 8008343200134  2,00  22,50     65,90"
-   Line 2: "Rummo pasta"                  ← continuation of name (no numbers)
+   Line 2: "Rummo pasta"              ← continuation of name (no numbers)
    Line 3: "                                                        -20,90"  ← discount
 
    PARSING LOGIC:
@@ -607,6 +654,10 @@ ${originalFilename ? `\n📁 FILENAME HINT: The original filename is "${original
    ✓ Did you copy product names EXACTLY from the PDF text?
    ✓ Are there NO items with negative prices?
    ✓ Did you combine multi-line product names correctly?
+   ✓ Are there NO items with 0 kr price (except "pant" items)?
+      ❌ If you see an item with 0 kr, it's likely a flavor/brand line that should have been combined with the previous item!
+   ✓ Did you check for text-only lines between product lines and discount lines?
+      ❌ Example: If you see "Nocco" as a separate 0 kr item, merge it with the previous "Blood Orange" item!
    
 5. SWEDISH ABBREVIATIONS & CONTEXT:
    - "st" = styck (piece/quantity). Example: "2 st" means quantity 2.
