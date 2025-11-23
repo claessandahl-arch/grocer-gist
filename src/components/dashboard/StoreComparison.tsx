@@ -10,27 +10,32 @@ export const StoreComparison = () => {
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
-      
+
       const { data, error } = await supabase
         .from('receipts')
         .select('*')
         .eq('user_id', user.id)
         .order('receipt_date', { ascending: false });
-      
+
       if (error) throw error;
       return data;
     },
   });
 
   // Group receipts by store
-  const storeData: Record<string, { total: number; count: number }> = {};
+  const storeData: Record<string, { total: number; count: number; savings: number }> = {};
   receipts?.forEach(receipt => {
     const store = receipt.store_name || 'Okänd butik';
     if (!storeData[store]) {
-      storeData[store] = { total: 0, count: 0 };
+      storeData[store] = { total: 0, count: 0, savings: 0 };
     }
     storeData[store].total += Number(receipt.total_amount || 0);
     storeData[store].count += 1;
+
+    // Calculate savings from items
+    const items = (receipt.items as unknown as Array<{ discount?: number }>) || [];
+    const receiptSavings = items.reduce((sum, item) => sum + (Number(item.discount) || 0), 0);
+    storeData[store].savings += receiptSavings;
   });
 
   const stores = Object.entries(storeData)
@@ -38,6 +43,7 @@ export const StoreComparison = () => {
       name,
       total: data.total,
       count: data.count,
+      savings: data.savings,
       average: data.count > 0 ? data.total / data.count : 0,
     }))
     .sort((a, b) => b.total - a.total);
@@ -101,7 +107,7 @@ export const StoreComparison = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-3">
               <div>
                 <p className="text-sm text-muted-foreground">Total spenderat</p>
                 <p className="text-2xl font-bold">{store.total.toLocaleString('sv-SE', { maximumFractionDigits: 0 })} kr</p>
@@ -109,6 +115,12 @@ export const StoreComparison = () => {
               <div>
                 <p className="text-sm text-muted-foreground">Snitt per kvitto</p>
                 <p className="text-2xl font-bold">{store.average.toLocaleString('sv-SE', { maximumFractionDigits: 0 })} kr</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Total besparing</p>
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                  {store.savings > 0 ? '-' : ''}{store.savings.toLocaleString('sv-SE', { maximumFractionDigits: 0 })} kr
+                </p>
               </div>
             </div>
           </CardContent>
