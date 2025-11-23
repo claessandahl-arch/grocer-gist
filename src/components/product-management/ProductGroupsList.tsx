@@ -100,15 +100,31 @@ export function ProductGroupsList({
   });
 
   const removeFromGroup = useMutation({
-    mutationFn: async ({ productId, isGlobal }: { productId: string; isGlobal: boolean }) => {
-      const table = isGlobal ? 'global_product_mappings' : 'product_mappings';
+    mutationFn: async ({ productId, isGlobal, originalName }: { productId: string; isGlobal: boolean; originalName: string }) => {
+      if (isGlobal) {
+        // For global products, we need to create a user mapping that "overrides" the global one
+        // by setting mapped_name to an empty string (effectively ungrouping it for this user)
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error("Not authenticated");
 
-      const { error } = await supabase
-        .from(table)
-        .update({ mapped_name: null })
-        .eq('id', productId);
+        const { error } = await supabase
+          .from('product_mappings')
+          .insert({
+            user_id: user.id,
+            original_name: originalName,
+            mapped_name: '', // Empty string means ungrouped
+          });
 
-      if (error) throw error;
+        if (error) throw error;
+      } else {
+        // For user mappings, we just update the existing record
+        const { error } = await supabase
+          .from('product_mappings')
+          .update({ mapped_name: '' }) // Set to empty string instead of null
+          .eq('id', productId);
+
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       toast.success("Produkt borttagen från gruppen");
@@ -304,7 +320,8 @@ export function ProductGroupsList({
                               size="sm"
                               onClick={() => removeFromGroup.mutate({
                                 productId: product.id,
-                                isGlobal: !product.user_id
+                                isGlobal: !product.user_id,
+                                originalName: product.original_name
                               })}
                               className="h-6 w-6 p-0"
                             >
