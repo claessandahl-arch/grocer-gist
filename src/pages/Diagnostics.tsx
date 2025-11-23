@@ -35,22 +35,32 @@ export default function Diagnostics() {
         }
     });
 
-    // Fetch empty mappings count
+    // Fetch empty mappings count (both user and global)
     const { data: emptyMappings = [], isLoading: loadingEmptyMappings } = useQuery({
         queryKey: ['diagnostics-empty-mappings', user?.id],
         queryFn: async () => {
             if (!user) return [];
 
-            // Fetch all user mappings and filter client-side to be safe
-            const { data, error } = await supabase
+            // Fetch user mappings
+            const { data: userMappings, error: userError } = await supabase
                 .from('product_mappings')
                 .select('*')
                 .eq('user_id', user.id);
 
-            if (error) throw error;
+            if (userError) throw userError;
 
-            // Filter for empty or whitespace-only mapped_names
-            return data.filter(m => !m.mapped_name || m.mapped_name.trim() === '');
+            // Fetch global mappings with empty mapped_name
+            const { data: globalMappings, error: globalError } = await supabase
+                .from('global_product_mappings')
+                .select('*');
+
+            if (globalError) throw globalError;
+
+            // Combine and filter for empty or whitespace-only mapped_names
+            const userEmpty = (userMappings || []).filter(m => !m.mapped_name || m.mapped_name.trim() === '').map(m => ({ ...m, source: 'user' }));
+            const globalEmpty = (globalMappings || []).filter(m => !m.mapped_name || m.mapped_name.trim() === '').map(m => ({ ...m, source: 'global' }));
+
+            return [...userEmpty, ...globalEmpty];
         },
         enabled: !!user,
     });
@@ -115,23 +125,37 @@ export default function Diagnostics() {
         mutationFn: async () => {
             if (!user) throw new Error("Not authenticated");
 
-            // Delete the specific IDs we found
-            const idsToDelete = emptyMappings.map(m => m.id);
+            if (emptyMappings.length === 0) return;
 
-            if (idsToDelete.length === 0) return;
+            // Separate user and global mappings
+            const userIds = emptyMappings.filter((m: any) => m.source === 'user').map(m => m.id);
+            const globalIds = emptyMappings.filter((m: any) => m.source === 'global').map(m => m.id);
 
-            const { error } = await supabase
-                .from('product_mappings')
-                .delete()
-                .in('id', idsToDelete);
+            // Delete user mappings
+            if (userIds.length > 0) {
+                const { error: userError } = await supabase
+                    .from('product_mappings')
+                    .delete()
+                    .in('id', userIds);
 
-            if (error) throw error;
+                if (userError) throw userError;
+            }
+
+            // Delete global mappings
+            if (globalIds.length > 0) {
+                const { error: globalError } = await supabase
+                    .from('global_product_mappings')
+                    .delete()
+                    .in('id', globalIds);
+
+                if (globalError) throw globalError;
+            }
         },
         onSuccess: () => {
             toast.success("Tomma kopplingar har rensats bort!");
             queryClient.invalidateQueries({ queryKey: ['diagnostics-empty-mappings'] });
-            // Also invalidate product management queries to reflect changes there
             queryClient.invalidateQueries({ queryKey: ['user-product-mappings'] });
+            queryClient.invalidateQueries({ queryKey: ['global-product-mappings'] });
         },
         onError: (error) => {
             console.error("Cleanup error:", error);
@@ -177,7 +201,7 @@ export default function Diagnostics() {
                                 <div className="space-y-1">
                                     <h3 className="font-medium">Rensa tomma kopplingar</h3>
                                     <p className="text-sm text-muted-foreground">
-                                        Tar bort produktkopplingar som saknar gruppnamn. Dessa visas ofta som "Ungrouped Products" även efter att kvitton raderats.
+                                        Tar bort produkt kopplingar (både personliga och globala) som saknar gruppnamn. Dessa visas som "Ungrouped Products" även efter att kvitton raderats.
                                     </p>
                                     {loadingEmptyMappings ? (
                                         <p className="text-xs text-muted-foreground">Laddar status...</p>
