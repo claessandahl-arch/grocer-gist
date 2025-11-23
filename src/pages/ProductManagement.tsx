@@ -238,6 +238,10 @@ export default function ProductManagement() {
       );
     }
 
+    if (filterType === 'mixed-categories') {
+      filtered = filtered.filter(g => g.categories.size > 1);
+    }
+
     // Sort
     filtered = [...filtered].sort((a, b) => {
       switch (sortBy) {
@@ -256,7 +260,7 @@ export default function ProductManagement() {
   const isLoading = receiptsLoading || userMappingsLoading || globalMappingsLoading;
 
   const showLeftPanel = filterType === 'all' || filterType === 'ungrouped';
-  const showRightPanel = filterType === 'all' || filterType === 'grouped';
+  const showRightPanel = filterType === 'all' || filterType === 'grouped' || filterType === 'mixed-categories';
   const showAutoGrouping = filterType === 'auto-grouping';
 
   return (

@@ -50,6 +50,7 @@ export function ProductSearchFilter({
               <SelectItem value="all">Alla</SelectItem>
               <SelectItem value="ungrouped">Ogrupperade</SelectItem>
               <SelectItem value="grouped">Grupperade</SelectItem>
+              <SelectItem value="mixed-categories">Blandade kategorier ⚠️</SelectItem>
               <SelectItem value="auto-grouping">Auto-Gruppering ✨</SelectItem>
             </SelectContent>
           </Select>
