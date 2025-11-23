@@ -82,15 +82,8 @@ function parseWillysReceiptText(text: string): { items: ParsedItem[]; store_name
     let i = startIdx + 1;
 
     while (i < endIdx) {
-      const line = lines[i];
+      let line = lines[i];
       console.log(`\n🔍 Line ${i}: "${line}"`);
-
-      // Skip weight/price calculation lines (format: "0,842kg*169,00kr/kg")
-      if (/^\d+[,.]?\d*kg\*\d+[,.]?\d*kr\/kg/.test(line)) {
-        console.log('  ⏭️  Weight calculation line, skipping (part of previous item)');
-        i++;
-        continue;
-      }
 
       // Check for discount embedded in line (format: "Rabatt:SALLAD -10,00")
       const discountInLineMatch = line.match(/Rabatt:(.+?)\s+(-\d+[,.]?\d*)/);
@@ -107,13 +100,42 @@ function parseWillysReceiptText(text: string): { items: ParsedItem[]; store_name
         continue;
       }
 
+      // Check if this line has no price but next line is a weight calculation
+      // Pattern: "MAJSKY.LÅRFILÉ" followed by "0,842kg*169,00kr/kg 142,30"
+      const priceMatch = line.match(/(-?\d+[,.]?\d*)\s*$/);
+      if (!priceMatch && i + 1 < endIdx) {
+        const nextLine = lines[i + 1];
+        const weightCalcMatch = nextLine.match(/^(\d+[,.]?\d*)kg\*(\d+[,.]?\d*)kr\/kg\s+(\d+[,.]?\d*)$/);
+        if (weightCalcMatch) {
+          console.log('  🔗 Product name on this line, weight+price on next line - combining');
+          // Combine the lines: product name from current line, weight and price from next
+          const productName = line.trim();
+          const weight = parseFloat(weightCalcMatch[1].replace(',', '.'));
+          const price = parseFloat(weightCalcMatch[3].replace(',', '.'));
+
+          console.log(`  🏷️  Product: "${productName}"`);
+          console.log(`  📦 Quantity: ${weight} kg`);
+          console.log(`  💰 Price: ${price} kr`);
+
+          items.push({
+            name: productName,
+            price: parseFloat(price.toFixed(2)),
+            quantity: parseFloat(weight.toFixed(3)),
+            category: 'other'
+          });
+
+          console.log(`  ✅ Added: ${productName} (${weight}kg x ${price} kr)`);
+          i += 2; // Skip both lines
+          continue;
+        }
+      }
+
       // Willys format patterns:
       // "PRODUCT NAME PRICE" - e.g., "GURKA IMPORT 14,90"
       // "PRODUCT NAME 2st*17,90 35,80" - e.g., "AUBERGINE ST 2st*17,90 35,80"
-      // "PRODUCT NAME 0,842kg*169,00kr/kg 142,30" - weighted item
+      // "PRODUCT NAME 0,842kg*169,00kr/kg 142,30" - weighted item (on one line)
 
       // Extract price (last number on the line, can be negative for PANTRETUR)
-      const priceMatch = line.match(/(-?\d+[,.]?\d*)\s*$/);
       if (!priceMatch) {
         console.log('  ⏭️  No price found, skipping');
         i++;
