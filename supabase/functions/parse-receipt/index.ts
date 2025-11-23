@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import pdf from "npm:pdf-parse@1.1.1";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -296,10 +297,25 @@ serve(async (req) => {
           const pdfBuffer = await pdfResponse.arrayBuffer();
           debugLog.push(`→ PDF buffer size: ${pdfBuffer.byteLength} bytes`);
 
-          // Note: PDF text extraction is handled on client-side now
-          // This section is kept for backwards compatibility
-          console.log('⚠️ PDF processing moved to client-side - using image OCR');
-          debugLog.push('✗ PDF text extraction moved to client-side');
+          // Deno doesn't have Buffer global - use Uint8Array instead
+          const uint8Array = new Uint8Array(pdfBuffer);
+          debugLog.push('→ Converting to Uint8Array...');
+
+          const data = await pdf(uint8Array);
+          debugLog.push(`→ pdf-parse completed, text length: ${data.text?.length || 0}`);
+
+          if (data.text) {
+            rawPdfText = data.text; // Store raw text
+            pdfText = `\n\n--- EXTRACTED TEXT FROM PDF ---\n${data.text}\n-------------------------------\n`;
+            console.log('✅ Successfully extracted text from raw PDF');
+            console.log('📄 PDF Text Length:', data.text.length, 'characters');
+            console.log('📄 First 500 chars:', data.text.substring(0, 500));
+            debugLog.push(`✓ PDF text extracted: ${data.text.length} characters`);
+            debugLog.push(`✓ First 100 chars: ${data.text.substring(0, 100)}`);
+          } else {
+            console.log('⚠️ PDF has no text layer - will rely on OCR from image');
+            debugLog.push('✗ PDF has no text layer');
+          }
         } else {
           console.error(`❌ Failed to fetch PDF: ${pdfResponse.status} ${pdfResponse.statusText}`);
           debugLog.push(`✗ Failed to fetch PDF: ${pdfResponse.status}`);
@@ -323,7 +339,26 @@ serve(async (req) => {
           (originalFilename && originalFilename.toLowerCase().endsWith('.pdf'));
 
         if (isPdf) {
-          console.log('⚠️ PDF processing moved to client-side - using image OCR');
+          try {
+            console.log('Detected PDF in images, fetching content for text extraction...');
+            const pdfResponse = await fetch(url);
+            if (pdfResponse.ok) {
+              const pdfBuffer = await pdfResponse.arrayBuffer();
+              // Deno doesn't have Buffer global - use Uint8Array instead
+              const uint8Array = new Uint8Array(pdfBuffer);
+              const data = await pdf(uint8Array);
+              if (data.text) {
+                rawPdfText += data.text; // Store raw text
+                pdfText += `\n\n--- EXTRACTED TEXT FROM PDF PAGE ---\n${data.text}\n------------------------------------\n`;
+                console.log('✅ Successfully extracted text from PDF image');
+              }
+            } else {
+              console.error(`❌ Failed to fetch PDF from images: ${pdfResponse.status} ${pdfResponse.statusText}`);
+            }
+          } catch (e) {
+            console.error('❌ Error extracting text from PDF image:', e);
+            console.error('Error details:', e instanceof Error ? e.message : String(e));
+          }
         }
       }
     }
