@@ -51,6 +51,17 @@ This project is actively developed with Lovable.ai:
    - Frontend changes deploy automatically
    - Edge Function changes require manual deployment request
    - May take a few minutes after deployment to see changes
+   - **Testing is critical**: Always test with real data after deployment
+   - If the fix doesn't work, create a new PR with the correction
+
+6. **Iterative Edge Function Development**:
+   - **Test with actual receipts**: Console output from real uploads reveals the true format
+   - **Don't assume the format**: What you think the receipt looks like may differ from reality
+   - **Example from this project**:
+     - Initially thought: 3-line pattern (product, brand on separate line, discount on third line)
+     - Reality: 2-line pattern (product, brand + discount on same line)
+   - **Process**: Merge PR → Deploy → Test → If wrong, create new PR with actual format
+   - **Deployment request should reference the PR number** for Lovable's tracking
 
 ## Git Workflow
 
