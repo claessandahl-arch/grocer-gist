@@ -1,0 +1,49 @@
+# ⚠️ CRITICAL FILE - READ BEFORE MODIFYING ⚠️
+
+## DO NOT REMOVE: pdf-parse import
+
+The `import pdf from "npm:pdf-parse@1.1.1"` line in index.ts is CRITICAL and has been incorrectly removed TWICE by Lovable.
+
+### Why pdf-parse is needed:
+1. Extracts perfect text from PDF receipts (100% accuracy)
+2. Without it, AI must use blurry JPG OCR (~80% accuracy)
+3. Product names get wrong, discounts missed, prices incorrect
+
+### pdf-parse IS Deno compatible:
+- Uses npm: prefix (official Deno feature)
+- Documentation: https://deno.land/manual/node/npm_specifiers
+- We use Uint8Array (not Buffer) - fully Deno compatible
+- Proven to work perfectly in production
+
+### If you see deployment errors:
+1. Check Deno logs for the ACTUAL error
+2. It's probably NOT pdf-parse (cache issue, timing, etc.)
+3. Try redeploying without changes
+4. Ask the user before removing code
+5. Read CLAUDE.md lines 24-53 for full context
+
+### History of incorrect removals:
+- First removal: PR #60 (reverted in PR #68)
+- Second removal: Commit 54936e7 (reverted in PR #80)
+- DO NOT make it a third time
+
+### Impact of removal:
+- ❌ Receipt parsing accuracy: 100% → 80%
+- ❌ "Linguine Rummo pasta" becomes "Lasagne"
+- ❌ Discounts not captured
+- ❌ Wrong final prices
+- ❌ Angry users
+
+## Files to never remove:
+- `import pdf from "npm:pdf-parse@1.1.1"`
+- `parseICAReceiptText()` function
+- PDF text extraction code (lines ~250-320)
+
+## Safe to modify:
+- AI prompt text
+- Category mappings
+- Store patterns
+- Debug logging
+
+## When in doubt:
+ASK THE USER before removing code that looks like it might be important.

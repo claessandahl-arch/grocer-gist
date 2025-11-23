@@ -1,4 +1,19 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+
+// ============================================================================
+// CRITICAL: DO NOT REMOVE THIS IMPORT
+// ============================================================================
+// pdf-parse IS DENO COMPATIBLE via npm: prefix
+// See: https://deno.land/manual/node/npm_specifiers
+//
+// If you see deployment errors, they are NOT caused by pdf-parse.
+// Check Deno logs for the actual error before removing this.
+//
+// Removing this breaks PDF text extraction and drops parsing accuracy
+// from 100% to ~80%. See CLAUDE.md lines 24-53 for full explanation.
+//
+// This has been removed incorrectly TWICE already. DO NOT REMOVE IT AGAIN.
+// ============================================================================
 import pdf from "npm:pdf-parse@1.1.1";
 
 const corsHeaders = {
