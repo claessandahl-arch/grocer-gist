@@ -69,7 +69,7 @@ function parseWillysReceiptText(text: string): { items: ParsedItem[]; store_name
 
     // Find the start and end of product list
     const startIdx = lines.findIndex(l => l.includes('Start Självscanning') || l.includes('START'));
-    const endIdx = lines.findIndex(l => l.includes('Slut Självscanning') || l.includes('SLUT') || l.includes('Totalt'));
+    const endIdx = lines.findIndex(l => l.includes('Slut Självscanning') || l.includes('SLUT'));
 
     console.log(`📍 Product list from line ${startIdx} to ${endIdx}`);
 
@@ -85,31 +85,35 @@ function parseWillysReceiptText(text: string): { items: ParsedItem[]; store_name
       const line = lines[i];
       console.log(`\n🔍 Line ${i}: "${line}"`);
 
-      // Skip discount lines (start with "Rabatt:")
-      if (line.startsWith('Rabatt:')) {
-        console.log('  ⏭️  Discount line, will apply to previous item');
+      // Skip weight/price calculation lines (format: "0,842kg*169,00kr/kg")
+      if (/^\d+[,.]?\d*kg\*\d+[,.]?\d*kr\/kg/.test(line)) {
+        console.log('  ⏭️  Weight calculation line, skipping (part of previous item)');
+        i++;
+        continue;
+      }
+
+      // Check for discount embedded in line (format: "Rabatt:SALLAD -10,00")
+      const discountInLineMatch = line.match(/Rabatt:(.+?)\s+(-\d+[,.]?\d*)/);
+      if (discountInLineMatch) {
+        console.log('  💰 Discount line detected (embedded format)');
         if (items.length > 0) {
-          const discountMatch = line.match(/-?(\d+[,.]?\d*)/);
-          if (discountMatch) {
-            const discount = parseFloat(discountMatch[1].replace(',', '.'));
-            const lastItem = items[items.length - 1];
-            lastItem.discount = discount;
-            lastItem.price = lastItem.price - discount;
-            console.log(`  ✅ Applied ${discount} kr discount to ${lastItem.name}`);
-          }
+          const discount = parseFloat(discountInLineMatch[2].replace(',', '.').replace('-', ''));
+          const lastItem = items[items.length - 1];
+          lastItem.discount = discount;
+          lastItem.price = parseFloat((lastItem.price - discount).toFixed(2));
+          console.log(`  ✅ Applied ${discount} kr discount to ${lastItem.name}`);
         }
         i++;
         continue;
       }
 
-      // Willys format: PRODUCT NAME [quantity info] PRICE
-      // Examples:
-      // "MOROT 1KG 12,90"
-      // "NAAN ORIGINA BRÖD 2st*29,90 59,80"
-      // "LEVAIN 650G 37,90"
+      // Willys format patterns:
+      // "PRODUCT NAME PRICE" - e.g., "GURKA IMPORT 14,90"
+      // "PRODUCT NAME 2st*17,90 35,80" - e.g., "AUBERGINE ST 2st*17,90 35,80"
+      // "PRODUCT NAME 0,842kg*169,00kr/kg 142,30" - weighted item
 
-      // Extract price (last number on the line)
-      const priceMatch = line.match(/(\d+[,.]?\d*)\s*$/);
+      // Extract price (last number on the line, can be negative for PANTRETUR)
+      const priceMatch = line.match(/(-?\d+[,.]?\d*)\s*$/);
       if (!priceMatch) {
         console.log('  ⏭️  No price found, skipping');
         i++;
@@ -121,31 +125,71 @@ function parseWillysReceiptText(text: string): { items: ParsedItem[]; store_name
       console.log(`  💰 Price: ${price} kr`);
       console.log(`  📝 Before price: "${beforePrice}"`);
 
-      // Check for quantity pattern: "2st*29,90" or "2st"
+      // Check for quantity pattern: "2st*29,90" or just "2st"
       let quantity = 1;
       let productName = beforePrice;
 
-      const qtyMatch = beforePrice.match(/(\d+)st\*?(\d+[,.]?\d*)?/);
+      const qtyMatch = beforePrice.match(/(\d+)st\*(\d+[,.]?\d*)/);
       if (qtyMatch) {
         quantity = parseInt(qtyMatch[1]);
         // Remove the quantity part from product name
         productName = beforePrice.substring(0, beforePrice.indexOf(qtyMatch[0])).trim();
-        console.log(`  📦 Quantity: ${quantity}`);
+        console.log(`  📦 Quantity: ${quantity} (from pattern)`);
         console.log(`  🏷️  Product: "${productName}"`);
       } else {
-        console.log(`  📦 Quantity: 1 (default)`);
-        console.log(`  🏷️  Product: "${productName}"`);
+        // Check for weighted item pattern: "0,842kg*169,00kr/kg"
+        const weightMatch = beforePrice.match(/(\d+[,.]?\d*)kg\*(\d+[,.]?\d*)kr\/kg/);
+        if (weightMatch) {
+          quantity = parseFloat(weightMatch[1].replace(',', '.'));
+          productName = beforePrice.substring(0, beforePrice.indexOf(weightMatch[0])).trim();
+          console.log(`  📦 Quantity: ${quantity} kg (weighted item)`);
+          console.log(`  🏷️  Product: "${productName}"`);
+        } else {
+          console.log(`  📦 Quantity: 1 (default)`);
+          console.log(`  🏷️  Product: "${productName}"`);
+        }
+      }
+
+      // Determine category based on product name
+      let category = 'other';
+      const nameLower = productName.toLowerCase();
+      if (nameLower.includes('pant')) {
+        category = 'pant';
       }
 
       items.push({
         name: productName,
-        price: price,
-        quantity: quantity,
-        category: 'other' // Will be categorized by AI
+        price: parseFloat(price.toFixed(2)), // Round to 2 decimals
+        quantity: parseFloat(quantity.toFixed(3)), // Round to 3 decimals for weights
+        category: category
       });
 
       console.log(`  ✅ Added: ${productName} (${quantity}x ${price} kr)`);
       i++;
+    }
+
+    // Check for items after "Slut Självscanning" (like PANTRETUR)
+    let j = endIdx + 1;
+    while (j < lines.length && !lines[j].includes('Totalt')) {
+      const line = lines[j];
+      console.log(`\n🔍 Post-scan line ${j}: "${line}"`);
+
+      // Match pattern: "PANTRETUR -90,00"
+      const postScanMatch = line.match(/^([A-ZÅÄÖ\s]+)\s+(-?\d+[,.]?\d*)\s*$/);
+      if (postScanMatch) {
+        const name = postScanMatch[1].trim();
+        const price = parseFloat(postScanMatch[2].replace(',', '.'));
+        const category = name.toLowerCase().includes('pant') ? 'pant' : 'other';
+
+        items.push({
+          name: name,
+          price: parseFloat(price.toFixed(2)),
+          quantity: 1,
+          category: category
+        });
+        console.log(`  ✅ Added post-scan item: ${name} (${price} kr)`);
+      }
+      j++;
     }
 
     console.log(`\n✅ Willys structured parsing succeeded: ${items.length} items`);
@@ -576,8 +620,8 @@ Return a JSON array of categories in the same order: ["category1", "category2", 
           console.log('⚠️ Categorization failed, using defaults:', e);
         }
 
-        // Calculate total amount
-        const totalAmount = structuredResult.items.reduce((sum, item) => sum + item.price, 0);
+        // Calculate total amount (round to 2 decimals to avoid floating point errors)
+        const totalAmount = parseFloat(structuredResult.items.reduce((sum, item) => sum + item.price, 0).toFixed(2));
 
         // Try to extract date from filename
         let receiptDate = new Date().toISOString().split('T')[0];
