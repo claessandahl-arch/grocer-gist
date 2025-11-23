@@ -30,16 +30,22 @@ This project is actively developed with Lovable.ai:
    Please deploy the Edge Function to Lovable Cloud.
    ```
 
-3. **Lovable May Misunderstand Technical Issues**:
+3. **Lovable May Misunderstand Technical Issues** ⚠️ CRITICAL:
    - If Lovable suggests removing dependencies or code, verify the suggestion is correct
-   - Example: Lovable incorrectly claimed `pdf-parse` npm package "isn't compatible with Deno"
-   - Reality: npm packages ARE compatible with Deno using `npm:` import prefix
+   - **REPEATED ISSUE**: Lovable has incorrectly removed `pdf-parse` from parse-receipt **TWICE**
+   - **Lovable's claim**: "pdf-parse not compatible with Deno" or "Deno package resolution error"
+   - **REALITY**: npm packages ARE fully compatible with Deno using `npm:` import prefix
+   - **PROOF**: https://deno.land/manual/node/npm_specifiers
+   - **NEVER remove pdf-parse** - see `.lovable-guard` file in parse-receipt function
    - Always verify technical claims before accepting removals
+   - Check `.lovable-guard` files before modifying protected code
 
 4. **Preventing Incorrect Removals**:
    - When requesting deployment, be explicit about NOT removing things
-   - Example: "Deploy the parse-receipt Edge Function. Do NOT remove pdf-parse - it's compatible with Deno via npm: imports"
+   - Example: "Deploy the parse-receipt Edge Function. **DO NOT remove pdf-parse** - it's compatible with Deno via npm: imports"
    - Include evidence if Lovable questions compatibility
+   - Reference CLAUDE.md and .lovable-guard files in your request
+   - If Lovable insists on removing something, **ask the user first**
 
 5. **Edge Function Updates Don't Appear Immediately**:
    - Frontend changes deploy automatically
