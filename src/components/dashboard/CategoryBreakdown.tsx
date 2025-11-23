@@ -2,7 +2,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { startOfMonth, endOfMonth } from "date-fns";
+import { startOfMonth, endOfMonth, format } from "date-fns";
+import { sv } from "date-fns/locale";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
@@ -10,8 +11,23 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { categoryNames } from "@/lib/categoryConstants";
 import { ReceiptItem } from "@/types/receipt";
 
+interface ItemDetail {
+  date: string;
+  store: string;
+  originalName: string;
+  price: number;
+  quantity: number;
+}
+
+interface GroupData {
+  total: number;
+  quantity: number;
+  items: ItemDetail[];
+}
+
 export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) => {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
 
   const { data: receipts, isLoading } = useQuery({
     queryKey: ['receipts'],
@@ -102,7 +118,7 @@ export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) =
 
   // Calculate category totals
   const categoryTotals: Record<string, number> = {};
-  const itemsByCategory: Record<string, Record<string, { total: number; quantity: number; originalNames: Set<string> }>> = {};
+  const itemsByCategory: Record<string, Record<string, GroupData>> = {};
 
   thisMonthReceipts.forEach(receipt => {
     const items = (receipt.items as unknown as ReceiptItem[]) || [];
@@ -121,11 +137,18 @@ export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) =
         itemsByCategory[category] = {};
       }
       if (!itemsByCategory[category][normalizedName]) {
-        itemsByCategory[category][normalizedName] = { total: 0, quantity: 0, originalNames: new Set() };
+        itemsByCategory[category][normalizedName] = { total: 0, quantity: 0, items: [] };
       }
+
       itemsByCategory[category][normalizedName].total += price;
       itemsByCategory[category][normalizedName].quantity += Number(item.quantity || 1);
-      itemsByCategory[category][normalizedName].originalNames.add(itemName);
+      itemsByCategory[category][normalizedName].items.push({
+        date: receipt.receipt_date || '',
+        store: receipt.store_name || 'Okänd butik',
+        originalName: itemName,
+        price: price,
+        quantity: Number(item.quantity || 1)
+      });
     });
   });
 
@@ -139,9 +162,9 @@ export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) =
     .slice(0, 10);
 
   // Get item details for selected category
-  const getItemDetails = (categoryKey: string) => {
-    const items = itemsByCategory[categoryKey] || {};
-    return Object.entries(items)
+  const getGroupDetails = (categoryKey: string) => {
+    const groups = itemsByCategory[categoryKey] || {};
+    return Object.entries(groups)
       .map(([normalizedName, data]) => {
         // Use the normalized/mapped name (capitalized) as the display name
         const displayName = normalizedName.split(' ')
@@ -150,19 +173,45 @@ export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) =
 
         return {
           name: displayName,
+          normalizedName: normalizedName, // Keep for ID
           total: Math.round(data.total),
           quantity: data.quantity,
+          items: data.items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
         };
       })
       .sort((a, b) => b.total - a.total);
   };
 
-  const handleBarClick = (data: { categoryKey: string }) => {
+  const handleCategoryClick = (data: { categoryKey: string }) => {
     setSelectedCategory(data.categoryKey);
+    setSelectedGroup(null);
+  };
+
+  const handleGroupClick = (data: { normalizedName?: string; name?: string }) => {
+    // Recharts passes 'name' which is the display name, but we might need normalizedName
+    // Ideally we pass normalizedName in the data payload
+    // For now, let's find the group by display name if needed, or pass payload
+
+    // If clicked from chart, data.name is the display name
+    // If clicked from table, we can pass normalizedName
+
+    // Let's try to find the normalized name from the display name if needed
+    // But wait, getGroupDetails returns 'name' as display name.
+    // We can use the display name for selection if it's unique enough (it should be)
+    // Or better, let's rely on the payload if available.
+
+    // Simple approach: Use the name passed (display name) for matching
+    if (data.name) {
+      setSelectedGroup(data.name);
+    }
   };
 
   const handleBack = () => {
-    setSelectedCategory(null);
+    if (selectedGroup) {
+      setSelectedGroup(null);
+    } else {
+      setSelectedCategory(null);
+    }
   };
 
   if (isLoading) {
@@ -197,11 +246,60 @@ export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) =
     );
   }
 
-  // Show detailed view for selected category
-  if (selectedCategory) {
-    const itemDetails = getItemDetails(selectedCategory);
+  // Level 3: Show detailed items for selected group
+  if (selectedCategory && selectedGroup) {
+    const groupDetails = getGroupDetails(selectedCategory);
+    const selectedGroupData = groupDetails.find(g => g.name === selectedGroup);
     const categoryName = categoryNames[selectedCategory] || 'Övrigt';
-    const itemChartData = itemDetails.slice(0, 10);
+
+    return (
+      <Card className="shadow-card">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={handleBack}>
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div>
+              <CardTitle>{selectedGroup}</CardTitle>
+              <CardDescription>{categoryName} &gt; {selectedGroup}</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Datum</TableHead>
+                  <TableHead>Butik</TableHead>
+                  <TableHead>Produkt</TableHead>
+                  <TableHead className="text-right">Antal</TableHead>
+                  <TableHead className="text-right">Pris</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {selectedGroupData?.items.map((item, index) => (
+                  <TableRow key={index}>
+                    <TableCell>{format(new Date(item.date), 'd MMM', { locale: sv })}</TableCell>
+                    <TableCell>{item.store}</TableCell>
+                    <TableCell className="font-medium">{item.originalName}</TableCell>
+                    <TableCell className="text-right">{item.quantity}</TableCell>
+                    <TableCell className="text-right">{item.price.toFixed(2)} kr</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Level 2: Show groups for selected category
+  if (selectedCategory) {
+    const groupDetails = getGroupDetails(selectedCategory);
+    const categoryName = categoryNames[selectedCategory] || 'Övrigt';
+    const itemChartData = groupDetails.slice(0, 10);
 
     return (
       <Card className="shadow-card">
@@ -239,7 +337,17 @@ export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) =
                   borderRadius: "var(--radius)",
                 }}
               />
-              <Bar dataKey="total" fill="hsl(var(--chart-1))" radius={[8, 8, 0, 0]} />
+              <Bar
+                dataKey="total"
+                fill="hsl(var(--chart-1))"
+                radius={[8, 8, 0, 0]}
+                onClick={(data) => handleGroupClick(data)}
+                cursor="pointer"
+              >
+                {itemChartData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} className="hover:opacity-80 transition-opacity" />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
 
@@ -247,14 +355,18 @@ export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) =
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Produkt</TableHead>
+                  <TableHead>Produktgrupp</TableHead>
                   <TableHead className="text-right">Antal</TableHead>
                   <TableHead className="text-right">Totalt</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {itemDetails.map((item, index) => (
-                  <TableRow key={index}>
+                {groupDetails.map((item, index) => (
+                  <TableRow
+                    key={index}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => handleGroupClick({ name: item.name })}
+                  >
                     <TableCell className="font-medium">{item.name}</TableCell>
                     <TableCell className="text-right">{item.quantity}</TableCell>
                     <TableCell className="text-right">{item.total} kr</TableCell>
@@ -268,6 +380,7 @@ export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) =
     );
   }
 
+  // Level 1: Categories
   return (
     <Card className="shadow-card">
       <CardHeader>
@@ -301,7 +414,7 @@ export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) =
               dataKey="amount"
               fill="hsl(var(--chart-2))"
               radius={[8, 8, 0, 0]}
-              onClick={handleBarClick}
+              onClick={handleCategoryClick}
               cursor="pointer"
             >
               {data.map((entry, index) => (
