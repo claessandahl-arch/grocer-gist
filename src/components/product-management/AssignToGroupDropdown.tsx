@@ -20,6 +20,7 @@ type Product = {
 type ProductGroup = {
   name: string;
   products: unknown[];
+  categories: Set<string>;
 };
 
 type AssignToGroupDropdownProps = {
@@ -39,6 +40,11 @@ export function AssignToGroupDropdown({
 
   const assignToGroup = useMutation({
     mutationFn: async (groupName: string) => {
+      // Find the target group to get its category
+      const targetGroup = existingGroups.find(g => g.name === groupName);
+      // Get the first category from the set, if any exists
+      const categoryToAssign = targetGroup?.categories.values().next().value;
+
       // Check if this is an unmapped product (temporary ID)
       const isUnmapped = product.id.startsWith('unmapped-');
 
@@ -53,6 +59,7 @@ export function AssignToGroupDropdown({
             user_id: user.id,
             original_name: product.original_name,
             mapped_name: groupName,
+            category: categoryToAssign || null, // Auto-assign category
           });
 
         if (error) throw error;
@@ -60,9 +67,18 @@ export function AssignToGroupDropdown({
         // Update existing mapping
         const table = product.type === 'user' ? 'product_mappings' : 'global_product_mappings';
 
+        const updatePayload: { mapped_name: string; category?: string } = {
+          mapped_name: groupName
+        };
+
+        // Only update category if the group has one
+        if (categoryToAssign) {
+          updatePayload.category = categoryToAssign;
+        }
+
         const { error } = await supabase
           .from(table)
-          .update({ mapped_name: groupName })
+          .update(updatePayload)
           .eq('id', product.id);
 
         if (error) throw error;
