@@ -45,6 +45,132 @@ interface ParsedItem {
 }
 
 /**
+ * Parse structured Willys receipt text directly
+ * Willys format: [Product Name] [Quantity*Price] [Total]
+ * No article numbers, simpler layout
+ */
+function parseWillysReceiptText(text: string): { items: ParsedItem[]; store_name?: string; total_amount?: number; receipt_date?: string; _debug?: any } | null {
+  try {
+    console.log('🔧 Attempting structured parsing of Willys receipt...');
+    console.log('📄 Input text length:', text.length);
+    console.log('📄 First 200 chars:', text.substring(0, 200));
+
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    console.log('📊 Total lines:', lines.length);
+
+    // Find store name
+    let storeName = 'Willys';
+    for (const line of lines.slice(0, 10)) {
+      if (line.toLowerCase().includes('willys') || line.toLowerCase().includes('willy')) {
+        storeName = line.trim();
+        break;
+      }
+    }
+
+    // Find the start and end of product list
+    const startIdx = lines.findIndex(l => l.includes('Start Självscanning') || l.includes('START'));
+    const endIdx = lines.findIndex(l => l.includes('Slut Självscanning') || l.includes('SLUT') || l.includes('Totalt'));
+
+    console.log(`📍 Product list from line ${startIdx} to ${endIdx}`);
+
+    if (startIdx === -1 || endIdx === -1) {
+      console.log('❌ Could not find product list markers');
+      return null;
+    }
+
+    const items: ParsedItem[] = [];
+    let i = startIdx + 1;
+
+    while (i < endIdx) {
+      const line = lines[i];
+      console.log(`\n🔍 Line ${i}: "${line}"`);
+
+      // Skip discount lines (start with "Rabatt:")
+      if (line.startsWith('Rabatt:')) {
+        console.log('  ⏭️  Discount line, will apply to previous item');
+        if (items.length > 0) {
+          const discountMatch = line.match(/-?(\d+[,.]?\d*)/);
+          if (discountMatch) {
+            const discount = parseFloat(discountMatch[1].replace(',', '.'));
+            const lastItem = items[items.length - 1];
+            lastItem.discount = discount;
+            lastItem.price = lastItem.price - discount;
+            console.log(`  ✅ Applied ${discount} kr discount to ${lastItem.name}`);
+          }
+        }
+        i++;
+        continue;
+      }
+
+      // Willys format: PRODUCT NAME [quantity info] PRICE
+      // Examples:
+      // "MOROT 1KG 12,90"
+      // "NAAN ORIGINA BRÖD 2st*29,90 59,80"
+      // "LEVAIN 650G 37,90"
+
+      // Extract price (last number on the line)
+      const priceMatch = line.match(/(\d+[,.]?\d*)\s*$/);
+      if (!priceMatch) {
+        console.log('  ⏭️  No price found, skipping');
+        i++;
+        continue;
+      }
+
+      const price = parseFloat(priceMatch[1].replace(',', '.'));
+      const beforePrice = line.substring(0, line.lastIndexOf(priceMatch[0])).trim();
+      console.log(`  💰 Price: ${price} kr`);
+      console.log(`  📝 Before price: "${beforePrice}"`);
+
+      // Check for quantity pattern: "2st*29,90" or "2st"
+      let quantity = 1;
+      let productName = beforePrice;
+
+      const qtyMatch = beforePrice.match(/(\d+)st\*?(\d+[,.]?\d*)?/);
+      if (qtyMatch) {
+        quantity = parseInt(qtyMatch[1]);
+        // Remove the quantity part from product name
+        productName = beforePrice.substring(0, beforePrice.indexOf(qtyMatch[0])).trim();
+        console.log(`  📦 Quantity: ${quantity}`);
+        console.log(`  🏷️  Product: "${productName}"`);
+      } else {
+        console.log(`  📦 Quantity: 1 (default)`);
+        console.log(`  🏷️  Product: "${productName}"`);
+      }
+
+      items.push({
+        name: productName,
+        price: price,
+        quantity: quantity,
+        category: 'other' // Will be categorized by AI
+      });
+
+      console.log(`  ✅ Added: ${productName} (${quantity}x ${price} kr)`);
+      i++;
+    }
+
+    console.log(`\n✅ Willys structured parsing succeeded: ${items.length} items`);
+    items.forEach((item, idx) => {
+      console.log(`  ${idx + 1}. ${item.name} - ${item.quantity}x ${item.price} kr${item.discount ? ` (discount: ${item.discount} kr)` : ''}`);
+    });
+
+    return {
+      items,
+      store_name: storeName,
+      _debug: {
+        method: 'structured_parser_willys',
+        lines_processed: endIdx - startIdx,
+        items_found: items.length
+      }
+    };
+
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    console.error('❌ Willys structured parsing failed:', errorMessage);
+    return null;
+  }
+}
+
+/**
  * Parse structured ICA receipt text directly
  * Returns null if parsing fails (fall back to AI)
  */
@@ -382,7 +508,17 @@ serve(async (req) => {
     if (rawPdfText) {
       console.log('🔍 Trying structured parsing with raw PDF text...');
       debugLog.push('→ Attempting structured parsing...');
-      const structuredResult = parseICAReceiptText(rawPdfText);
+
+      // Detect store type from PDF text
+      const isWillys = rawPdfText.toLowerCase().includes('willys') ||
+                       rawPdfText.toLowerCase().includes('willy') ||
+                       rawPdfText.includes('Självscanning');
+
+      console.log(`🏪 Detected store type: ${isWillys ? 'Willys' : 'ICA'}`);
+
+      const structuredResult = isWillys
+        ? parseWillysReceiptText(rawPdfText)
+        : parseICAReceiptText(rawPdfText);
 
       if (structuredResult && structuredResult.items && structuredResult.items.length > 0) {
         console.log('🎯 Using structured parsing results instead of AI!');
