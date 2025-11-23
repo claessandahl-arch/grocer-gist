@@ -98,6 +98,29 @@ export default function Diagnostics() {
         enabled: !!user,
     });
 
+    // Mutation to delete all receipts
+    const deleteAllReceipts = useMutation({
+        mutationFn: async () => {
+            if (!user) throw new Error("Not authenticated");
+
+            const { error } = await supabase
+                .from('receipts')
+                .delete()
+                .eq('user_id', user.id);
+
+            if (error) throw error;
+        },
+        onSuccess: () => {
+            toast.success("Alla kvitton har raderats!");
+            queryClient.invalidateQueries({ queryKey: ['diagnostics-receipt-count'] });
+            queryClient.invalidateQueries({ queryKey: ['receipts-all'] });
+            queryClient.invalidateQueries({ queryKey: ['receipts'] });
+        },
+        onError: (error) => {
+            toast.error("Kunde inte radera kvitton: " + error.message);
+        }
+    });
+
     // Mutation to delete a single mapping by ID
     const deleteSingleMapping = useMutation({
         mutationFn: async (id: string) => {
@@ -252,9 +275,9 @@ export default function Diagnostics() {
                             {/* Receipt Count Check */}
                             <div className="flex items-center justify-between p-4 border rounded-lg bg-card/50 mt-4">
                                 <div className="space-y-1">
-                                    <h3 className="font-medium">Antal kvitton</h3>
+                                    <h3 className="font-medium">Radera alla kvitton</h3>
                                     <p className="text-sm text-muted-foreground">
-                                        Kontrollera att alla kvitton är raderade.
+                                        Raderar alla dina kvitton. Produktkopplingar påverkas inte.
                                     </p>
                                     <div className="flex items-center gap-2 mt-2">
                                         {loadingReceipts ? (
@@ -262,7 +285,7 @@ export default function Diagnostics() {
                                         ) : receiptCount > 0 ? (
                                             <span className="text-sm font-medium text-orange-600 flex items-center gap-1">
                                                 <AlertTriangle className="h-3 w-3" />
-                                                {receiptCount} kvitton finns kvar i databasen
+                                                {receiptCount} kvitton finns i databasen
                                             </span>
                                         ) : (
                                             <span className="text-sm font-medium text-green-600 flex items-center gap-1">
@@ -272,6 +295,35 @@ export default function Diagnostics() {
                                         )}
                                     </div>
                                 </div>
+
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <Button
+                                            variant="destructive"
+                                            disabled={loadingReceipts || receiptCount === 0 || deleteAllReceipts.isPending}
+                                        >
+                                            {deleteAllReceipts.isPending ? "Raderar..." : "Radera alla"}
+                                        </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle>Radera alla kvitton?</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                                Detta kommer att permanent radera {receiptCount} kvitton från databasen.
+                                                Detta går inte att ångra.
+                                                <br /><br />
+                                                <strong>OBS:</strong> Dina produktkopplingar bevaras (så du inte förlorar ditt grupperingsarbete),
+                                                men produkter från raderade kvitton kommer att visas som "ungrouped" i ProductManagement tills du tar bort kopplingsarna manuellt.
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+                                            <AlertDialogAction onClick={() => deleteAllReceipts.mutate()}>
+                                                Ja, radera allt
+                                            </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
                             </div>
 
                             {/* Corrupted Categories Tool (Migrated from old DiagnosticTool) */}
