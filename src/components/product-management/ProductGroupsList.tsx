@@ -34,12 +34,14 @@ type ProductGroup = {
 
 type ProductGroupsListProps = {
   groups: ProductGroup[];
+  allGroups?: ProductGroup[];
   isLoading: boolean;
   onRefresh: () => void;
 };
 
 export function ProductGroupsList({
   groups,
+  allGroups,
   isLoading,
   onRefresh,
 }: ProductGroupsListProps) {
@@ -356,7 +358,7 @@ export function ProductGroupsList({
         {/* Merge Groups Dialog */}
         <MergeGroupsDialog
           sourceGroup={selectedGroupToMerge}
-          allGroups={groups}
+          allGroups={allGroups || groups}
           open={mergeDialogOpen}
           onClose={() => {
             setMergeDialogOpen(false);

@@ -366,6 +366,7 @@ export default function ProductManagement() {
               <div className={showLeftPanel && showRightPanel ? 'lg:col-span-3' : 'lg:col-span-1'}>
                 <ProductGroupsList
                   groups={filteredProductGroups}
+                  allGroups={productGroups}
                   isLoading={isLoading}
                   onRefresh={() => {
                     queryClient.invalidateQueries({ queryKey: ['receipts-all'] });
