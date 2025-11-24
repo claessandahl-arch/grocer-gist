@@ -18,6 +18,7 @@ import { categoryNames } from "@/lib/categoryConstants";
 const Dashboard = () => {
   const navigate = useNavigate();
   const [selectedMonth, setSelectedMonth] = useState(new Date());
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   const monthStart = format(startOfMonth(selectedMonth), 'yyyy-MM-dd');
 
@@ -186,8 +187,12 @@ const Dashboard = () => {
             </div>
 
             <div className="grid gap-6 lg:grid-cols-2">
-              <SpendingChart />
-              <CategoryBreakdown selectedMonth={selectedMonth} />
+              <SpendingChart selectedCategory={selectedCategory} />
+              <CategoryBreakdown
+                selectedMonth={selectedMonth}
+                selectedCategory={selectedCategory}
+                onCategoryChange={setSelectedCategory}
+              />
             </div>
           </TabsContent>
 

@@ -25,9 +25,32 @@ interface GroupData {
   items: ItemDetail[];
 }
 
-export const CategoryBreakdown = ({ selectedMonth }: { selectedMonth?: Date }) => {
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+interface CategoryBreakdownProps {
+  selectedMonth?: Date;
+  selectedCategory?: string | null;
+  onCategoryChange?: (category: string | null) => void;
+}
+
+export const CategoryBreakdown = ({
+  selectedMonth,
+  selectedCategory: externalSelectedCategory,
+  onCategoryChange
+}: CategoryBreakdownProps) => {
+  // Use external state if provided, otherwise use internal state (for backwards compatibility)
+  const [internalSelectedCategory, setInternalSelectedCategory] = useState<string | null>(null);
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+
+  const selectedCategory = externalSelectedCategory !== undefined
+    ? externalSelectedCategory
+    : internalSelectedCategory;
+
+  const setSelectedCategory = (category: string | null) => {
+    if (onCategoryChange) {
+      onCategoryChange(category);
+    } else {
+      setInternalSelectedCategory(category);
+    }
+  };
 
   const { data: receipts, isLoading } = useQuery({
     queryKey: ['receipts'],
