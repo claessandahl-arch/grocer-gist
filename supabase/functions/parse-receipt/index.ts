@@ -682,9 +682,18 @@ Return a JSON array of categories in the same order: ["category1", "category2", 
     console.log('⚠️ Structured parsing not available, falling back to AI...');
     debugLog.push('→ Falling back to AI parser...');
 
+    // Build conditional prompt sections separately to avoid nested template literals
+    const pdfTextSection = pdfText
+      ? `\n📜 TEXT LAYER EXTRACTED FROM PDF:\n${pdfText}\n\n⚠️ CRITICAL: Use the extracted text above as the PRIMARY source of truth. The text layer is 100% accurate. DO NOT rely on OCR from images. Copy product names EXACTLY as they appear in the extracted text.\n`
+      : '';
+
+    const filenameHint = originalFilename
+      ? `\n📁 FILENAME HINT: The original filename is "${originalFilename}". If it contains a date pattern (like "2025-10-26" or "2025-10-26T15_49_07"), use it to help determine the receipt_date. Match the date format YYYY-MM-DD.\n`
+      : '';
+
     const promptText = `Parse this ${imagesToProcess.length > 1 ? imagesToProcess.length + '-page ' : ''}grocery receipt${imagesToProcess.length > 1 ? '. Combine information from ALL pages into a single receipt. The images are in page order.' : ''} and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), quantity_unit (string, e.g. 'st', 'kg'), content_amount (number, optional), content_unit (string, optional), category, and discount (as number, optional).
 
-${pdfText ? `\n📜 TEXT LAYER EXTRACTED FROM PDF:\n${pdfText}\n\n⚠️ CRITICAL: Use the extracted text above as the PRIMARY source of truth. The text layer is 100% accurate. DO NOT rely on OCR from images. Copy product names EXACTLY as they appear in the extracted text.\n` : ''}
+${pdfTextSection}
 
 🔴 TOP PRIORITY - ICA RECEIPT PARSING RULES:
 
@@ -745,7 +754,7 @@ REAL EXAMPLE FROM ICA RECEIPT:
 - DO NOT truncate to just the brand (e.g., "ICA Nära Älvsjö" is correct, "ICA" is WRONG)
 - Exclude street addresses and city names if they are on a separate line, but keep the branch name if it's part of the logo/header
 
-${originalFilename ? `\n📁 FILENAME HINT: The original filename is "${originalFilename}". If it contains a date pattern (like "2025-10-26" or "2025-10-26T15_49_07"), use it to help determine the receipt_date. Match the date format YYYY-MM-DD.\n` : ''}
+${filenameHint}
 
 🚨 CRITICAL PARSING RULES - MUST FOLLOW EXACTLY:
 
