@@ -291,8 +291,16 @@ function parseICAReceiptText(text: string): { items: ParsedItem[]; store_name?: 
       const line = lines[i];
       console.log(`\n🔍 Processing line ${i}: "${line}"`);
 
-      // Skip non-product lines
-      if (line.includes('Betalat') || line.includes('Moms') || line.includes('Totalt') ||
+      // Stop parsing at footer section (anything after "Betalat" is not a product)
+      if (line.includes('Betalat') || line.includes('Moms %') ||
+          line.includes('Betalningsinformation') || line.includes('Page 2') ||
+          line.includes('ÖPPETTIDER') || line.includes('Returkod')) {
+        console.log(`  🛑 Reached footer section, stopping product parsing`);
+        break;
+      }
+
+      // Skip non-product lines within the product section
+      if (line.includes('Moms') || line.includes('Totalt') ||
           line.includes('Kort') || line.includes('Netto') || line.includes('Brutto') ||
           line.includes('Erhållen rabatt') || line.includes('Avrundning')) {
         console.log(`  ⏭️  Header/footer line, skipping`);
