@@ -715,15 +715,15 @@ Step 3: Calculate: final_price = summa_value - abs(discount_value)
 Step 4: Create ONE item with: name, price=final_price, discount=abs(discount_value)
 
 UNIT EXTRACTION (CRITICAL FOR PRICE COMPARISON):
-- Extract `quantity_unit` (e.g., 'st', 'kg', 'l', 'g', 'ml') from the receipt text if available.
-- Extract `content_amount` and `content_unit` if the product is a package with a specific size.
+- Extract \`quantity_unit\` (e.g., 'st', 'kg', 'l', 'g', 'ml') from the receipt text if available.
+- Extract \`content_amount\` and \`content_unit\` if the product is a package with a specific size.
   - Example: "Kaffe 500g" -> content_amount: 0.5, content_unit: 'kg'
   - Example: "Mjölk 1.5L" -> content_amount: 1.5, content_unit: 'l'
   - Example: "Äpplen 1.2kg" -> quantity: 1.2, quantity_unit: 'kg' (weighted item)
 - Normalize units:
   - Convert 'g' to 'kg' (divide by 1000)
   - Convert 'ml', 'cl', 'dl' to 'l' (divide by 1000, 100, 10 respectively)
-  - Default `quantity_unit` is 'st' if not specified.
+  - Default \`quantity_unit\` is 'st' if not specified.
 
 REAL EXAMPLE FROM ICA RECEIPT:
   PDF Text:
