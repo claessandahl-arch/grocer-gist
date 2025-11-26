@@ -264,33 +264,57 @@ function parseICAReceiptText(text: string): { items: ParsedItem[]; store_name?: 
     const items: ParsedItem[] = [];
     let i = 0;
 
-    // Skip header row (Beskrivning, Artikelnummer, etc.)
-    console.log('🔍 Looking for first line with 8-13 digit article number...');
-    while (i < lines.length && !lines[i].match(/\d{8,13}/)) {
-      console.log(`  Line ${i}: "${lines[i]}" - No article number found`);
-      i++;
+    // ICA "Kvitto" format detection - simpler format without article numbers on every line
+    // Look for table headers: "Beskrivning", "Artikelnummer", "Pris", "Mängd", "Summa(SEK)"
+    const hasTableHeaders = lines.some(l => l.includes('Beskrivning') && l.includes('Artikelnummer'));
+    console.log(`📋 Table format detected: ${hasTableHeaders ? 'Yes (detailed format)' : 'No (kvitto format)'}`);
+
+    // Find where products start
+    let startIdx = 0;
+    if (hasTableHeaders) {
+      // Skip to after header row
+      startIdx = lines.findIndex(l => l.includes('Beskrivning') && l.includes('Artikelnummer')) + 1;
+    } else {
+      // Find first line that looks like a product (has price pattern)
+      startIdx = lines.findIndex(l => /\d+[,.]\d+/.test(l));
     }
 
-    if (i >= lines.length) {
-      console.log('❌ No lines with article numbers found in entire text!');
-      console.log('📄 All lines:', lines);
+    console.log(`📍 Starting product parsing at line ${startIdx}`);
+    if (startIdx === -1 || startIdx >= lines.length) {
+      console.log('❌ Could not find product section start');
       return null;
     }
 
-    console.log(`✓ Found first article number at line ${i}: "${lines[i]}"`);
-    console.log(`📝 Will process ${lines.length - i} lines for products`);
+    i = startIdx;
 
     while (i < lines.length) {
       const line = lines[i];
       console.log(`\n🔍 Processing line ${i}: "${line}"`);
 
-      // Product line pattern: has 8-13 digit article number
+      // Stop parsing at footer section (anything after "Betalat" is not a product)
+      if (line.includes('Betalat') || line.includes('Moms %') ||
+          line.includes('Betalningsinformation') || line.includes('Page 2') ||
+          line.includes('ÖPPETTIDER') || line.includes('Returkod')) {
+        console.log(`  🛑 Reached footer section, stopping product parsing`);
+        break;
+      }
+
+      // Skip non-product lines within the product section
+      if (line.includes('Moms') || line.includes('Totalt') ||
+          line.includes('Kort') || line.includes('Netto') || line.includes('Brutto') ||
+          line.includes('Erhållen rabatt') || line.includes('Avrundning')) {
+        console.log(`  ⏭️  Header/footer line, skipping`);
+        i++;
+        continue;
+      }
+
+      // Try to match article number format first (detailed format)
       const articleMatch = line.match(/(\d{8,13})/);
 
       if (articleMatch) {
         console.log(`  ✓ Found article number: ${articleMatch[1]}`);
 
-        // This is a product line
+        // This is a product line with article number
         const parts = line.split(/\s+/);
         console.log(`  📦 Split into ${parts.length} parts:`, parts);
 
@@ -379,24 +403,85 @@ function parseICAReceiptText(text: string): { items: ParsedItem[]; store_name?: 
 
         i = j;
       } else {
-        console.log(`  ⏭️  No article number, skipping`);
+        console.log(`  ⏭️  No article number - trying kvitto format pattern`);
 
-        // Line without article number - might be pant, plastkasse, etc.
-        // Simple pattern: Name Price Quantity Total
+        // ICA "Kvitto" format (simpler):
+        // Pattern: "ProductName ArticleNumber Price Quantity Total"
+        // OR: "ProductName Price Quantity Total" (no article number visible)
+        // OR: "*ProductName ArticleNumber Price Quantity Total" (with discount indicator)
+
         const parts = line.split(/\s+/);
+        console.log(`  📦 Split into ${parts.length} parts:`, parts);
+
+        // Extract all numbers from the line
         const numbers = parts.filter(p => /^-?\d+[,.]?\d*$/.test(p.replace(',', '.')));
+        console.log(`  💵 Found ${numbers.length} numeric values:`, numbers);
 
+        // Need at least 3 numbers: unit_price, quantity, total
+        // OR at least 2 numbers: quantity, total (for simple items)
         if (numbers.length >= 2) {
-          const name = parts.slice(0, parts.length - numbers.length).join(' ');
-          const quantity = parseFloat(numbers[numbers.length - 2].replace(',', '.'));
-          const total = parseFloat(numbers[numbers.length - 1].replace(',', '.'));
+          let productName = '';
+          let articleNumber = '';
+          let quantity = 1;
+          let unitPrice = 0;
+          let total = 0;
+          let discount = 0;
 
-          items.push({
-            name: name,
-            price: total,
-            quantity: quantity,
-            category: name.toLowerCase().includes('pant') ? 'pant' : 'other'
-          });
+          // Find non-numeric parts (product name and possibly article number)
+          const nonNumeric = parts.filter(p => !/^-?\d+[,.]?\d*$/.test(p.replace(',', '.')));
+
+          // Check if any non-numeric part is an article number (8-13 digits)
+          const articlePart = nonNumeric.find(p => /^\d{8,13}$/.test(p));
+          if (articlePart) {
+            articleNumber = articlePart;
+            productName = nonNumeric.filter(p => p !== articlePart).join(' ').replace(/^\*/, '').trim();
+          } else {
+            productName = nonNumeric.join(' ').replace(/^\*/, '').trim();
+          }
+
+          // Parse numbers based on count
+          if (numbers.length >= 3) {
+            // Format: unit_price quantity total
+            unitPrice = parseFloat(numbers[0].replace(',', '.'));
+            quantity = parseFloat(numbers[1].replace(',', '.'));
+            total = parseFloat(numbers[2].replace(',', '.'));
+          } else if (numbers.length === 2) {
+            // Format: quantity total (unit price = total/quantity)
+            quantity = parseFloat(numbers[0].replace(',', '.'));
+            total = parseFloat(numbers[1].replace(',', '.'));
+            unitPrice = total / quantity;
+          }
+
+          console.log(`  🏷️  Product: "${productName}"`);
+          console.log(`  🔢 Article: ${articleNumber || 'N/A'}`);
+          console.log(`  📦 Quantity: ${quantity}`);
+          console.log(`  💰 Total: ${total} kr`);
+
+          // Check next line for discount (if product name starts with *)
+          if (line.includes('*') && i + 1 < lines.length) {
+            const nextLine = lines[i + 1];
+            const discountMatch = nextLine.match(/-(\d+[,.]?\d*)/);
+            if (discountMatch) {
+              discount = parseFloat(discountMatch[1].replace(',', '.'));
+              total = parseFloat((total - discount).toFixed(2));
+              console.log(`  🎁 Discount found: ${discount} kr, new total: ${total} kr`);
+              i++; // Skip discount line
+            }
+          }
+
+          if (productName) {
+            items.push({
+              name: productName,
+              article_number: articleNumber || undefined,
+              price: parseFloat(total.toFixed(2)),
+              quantity: parseFloat(quantity.toFixed(3)),
+              category: productName.toLowerCase().includes('pant') ? 'pant' : 'other',
+              discount: discount > 0 ? discount : undefined
+            });
+            console.log(`  ✅ Added: ${productName} (${quantity}x ${total} kr${discount > 0 ? `, discount: ${discount}` : ''})`);
+          }
+        } else {
+          console.log(`  ⏭️  Not enough numbers found, skipping`);
         }
 
         i++;
