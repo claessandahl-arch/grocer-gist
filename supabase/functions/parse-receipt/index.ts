@@ -39,6 +39,8 @@ interface ParsedItem {
   price: number;
   quantity: number;
   quantity_unit?: string;
+  content_amount?: number;
+  content_unit?: string;
   unit_price?: number;
   category: string;
   discount?: number;
@@ -577,8 +579,8 @@ serve(async (req) => {
 
       // Detect store type from PDF text
       const isWillys = rawPdfText.toLowerCase().includes('willys') ||
-                       rawPdfText.toLowerCase().includes('willy') ||
-                       rawPdfText.includes('Självscanning');
+        rawPdfText.toLowerCase().includes('willy') ||
+        rawPdfText.includes('Självscanning');
 
       console.log(`🏪 Detected store type: ${isWillys ? 'Willys' : 'ICA'}`);
 
@@ -680,7 +682,7 @@ Return a JSON array of categories in the same order: ["category1", "category2", 
     console.log('⚠️ Structured parsing not available, falling back to AI...');
     debugLog.push('→ Falling back to AI parser...');
 
-    const promptText = `Parse this ${imagesToProcess.length > 1 ? imagesToProcess.length + '-page ' : ''}grocery receipt${imagesToProcess.length > 1 ? '. Combine information from ALL pages into a single receipt. The images are in page order.' : ''} and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), category, and discount (as number, optional).
+    const promptText = `Parse this ${imagesToProcess.length > 1 ? imagesToProcess.length + '-page ' : ''}grocery receipt${imagesToProcess.length > 1 ? '. Combine information from ALL pages into a single receipt. The images are in page order.' : ''} and extract: store_name, total_amount (as number), receipt_date (YYYY-MM-DD format), and items array. Each item should have: name, price (as number), quantity (as number), quantity_unit (string, e.g. 'st', 'kg'), content_amount (number, optional), content_unit (string, optional), category, and discount (as number, optional).
 
 ${pdfText ? `\n📜 TEXT LAYER EXTRACTED FROM PDF:\n${pdfText}\n\n⚠️ CRITICAL: Use the extracted text above as the PRIMARY source of truth. The text layer is 100% accurate. DO NOT rely on OCR from images. Copy product names EXACTLY as they appear in the extracted text.\n` : ''}
 
@@ -703,6 +705,17 @@ Step 2: Look at next line → If it has a negative amount, IT IS A DISCOUNT
 Step 3: Calculate: final_price = summa_value - abs(discount_value)
 Step 4: Create ONE item with: name, price=final_price, discount=abs(discount_value)
 
+UNIT EXTRACTION (CRITICAL FOR PRICE COMPARISON):
+- Extract `quantity_unit` (e.g., 'st', 'kg', 'l', 'g', 'ml') from the receipt text if available.
+- Extract `content_amount` and `content_unit` if the product is a package with a specific size.
+  - Example: "Kaffe 500g" -> content_amount: 0.5, content_unit: 'kg'
+  - Example: "Mjölk 1.5L" -> content_amount: 1.5, content_unit: 'l'
+  - Example: "Äpplen 1.2kg" -> quantity: 1.2, quantity_unit: 'kg' (weighted item)
+- Normalize units:
+  - Convert 'g' to 'kg' (divide by 1000)
+  - Convert 'ml', 'cl', 'dl' to 'l' (divide by 1000, 100, 10 respectively)
+  - Default `quantity_unit` is 'st' if not specified.
+
 REAL EXAMPLE FROM ICA RECEIPT:
   PDF Text:
   "*Linguine                 8008343200134  2,00  22,50     65,90"
@@ -714,6 +727,9 @@ REAL EXAMPLE FROM ICA RECEIPT:
     name: "Linguine Rummo pasta",
     article_number: "8008343200134",
     quantity: 2,
+    quantity_unit: "st",
+    content_amount: 0.5, // inferred standard pasta size or extracted if text says "500g"
+    content_unit: "kg",
     price: 45.00,        // 65.90 - 20.90 = 45.00
     discount: 20.90,     // abs(-20.90)
     category: "brod_bageri"
