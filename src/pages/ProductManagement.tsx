@@ -172,7 +172,7 @@ export default function ProductManagement() {
       });
 
     return Array.from(groupsMap.values());
-  }, [allMappings, receipts]);
+  }, [allMappings]);
 
   // Get unique groups by type
   const globalGroups = useMemo(() => {
