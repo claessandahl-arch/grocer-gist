@@ -171,22 +171,6 @@ export default function ProductManagement() {
         group.totalPurchases += (mapping.type === 'global' ? mapping.usage_count : 0) || 0;
       });
 
-    // Now collect categories from actual receipt items for mixed category detection
-    receipts.forEach(receipt => {
-      const items = (receipt.items as unknown as ReceiptItem[]) || [];
-      items.forEach(item => {
-        // Find if this item's name matches any mapping
-        const mapping = allMappings.find(m => m.original_name === item.name);
-        if (mapping && mapping.mapped_name && mapping.mapped_name.trim() !== '') {
-          const group = groupsMap.get(mapping.mapped_name);
-          if (group && item.category) {
-            // Add the category from the actual receipt item
-            group.categories.add(item.category);
-          }
-        }
-      });
-    });
-
     return Array.from(groupsMap.values());
   }, [allMappings, receipts]);
 
