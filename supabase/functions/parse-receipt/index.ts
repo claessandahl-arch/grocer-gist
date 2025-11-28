@@ -87,6 +87,22 @@ function parseWillysReceiptText(text: string): { items: ParsedItem[]; store_name
       let line = lines[i];
       console.log(`\n🔍 Line ${i}: "${line}"`);
 
+      // Check for Willys Plus discount line (format: "  Willys Plus:DESCRIPTION -20,00")
+      const willysPlusMatch = line.match(/^\s*Willys Plus:.*?\s+(-\d+[,.]?\d*)\s*$/);
+      if (willysPlusMatch) {
+        console.log('  💰 Willys Plus discount line detected');
+        if (items.length > 0) {
+          const discount = parseFloat(willysPlusMatch[1].replace(',', '.').replace('-', ''));
+          const lastItem = items[items.length - 1];
+          const existingDiscount = lastItem.discount || 0;
+          lastItem.discount = parseFloat((existingDiscount + discount).toFixed(2));
+          lastItem.price = parseFloat((lastItem.price - discount).toFixed(2));
+          console.log(`  ✅ Applied Willys Plus ${discount} kr discount to ${lastItem.name} (total discount: ${lastItem.discount} kr)`);
+        }
+        i++;
+        continue;
+      }
+
       // Check for discount embedded in line (format: "Rabatt:SALLAD -10,00")
       const discountInLineMatch = line.match(/Rabatt:(.+?)\s+(-\d+[,.]?\d*)/);
       if (discountInLineMatch) {
