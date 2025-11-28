@@ -23,7 +23,7 @@ export default function PriceComparison() {
   const navigate = useNavigate();
 
   const { data: items, isLoading } = useQuery({
-    queryKey: ['price-comparison'],
+    queryKey: ['price-comparison', new Date().toISOString().split('T')[0]], // Add date to force daily refresh
     queryFn: async () => {
       const { data, error } = await supabase
         .from('view_price_comparison')
@@ -33,6 +33,8 @@ export default function PriceComparison() {
       if (error) throw error;
       return data as PriceComparisonItem[];
     },
+    staleTime: 0, // Always fetch fresh data
+    gcTime: 0, // Don't cache
   });
 
   const filteredItems = items?.filter(item =>
