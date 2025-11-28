@@ -348,18 +348,16 @@ Location: `supabase/functions/`
 
 2. **Structured Parser** (if PDF text available):
    - Code-based parsing for 100% accuracy
-   - Looks for 8-13 digit article numbers
+   - Detects receipt format: detailed (with table headers) vs kvitto (simplified)
+   - Handles both ICA formats:
+     - **Detailed format**: Lines with 8-13 digit article numbers
+     - **Kvitto format**: Simplified format without article numbers on every line
    - Handles multi-line product names
-   - Applies discount lines to products above them
-   - **TODO: Currently not working** - Always falls back to AI parser
-   - **Known Issue**: Parser fails to find article numbers in ICA PDF text format
-   - **Debug logs added**: Comprehensive logging in `parseICAReceiptText()` (view in Edge Function logs)
-   - **Current Status**: AI parser with PDF text achieves 100% accuracy, so this is LOW PRIORITY
-   - **To fix in future**:
-     1. Check Supabase Edge Function logs after upload to see detailed parsing output
-     2. Analyze actual PDF text structure (how ICA formats product lines)
-     3. Adjust article number regex in `parseICAReceiptText()` to match real format
-     4. Update line parsing logic to handle ICA's specific layout
+   - Applies discount lines to products marked with "*"
+   - Stops parsing at footer section ("Betalat", "Moms %", etc.) to prevent page 2 content from being parsed
+   - Comprehensive debug logging (view in Edge Function logs)
+   - **Status**: Working for ICA detailed and kvitto formats, Willys self-scanning receipts
+   - Falls back to AI parser if structured parsing fails or returns no items
 
 3. **AI Vision Fallback** (always runs if structured parser fails):
    - Uses `google/gemini-2.5-flash` via Lovable AI Gateway
