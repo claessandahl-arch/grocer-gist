@@ -815,16 +815,47 @@ Step 2: Look at next line → If it has a negative amount, IT IS A DISCOUNT
 Step 3: Calculate: final_price = summa_value - abs(discount_value)
 Step 4: Create ONE item with: name, price=final_price, discount=abs(discount_value)
 
-UNIT EXTRACTION (CRITICAL FOR PRICE COMPARISON):
-- Extract \`quantity_unit\` (e.g., 'st', 'kg', 'l', 'g', 'ml') from the receipt text if available.
-- Extract \`content_amount\` and \`content_unit\` if the product is a package with a specific size.
-  - Example: "Kaffe 500g" -> content_amount: 0.5, content_unit: 'kg'
-  - Example: "Mjölk 1.5L" -> content_amount: 1.5, content_unit: 'l'
-  - Example: "Äpplen 1.2kg" -> quantity: 1.2, quantity_unit: 'kg' (weighted item)
-- Normalize units:
-  - Convert 'g' to 'kg' (divide by 1000)
-  - Convert 'ml', 'cl', 'dl' to 'l' (divide by 1000, 100, 10 respectively)
-  - Default \`quantity_unit\` is 'st' if not specified.
+🚨 CRITICAL: UNIT EXTRACTION FOR PRICE COMPARISON
+
+For EVERY product, you MUST extract package size information if visible on receipt:
+
+1. **content_amount** and **content_unit**: Package/bottle/container size
+   ⚠️ This is ESSENTIAL for accurate price comparisons!
+
+   ✅ EXAMPLES:
+   - "Coca-Cola 33cl" → content_amount: 0.33, content_unit: 'l'
+   - "Coca-Cola 1.5L" → content_amount: 1.5, content_unit: 'l'
+   - "Mjölk 1L" → content_amount: 1, content_unit: 'l'
+   - "Kaffe 500g" → content_amount: 0.5, content_unit: 'kg'
+   - "Nocco 33cl" → content_amount: 0.33, content_unit: 'l'
+   - "Vispgrädde 5dl" → content_amount: 0.5, content_unit: 'l'
+   - "Smoothie 250ml" → content_amount: 0.25, content_unit: 'l'
+   - "Chips 175g" → content_amount: 0.175, content_unit: 'kg'
+
+2. **quantity_unit**: What the item is sold as (st, kg, l)
+   - Weighted items: 'kg', 'g' (fruits, vegetables, meat, cheese by weight)
+   - Volume items: 'l', 'ml' (liquids)
+   - Pieces: 'st' (cans, bottles, packages, individual items)
+
+   ✅ EXAMPLES:
+   - "Bananer 1.2kg" → quantity: 1.2, quantity_unit: 'kg' (sold by weight)
+   - "Coca-Cola" → quantity: 1, quantity_unit: 'st' (sold as piece)
+   - "Mjölk 1L" → quantity: 1, quantity_unit: 'st', content_amount: 1, content_unit: 'l'
+
+3. **If package size is NOT visible**: Leave content_amount and content_unit as NULL
+   - Do NOT guess or infer sizes
+   - Better to have NULL than wrong size
+   - Items without size info will be excluded from price comparison
+
+NORMALIZATION (MANDATORY):
+- Convert g → kg (divide by 1000): 500g becomes 0.5 kg
+- Convert ml → l (divide by 1000): 330ml becomes 0.33 l
+- Convert cl → l (divide by 100): 33cl becomes 0.33 l
+- Convert dl → l (divide by 10): 5dl becomes 0.5 l
+- Use lowercase units: 'kg', 'l', 'st'
+
+⚠️ CRITICAL: Without proper unit extraction, price comparisons will be MEANINGLESS!
+Example: 33cl Coca-Cola at 12 kr vs 1.5L Coca-Cola at 25 kr will appear as "12 kr/st" vs "25 kr/st" instead of the correct "36.36 kr/l" vs "16.67 kr/l"
 
 REAL EXAMPLE FROM ICA RECEIPT:
   PDF Text:
