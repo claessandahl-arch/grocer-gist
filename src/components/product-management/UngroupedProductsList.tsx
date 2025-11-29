@@ -4,9 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Globe, User, Plus } from "lucide-react";
+import { Globe, User, Plus, Sparkles, Loader2 } from "lucide-react";
 import { AssignToGroupDropdown } from "./AssignToGroupDropdown";
 import { CreateGroupDialog } from "./CreateGroupDialog";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 type Product = {
   id: string;
@@ -45,7 +47,51 @@ export function UngroupedProductsList({
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(ITEMS_PER_PAGE);
   const [activeFilter, setActiveFilter] = useState<string>('Alla');
+  const [isAutoMapping, setIsAutoMapping] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  const handleAutoMapAll = async () => {
+    if (products.length === 0) return;
+
+    setIsAutoMapping(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Du måste vara inloggad");
+        return;
+      }
+
+      toast.info(`🤖 Mappar ${products.length} produkter...`, { duration: 2000 });
+
+      const { data, error } = await supabase.functions.invoke('auto-map-products', {
+        body: {
+          userId: user.id,
+          products: products.map(p => ({
+            name: p.original_name,
+            category: p.category || null
+          }))
+        }
+      });
+
+      if (error) {
+        console.error('Auto-map error:', error);
+        toast.error(`Mappning misslyckades: ${error.message}`);
+        return;
+      }
+
+      if (data?.mapped > 0) {
+        toast.success(`🤖 ${data.mapped} av ${data.total} produkter mappades!`);
+        onRefresh();
+      } else if (data?.mapped === 0) {
+        toast.info("Inga nya produkter kunde mappas");
+      }
+    } catch (err) {
+      console.error('Auto-map error:', err);
+      toast.error("Något gick fel vid mappning");
+    } finally {
+      setIsAutoMapping(false);
+    }
+  };
 
   const handleSelectProduct = (productId: string, checked: boolean) => {
     if (checked) {
@@ -173,16 +219,34 @@ export function UngroupedProductsList({
                 )}
               </CardDescription>
             </div>
-            {selectedProducts.length > 0 && (
-              <Button
-                size="sm"
-                onClick={handleCreateGroupFromSelected}
-                className="gap-2"
-              >
-                <Plus className="h-4 w-4" />
-                Skapa grupp ({selectedProducts.length})
-              </Button>
-            )}
+            <div className="flex gap-2">
+              {products.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleAutoMapAll}
+                  disabled={isAutoMapping}
+                  className="gap-2"
+                >
+                  {isAutoMapping ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4" />
+                  )}
+                  {isAutoMapping ? 'Mappar...' : 'Mappa alla automatiskt'}
+                </Button>
+              )}
+              {selectedProducts.length > 0 && (
+                <Button
+                  size="sm"
+                  onClick={handleCreateGroupFromSelected}
+                  className="gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Skapa grupp ({selectedProducts.length})
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>

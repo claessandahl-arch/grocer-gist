@@ -315,6 +315,28 @@ const Upload = () => {
             return;
           }
 
+          // Auto-map products in the background (fire-and-forget)
+          if (parsedData.items && parsedData.items.length > 0) {
+            supabase.functions.invoke('auto-map-products', {
+              body: {
+                userId: userId,
+                products: parsedData.items.map((item: { name: string; category?: string }) => ({
+                  name: item.name,
+                  category: item.category || null
+                }))
+              }
+            }).then(({ data, error }) => {
+              if (error) {
+                console.warn('Auto-mapping failed (non-blocking):', error);
+              } else if (data?.mapped > 0) {
+                console.log(`🤖 Auto-mapped ${data.mapped} products`);
+                toast.success(`🤖 ${data.mapped} produkter mappades automatiskt`, { duration: 3000 });
+              }
+            }).catch(err => {
+              console.warn('Auto-mapping error (non-blocking):', err);
+            });
+          }
+
           successCount++;
         } catch (error) {
           errorCount++;
