@@ -3,34 +3,31 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Sparkles, Check, X, RefreshCw, AlertTriangle } from "lucide-react";
+import { Sparkles, Check, X, RefreshCw, ArrowRight, Layers } from "lucide-react";
 import { toast } from "sonner";
-import { categoryOptions, categoryNames } from "@/lib/categoryConstants";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ReceiptItem } from "@/types/receipt";
 
-type ProductCandidate = {
-    original_name: string;
-    mapped_name?: string | null;
-    occurrences: number;
+type ProductGroup = {
+    name: string;
+    productCount: number;
+    categories: string[];
+    sampleProducts: string[];
+    isGlobal: boolean;
 };
 
-type GroupSuggestion = {
-    groupName: string;
-    products: string[];
+type MergeSuggestion = {
+    sourceGroups: string[];
+    targetName: string;
     confidence: number;
     reasoning: string;
-    excludedProducts: Set<string>;
+    excludedGroups: Set<string>;
     status: 'pending' | 'accepted' | 'skipped';
 };
 
 export function AutoGrouping() {
-    const [selectedCategory, setSelectedCategory] = useState<string>("");
-    const [suggestions, setSuggestions] = useState<GroupSuggestion[]>([]);
+    const [suggestions, setSuggestions] = useState<MergeSuggestion[]>([]);
     const [isGenerating, setIsGenerating] = useState(false);
     const queryClient = useQueryClient();
 
@@ -42,120 +39,148 @@ export function AutoGrouping() {
         }
     });
 
-    // Fetch ALL products for the selected category (grouped and ungrouped)
-    const { data: candidates = [], isLoading: candidatesLoading } = useQuery({
-        queryKey: ['category-products', selectedCategory],
+    // Fetch all product groups across all categories
+    const { data: productGroups = [], isLoading: groupsLoading } = useQuery({
+        queryKey: ['all-product-groups'],
         queryFn: async () => {
-            if (!user || !selectedCategory) return [];
+            if (!user) return [];
 
-            const { data, error } = await supabase
+            // Fetch user's product mappings
+            const { data: userMappings, error: userError } = await supabase
                 .from('product_mappings')
-                .select('original_name, mapped_name')
+                .select('original_name, mapped_name, category')
                 .eq('user_id', user.id)
-                .eq('category', selectedCategory);
+                .not('mapped_name', 'is', null);
 
-            if (error) throw error;
+            if (userError) throw userError;
 
-            // Get occurrences
-            const { data: receiptItems } = await supabase
-                .from('receipts')
-                .select('items')
-                .eq('user_id', user.id);
+            // Fetch global product mappings to check if a group is global
+            const { data: globalMappings, error: globalError } = await supabase
+                .from('global_product_mappings')
+                .select('mapped_name');
 
-            const occurrenceMap = new Map<string, number>();
-            receiptItems?.forEach(receipt => {
-                const items = (receipt.items as unknown as ReceiptItem[]) || [];
-                items.forEach(item => {
-                    if (item.name) {
-                        occurrenceMap.set(item.name, (occurrenceMap.get(item.name) || 0) + 1);
-                    }
+            if (globalError) throw globalError;
+
+            const globalGroupNames = new Set(globalMappings?.map(g => g.mapped_name) || []);
+
+            // Group products by mapped_name
+            const groupMap = new Map<string, {
+                products: string[];
+                categories: Set<string>;
+            }>();
+
+            userMappings?.forEach(mapping => {
+                if (!mapping.mapped_name) return;
+                
+                const existing = groupMap.get(mapping.mapped_name);
+                if (existing) {
+                    existing.products.push(mapping.original_name);
+                    if (mapping.category) existing.categories.add(mapping.category);
+                } else {
+                    groupMap.set(mapping.mapped_name, {
+                        products: [mapping.original_name],
+                        categories: new Set(mapping.category ? [mapping.category] : [])
+                    });
+                }
+            });
+
+            // Convert to array format expected by Edge Function
+            const groups: ProductGroup[] = [];
+            groupMap.forEach((value, name) => {
+                groups.push({
+                    name,
+                    productCount: value.products.length,
+                    categories: Array.from(value.categories),
+                    sampleProducts: value.products.slice(0, 3),
+                    isGlobal: globalGroupNames.has(name)
                 });
             });
 
-            return data.map(p => ({
-                original_name: p.original_name,
-                mapped_name: p.mapped_name,
-                occurrences: occurrenceMap.get(p.original_name) || 0
-            })).filter(p => p.occurrences > 0)
-                .sort((a, b) => b.occurrences - a.occurrences);
+            return groups.sort((a, b) => b.productCount - a.productCount);
         },
-        enabled: !!user && !!selectedCategory,
+        enabled: !!user
     });
 
     const generateSuggestions = async () => {
-        if (!user || !selectedCategory || candidates.length === 0) return;
+        if (!user || productGroups.length < 2) return;
         setIsGenerating(true);
+        setSuggestions([]);
+        
         try {
-            const { data, error } = await supabase.functions.invoke('suggest-product-groups', {
+            const { data, error } = await supabase.functions.invoke('suggest-group-merges', {
                 body: {
                     userId: user.id,
-                    category: selectedCategory,
-                    products: candidates.slice(0, 100) // Increased batch limit since we process more items
+                    groups: productGroups
                 }
             });
 
             if (error) throw error;
 
-            const rawSuggestions = data.suggestions as GroupSuggestion[];
+            if (data.error) {
+                throw new Error(data.error);
+            }
 
-            // Filter out suggestions that don't result in any change
-            const usefulSuggestions = rawSuggestions.filter(suggestion => {
-                // Check if ANY product in this group would actually change its status
-                return suggestion.products.some(prodName => {
-                    const candidate = candidates.find(c => c.original_name === prodName);
-                    // It's useful if:
-                    // 1. The product currently has NO group (mapped_name is null/empty)
-                    // 2. The product has a DIFFERENT group than the suggested one
-                    return !candidate?.mapped_name || candidate.mapped_name !== suggestion.groupName;
-                });
-            }).map(s => ({
-                ...s,
-                excludedProducts: new Set<string>(),
-                status: 'pending' as const
-            }));
+            const rawSuggestions = data.suggestions || [];
 
-            if (usefulSuggestions.length === 0) {
-                toast.info("Inga nya grupperingar hittades. Alla produkter verkar redan ligga rätt!");
+            if (rawSuggestions.length === 0) {
+                toast.info("Inga liknande grupper hittades att slå ihop!");
             } else {
-                setSuggestions(usefulSuggestions);
-                toast.success(`${usefulSuggestions.length} förslag genererade!`);
+                const processedSuggestions = rawSuggestions.map((s: { sourceGroups: string[]; targetName: string; confidence: number; reasoning: string }) => ({
+                    sourceGroups: s.sourceGroups,
+                    targetName: s.targetName,
+                    confidence: s.confidence,
+                    reasoning: s.reasoning,
+                    excludedGroups: new Set<string>(),
+                    status: 'pending' as const
+                }));
+                setSuggestions(processedSuggestions);
+                toast.success(`${processedSuggestions.length} sammanslagningsförslag hittades!`);
             }
 
         } catch (error) {
+            console.error('Error generating suggestions:', error);
             toast.error(`Kunde inte generera förslag: ${(error as Error).message}`);
         } finally {
             setIsGenerating(false);
         }
     };
 
-    const applyGroups = useMutation({
-        mutationFn: async (groupsToApply: GroupSuggestion[]) => {
+    const applyMerges = useMutation({
+        mutationFn: async (mergesToApply: MergeSuggestion[]) => {
             if (!user) throw new Error('Not authenticated');
-            let successfulGroups = 0;
+            let successfulMerges = 0;
             let failedUpdates = 0;
 
-            for (const group of groupsToApply) {
-                const productsToGroup = group.products.filter(p => !group.excludedProducts.has(p));
-
-                for (const productName of productsToGroup) {
+            for (const merge of mergesToApply) {
+                // Get all source groups except excluded ones
+                const groupsToMerge = merge.sourceGroups.filter(g => !merge.excludedGroups.has(g));
+                
+                // Update all products from source groups to the target name
+                for (const sourceGroup of groupsToMerge) {
+                    if (sourceGroup === merge.targetName) continue; // Skip if already target
+                    
                     const { error } = await supabase
                         .from('product_mappings')
-                        .update({ mapped_name: group.groupName })
+                        .update({ mapped_name: merge.targetName })
                         .eq('user_id', user.id)
-                        .eq('original_name', productName);
+                        .eq('mapped_name', sourceGroup);
 
-                    if (error) failedUpdates++;
+                    if (error) {
+                        console.error(`Failed to merge ${sourceGroup} -> ${merge.targetName}:`, error);
+                        failedUpdates++;
+                    }
                 }
-                successfulGroups++;
+                successfulMerges++;
             }
 
-            if (failedUpdates > 0) console.warn(`${failedUpdates} products failed to update`);
-            return { successfulGroups };
+            if (failedUpdates > 0) console.warn(`${failedUpdates} updates failed`);
+            return { successfulMerges };
         },
         onSuccess: (data) => {
-            toast.success(`${data.successfulGroups} grupper sparade!`);
-            queryClient.invalidateQueries({ queryKey: ['ungrouped-products'] });
+            toast.success(`${data.successfulMerges} sammanslagningar genomförda!`);
+            queryClient.invalidateQueries({ queryKey: ['all-product-groups'] });
             queryClient.invalidateQueries({ queryKey: ['product-mappings'] });
+            queryClient.invalidateQueries({ queryKey: ['grouped-products'] });
             setSuggestions([]);
         },
         onError: (error: Error) => toast.error(`Fel: ${error.message}`)
@@ -163,112 +188,177 @@ export function AutoGrouping() {
 
     const handleSave = () => {
         const accepted = suggestions.filter(s => s.status === 'accepted');
-        if (accepted.length === 0) return toast.error("Inga accepterade grupper att spara");
-        applyGroups.mutate(accepted);
+        if (accepted.length === 0) return toast.error("Inga accepterade sammanslagningar att spara");
+        applyMerges.mutate(accepted);
     };
 
-    const toggleProductExclusion = (groupIndex: number, productName: string) => {
-        setSuggestions(prev => prev.map((g, i) => {
-            if (i !== groupIndex) return g;
-            const newExcluded = new Set(g.excludedProducts);
-            if (newExcluded.has(productName)) newExcluded.delete(productName);
-            else newExcluded.add(productName);
-            return { ...g, excludedProducts: newExcluded };
+    const toggleGroupExclusion = (suggestionIndex: number, groupName: string) => {
+        setSuggestions(prev => prev.map((s, i) => {
+            if (i !== suggestionIndex) return s;
+            const newExcluded = new Set(s.excludedGroups);
+            if (newExcluded.has(groupName)) newExcluded.delete(groupName);
+            else newExcluded.add(groupName);
+            return { ...s, excludedGroups: newExcluded };
         }));
+    };
+
+    const getProductCountForGroup = (groupName: string) => {
+        const group = productGroups.find(g => g.name === groupName);
+        return group?.productCount || 0;
     };
 
     return (
         <div className="space-y-6">
             <Card>
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2"><Sparkles className="h-5 w-5" />Auto-Gruppering</CardTitle>
-                    <CardDescription>Använd AI för att hitta och gruppera varianter av samma produkt.</CardDescription>
+                    <CardTitle className="flex items-center gap-2">
+                        <Layers className="h-5 w-5" />
+                        Auto-Gruppering
+                    </CardTitle>
+                    <CardDescription>
+                        Använd AI för att hitta liknande produktgrupper som kan slås ihop.
+                        T.ex. "Eko Creme Fraiche" och "Creme fraiche" → "Creme Fraiche"
+                    </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <div className="flex gap-4 items-end">
-                        <div className="space-y-2 flex-1">
-                            <label className="text-sm font-medium">Välj kategori att analysera</label>
-                            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Välj kategori" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {categoryOptions.map(opt => (
-                                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                    <div className="flex gap-4 items-center">
+                        <div className="flex-1">
+                            {groupsLoading ? (
+                                <p className="text-sm text-muted-foreground">Laddar produktgrupper...</p>
+                            ) : (
+                                <p className="text-sm text-muted-foreground">
+                                    <span className="font-medium">{productGroups.length}</span> produktgrupper hittades.
+                                    {productGroups.filter(g => g.isGlobal).length > 0 && (
+                                        <span className="ml-2">
+                                            ({productGroups.filter(g => g.isGlobal).length} globala)
+                                        </span>
+                                    )}
+                                </p>
+                            )}
                         </div>
                         <Button
                             onClick={generateSuggestions}
-                            disabled={!selectedCategory || candidates.length === 0 || isGenerating}
+                            disabled={productGroups.length < 2 || isGenerating}
                         >
-                            {isGenerating ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
-                            Generera förslag
+                            {isGenerating ? (
+                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                            ) : (
+                                <Sparkles className="h-4 w-4 mr-2" />
+                            )}
+                            {isGenerating ? "Analyserar..." : "Sök liknande grupper"}
                         </Button>
                     </div>
-
-                    {selectedCategory && (
-                        <div className="text-sm text-muted-foreground">
-                            {candidatesLoading ? "Laddar produkter..." : `${candidates.length} kandidater hittades för analys.`}
-                        </div>
-                    )}
                 </CardContent>
             </Card>
 
             {suggestions.length > 0 && (
                 <div className="space-y-4">
                     <div className="flex justify-between items-center">
-                        <h3 className="text-lg font-semibold">Förslag ({suggestions.length})</h3>
-                        <Button onClick={handleSave} disabled={applyGroups.isPending}>
-                            {applyGroups.isPending ? "Sparar..." : `Spara ${suggestions.filter(s => s.status === 'accepted').length} grupper`}
+                        <h3 className="text-lg font-semibold">
+                            Förslag ({suggestions.length})
+                        </h3>
+                        <Button onClick={handleSave} disabled={applyMerges.isPending}>
+                            {applyMerges.isPending ? "Sparar..." : `Slå ihop ${suggestions.filter(s => s.status === 'accepted').length} grupper`}
                         </Button>
                     </div>
 
                     <div className="grid gap-4">
-                        {suggestions.map((group, index) => (
-                            <Card key={index} className={`border-l-4 ${group.status === 'accepted' ? 'border-l-green-500' : group.status === 'skipped' ? 'border-l-gray-300' : 'border-l-blue-500'}`}>
+                        {suggestions.map((suggestion, index) => (
+                            <Card 
+                                key={index} 
+                                className={`border-l-4 ${
+                                    suggestion.status === 'accepted' 
+                                        ? 'border-l-green-500' 
+                                        : suggestion.status === 'skipped' 
+                                            ? 'border-l-gray-300' 
+                                            : 'border-l-blue-500'
+                                }`}
+                            >
                                 <CardContent className="pt-6">
                                     <div className="flex justify-between items-start gap-4">
                                         <div className="space-y-3 flex-1">
-                                            <div className="flex items-center gap-3">
-                                                <Input
-                                                    value={group.groupName}
-                                                    onChange={(e) => setSuggestions(prev => prev.map((g, i) => i === index ? { ...g, groupName: e.target.value } : g))}
-                                                    className="font-semibold text-lg w-auto min-w-[200px]"
-                                                />
-                                                <Badge variant={group.confidence > 80 ? "default" : group.confidence > 50 ? "secondary" : "destructive"}>
-                                                    {group.confidence}% säkerhet
+                                            <div className="flex items-center gap-3 flex-wrap">
+                                                <Badge variant={
+                                                    suggestion.confidence > 80 ? "default" : 
+                                                    suggestion.confidence > 50 ? "secondary" : 
+                                                    "destructive"
+                                                }>
+                                                    {suggestion.confidence}% säkerhet
                                                 </Badge>
                                             </div>
-                                            <p className="text-sm text-muted-foreground italic">{group.reasoning}</p>
+                                            
+                                            <p className="text-sm text-muted-foreground italic">
+                                                {suggestion.reasoning}
+                                            </p>
 
-                                            <div className="bg-muted/30 p-3 rounded-md space-y-2">
-                                                <p className="text-xs font-medium uppercase text-muted-foreground">Produkter att gruppera:</p>
-                                                {group.products.map(product => (
-                                                    <div key={product} className="flex items-center gap-2">
-                                                        <Checkbox
-                                                            checked={!group.excludedProducts.has(product)}
-                                                            onCheckedChange={() => toggleProductExclusion(index, product)}
+                                            <div className="bg-muted/30 p-4 rounded-md space-y-3">
+                                                <p className="text-xs font-medium uppercase text-muted-foreground">
+                                                    Grupper att slå ihop:
+                                                </p>
+                                                
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    {suggestion.sourceGroups.map((groupName, gIndex) => (
+                                                        <div key={groupName} className="flex items-center gap-2">
+                                                            {gIndex > 0 && (
+                                                                <span className="text-muted-foreground">+</span>
+                                                            )}
+                                                            <div className="flex items-center gap-2 bg-background px-3 py-1.5 rounded border">
+                                                                <Checkbox
+                                                                    checked={!suggestion.excludedGroups.has(groupName)}
+                                                                    onCheckedChange={() => toggleGroupExclusion(index, groupName)}
+                                                                />
+                                                                <span className={suggestion.excludedGroups.has(groupName) ? "text-muted-foreground line-through" : ""}>
+                                                                    {groupName}
+                                                                </span>
+                                                                <Badge variant="outline" className="text-xs">
+                                                                    {getProductCountForGroup(groupName)} produkter
+                                                                </Badge>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+
+                                                <div className="flex items-center gap-3 pt-2 border-t">
+                                                    <ArrowRight className="h-5 w-5 text-muted-foreground" />
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-sm font-medium">Ny gruppnamn:</span>
+                                                        <Input
+                                                            value={suggestion.targetName}
+                                                            onChange={(e) => setSuggestions(prev => 
+                                                                prev.map((s, i) => i === index 
+                                                                    ? { ...s, targetName: e.target.value } 
+                                                                    : s
+                                                                )
+                                                            )}
+                                                            className="w-auto min-w-[200px] font-semibold"
                                                         />
-                                                        <span className={group.excludedProducts.has(product) ? "text-muted-foreground line-through" : ""}>{product}</span>
                                                     </div>
-                                                ))}
+                                                </div>
                                             </div>
                                         </div>
 
                                         <div className="flex flex-col gap-2">
                                             <Button
                                                 size="sm"
-                                                variant={group.status === 'accepted' ? "default" : "outline"}
-                                                onClick={() => setSuggestions(prev => prev.map((g, i) => i === index ? { ...g, status: 'accepted' } : g))}
+                                                variant={suggestion.status === 'accepted' ? "default" : "outline"}
+                                                onClick={() => setSuggestions(prev => 
+                                                    prev.map((s, i) => i === index 
+                                                        ? { ...s, status: 'accepted' } 
+                                                        : s
+                                                    )
+                                                )}
                                             >
                                                 <Check className="h-4 w-4 mr-2" /> Acceptera
                                             </Button>
                                             <Button
                                                 size="sm"
-                                                variant={group.status === 'skipped' ? "secondary" : "ghost"}
-                                                onClick={() => setSuggestions(prev => prev.map((g, i) => i === index ? { ...g, status: 'skipped' } : g))}
+                                                variant={suggestion.status === 'skipped' ? "secondary" : "ghost"}
+                                                onClick={() => setSuggestions(prev => 
+                                                    prev.map((s, i) => i === index 
+                                                        ? { ...s, status: 'skipped' } 
+                                                        : s
+                                                    )
+                                                )}
                                             >
                                                 <X className="h-4 w-4 mr-2" /> Hoppa över
                                             </Button>
