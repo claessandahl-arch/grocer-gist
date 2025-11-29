@@ -73,7 +73,6 @@ export type Database = {
       }
       product_mappings: {
         Row: {
-          auto_mapped: boolean | null
           category: string | null
           created_at: string
           id: string
@@ -85,7 +84,6 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          auto_mapped?: boolean | null
           category?: string | null
           created_at?: string
           id?: string
@@ -97,7 +95,6 @@ export type Database = {
           user_id: string
         }
         Update: {
-          auto_mapped?: boolean | null
           category?: string | null
           created_at?: string
           id?: string
