@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.suggest-product-groups]
 verify_jwt = false
+
+[functions.suggest-group-merges]
+verify_jwt = false
