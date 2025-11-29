@@ -1,1 +1,13 @@
 project_id = "mbxrezbotqxttjemwvqk"
+
+[functions.parse-receipt]
+verify_jwt = false
+
+[functions.auto-map-products]
+verify_jwt = false
+
+[functions.suggest-categories]
+verify_jwt = false
+
+[functions.suggest-product-groups]
+verify_jwt = false
