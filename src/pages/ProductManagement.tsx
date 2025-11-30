@@ -53,6 +53,7 @@ export default function ProductManagement() {
   const { data: userMappings = [], isLoading: userMappingsLoading } = useQuery({
     queryKey: ['user-product-mappings', user?.id],
     queryFn: async () => {
+      console.log('[ProductManagement] Fetching user mappings...');
       if (!user) return [];
       const { data, error } = await supabase
         .from('product_mappings')
@@ -60,9 +61,11 @@ export default function ProductManagement() {
         .eq('user_id', user.id);
 
       if (error) throw error;
+      console.log('[ProductManagement] User mappings fetched:', data?.length || 0);
       return data.map(m => ({ ...m, type: 'user' as const }));
     },
     enabled: !!user,
+    staleTime: 0, // Don't cache - always refetch
   });
 
   // Fetch all global mappings
@@ -336,21 +339,22 @@ export default function ProductManagement() {
                   products={filteredUngroupedProducts}
                   existingGroups={productGroups}
                   isLoading={isLoading}
-                  onRefresh={() => {
-                    console.log('[ProductManagement] Refreshing after assignment...');
-                    // Use refetchType: 'all' to ensure partial key matching works
-                    queryClient.invalidateQueries({ 
-                      queryKey: ['receipts-all'],
-                      refetchType: 'all'
-                    });
-                    queryClient.invalidateQueries({ 
+                  onRefresh={async () => {
+                    console.log('[ProductManagement] onRefresh called - Refreshing after assignment...');
+                    // Use refetchQueries instead of invalidateQueries for immediate refetch
+                    console.log('[ProductManagement] Refetching user-product-mappings...');
+                    await queryClient.refetchQueries({ 
                       queryKey: ['user-product-mappings'],
-                      refetchType: 'all'
                     });
-                    queryClient.invalidateQueries({ 
+                    console.log('[ProductManagement] Refetching global-product-mappings...');
+                    await queryClient.refetchQueries({ 
                       queryKey: ['global-product-mappings'],
-                      refetchType: 'all'
                     });
+                    console.log('[ProductManagement] Refetching receipts-all...');
+                    await queryClient.refetchQueries({ 
+                      queryKey: ['receipts-all'],
+                    });
+                    console.log('[ProductManagement] All refetches complete');
                   }}
                 />
               </div>
@@ -363,20 +367,18 @@ export default function ProductManagement() {
                   groups={filteredProductGroups}
                   allGroups={productGroups}
                   isLoading={isLoading}
-                  onRefresh={() => {
-                    console.log('[ProductManagement] Refreshing after group change...');
-                    queryClient.invalidateQueries({ 
-                      queryKey: ['receipts-all'],
-                      refetchType: 'all'
-                    });
-                    queryClient.invalidateQueries({ 
+                  onRefresh={async () => {
+                    console.log('[ProductManagement] onRefresh called - Refreshing after group change...');
+                    await queryClient.refetchQueries({ 
                       queryKey: ['user-product-mappings'],
-                      refetchType: 'all'
                     });
-                    queryClient.invalidateQueries({ 
+                    await queryClient.refetchQueries({ 
                       queryKey: ['global-product-mappings'],
-                      refetchType: 'all'
                     });
+                    await queryClient.refetchQueries({ 
+                      queryKey: ['receipts-all'],
+                    });
+                    console.log('[ProductManagement] All refetches complete');
                   }}
                 />
               </div>
