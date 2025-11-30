@@ -288,6 +288,19 @@ export type Database = {
         }
         Relationships: []
       }
+      view_product_store_prices: {
+        Row: {
+          avg_unit_price: number | null
+          data_points: number | null
+          last_purchased: string | null
+          max_unit_price: number | null
+          min_unit_price: number | null
+          product_name: string | null
+          store_name: string | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
       view_store_comparison: {
         Row: {
           month_start: string | null
@@ -295,6 +308,41 @@ export type Database = {
           total_spend: number | null
           user_id: string | null
           visit_count: number | null
+        }
+        Relationships: []
+      }
+      view_store_recommendations: {
+        Row: {
+          cheapest_price: number | null
+          cheapest_store_name: string | null
+          current_avg_price: number | null
+          potential_total_savings: number | null
+          product_name: string | null
+          purchase_count: number | null
+          savings_per_unit: number | null
+          savings_percent: number | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
+      view_store_savings_summary: {
+        Row: {
+          avg_savings_percent: number | null
+          products_cheapest_at: number | null
+          store_name: string | null
+          total_potential_savings: number | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
+      view_user_basket: {
+        Row: {
+          avg_unit_price: number | null
+          product_name: string | null
+          purchase_count: number | null
+          stores_bought_at: number | null
+          total_spent: number | null
+          user_id: string | null
         }
         Relationships: []
       }
