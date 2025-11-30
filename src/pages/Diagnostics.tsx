@@ -437,6 +437,69 @@ export default function Diagnostics() {
                                 </Button>
                             </div>
 
+                            {/* Recent Auto-Mapped Products */}
+                            <div className="mt-8 pt-8 border-t">
+                                <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
+                                    <Sparkles className="h-5 w-5 text-purple-500" />
+                                    Senaste AI-mappningar
+                                </h3>
+                                <p className="text-sm text-muted-foreground mb-4">
+                                    Produkter som automatiskt mappats av AI (senaste 50).
+                                </p>
+                                {loadingAutoMapped ? (
+                                    <p className="text-sm text-muted-foreground">Laddar...</p>
+                                ) : recentAutoMapped.length === 0 ? (
+                                    <div className="text-center py-8 text-muted-foreground">
+                                        <Sparkles className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                                        <p>Inga AI-mappade produkter ännu.</p>
+                                        <p className="text-xs mt-1">Ladda upp ett kvitto eller använd "Mappa alla automatiskt" i Produkthantering.</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                            <CheckCircle className="h-4 w-4 text-green-500" />
+                                            <span>{recentAutoMapped.length} AI-mappade produkter</span>
+                                        </div>
+                                        <div className="border rounded-md overflow-hidden max-h-[400px] overflow-y-auto">
+                                            <table className="w-full text-sm text-left">
+                                                <thead className="bg-muted sticky top-0">
+                                                    <tr>
+                                                        <th className="p-2">Originalnamn</th>
+                                                        <th className="p-2">Grupp</th>
+                                                        <th className="p-2">Kategori</th>
+                                                        <th className="p-2">Tid</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y">
+                                                    {recentAutoMapped.map((m) => (
+                                                        <tr key={m.id} className="hover:bg-muted/50">
+                                                            <td className="p-2 font-medium">{m.original_name}</td>
+                                                            <td className="p-2">
+                                                                <Badge variant="secondary">{m.mapped_name}</Badge>
+                                                            </td>
+                                                            <td className="p-2 text-xs text-muted-foreground">
+                                                                {m.category || '-'}
+                                                            </td>
+                                                            <td className="p-2 text-xs text-muted-foreground">
+                                                                <span className="flex items-center gap-1">
+                                                                    <Clock className="h-3 w-3" />
+                                                                    {new Date(m.created_at).toLocaleString('sv-SE', {
+                                                                        month: 'short',
+                                                                        day: 'numeric',
+                                                                        hour: '2-digit',
+                                                                        minute: '2-digit'
+                                                                    })}
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
                             {/* Raw Data Inspector */}
                             <div className="mt-8 pt-8 border-t">
                                 <h3 className="text-lg font-semibold mb-4">Manuell Inspektion (Raw Data)</h3>
@@ -492,73 +555,6 @@ export default function Diagnostics() {
                                     </div>
                                 )}
                             </div>
-                        </CardContent>
-                    </Card>
-
-                    {/* Recent Auto-Mapped Products Card */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <Sparkles className="h-5 w-5 text-purple-500" />
-                                Senaste AI-mappningar
-                            </CardTitle>
-                            <CardDescription>
-                                Produkter som automatiskt mappats av AI (senaste 50).
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            {loadingAutoMapped ? (
-                                <p className="text-sm text-muted-foreground">Laddar...</p>
-                            ) : recentAutoMapped.length === 0 ? (
-                                <div className="text-center py-8 text-muted-foreground">
-                                    <Sparkles className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                                    <p>Inga AI-mappade produkter ännu.</p>
-                                    <p className="text-xs mt-1">Ladda upp ett kvitto eller använd "Mappa alla automatiskt" i Produkthantering.</p>
-                                </div>
-                            ) : (
-                                <div className="space-y-4">
-                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                        <CheckCircle className="h-4 w-4 text-green-500" />
-                                        <span>{recentAutoMapped.length} AI-mappade produkter</span>
-                                    </div>
-                                    <div className="border rounded-md overflow-hidden max-h-[400px] overflow-y-auto">
-                                        <table className="w-full text-sm text-left">
-                                            <thead className="bg-muted sticky top-0">
-                                                <tr>
-                                                    <th className="p-2">Originalnamn</th>
-                                                    <th className="p-2">Grupp</th>
-                                                    <th className="p-2">Kategori</th>
-                                                    <th className="p-2">Tid</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y">
-                                                {recentAutoMapped.map((m) => (
-                                                    <tr key={m.id} className="hover:bg-muted/50">
-                                                        <td className="p-2 font-medium">{m.original_name}</td>
-                                                        <td className="p-2">
-                                                            <Badge variant="secondary">{m.mapped_name}</Badge>
-                                                        </td>
-                                                        <td className="p-2 text-xs text-muted-foreground">
-                                                            {m.category || '-'}
-                                                        </td>
-                                                        <td className="p-2 text-xs text-muted-foreground">
-                                                            <span className="flex items-center gap-1">
-                                                                <Clock className="h-3 w-3" />
-                                                                {new Date(m.created_at).toLocaleString('sv-SE', {
-                                                                    month: 'short',
-                                                                    day: 'numeric',
-                                                                    hour: '2-digit',
-                                                                    minute: '2-digit'
-                                                                })}
-                                                            </span>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            )}
                         </CardContent>
                     </Card>
                 </div>
