@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Package } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ArrowLeft, Package, AlertTriangle } from "lucide-react";
 import { StatsCard } from "@/components/datamanagement/StatsCard";
 import { UngroupedProductsList } from "@/components/product-management/UngroupedProductsList";
 import { ProductGroupsList } from "@/components/product-management/ProductGroupsList";
@@ -288,6 +289,17 @@ export default function ProductManagement() {
             </div>
           </div>
         </div>
+
+        {/* Data Truncation Warning */}
+        {(userMappings.length === 10000 || globalMappings.length === 10000) && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              Varning: Du har nått gränsen för produktmappningar ({userMappings.length === 10000 ? 'personliga' : 'globala'}). 
+              Vissa produkter kanske inte visas. Kontakta support om du behöver hantera fler mappningar.
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
