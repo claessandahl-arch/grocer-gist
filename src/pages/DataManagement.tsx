@@ -3,8 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Database } from "lucide-react";
+import { ArrowLeft, Database, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { ProductTable } from "@/components/datamanagement/ProductTable";
 import { BulkCategoryEditor } from "@/components/datamanagement/BulkCategoryEditor";
@@ -74,9 +75,11 @@ export default function DataManagement() {
       const { data, error } = await supabase
         .from('product_mappings')
         .select('*')
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .limit(10000); // Override default 1000 row limit
 
       if (error) throw error;
+      console.log('[DataManagement] User mappings fetched:', data?.length || 0);
       return data.map(m => ({ ...m, type: 'user' as const }));
     },
     enabled: !!user,
@@ -88,9 +91,11 @@ export default function DataManagement() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('global_product_mappings')
-        .select('*');
+        .select('*')
+        .limit(10000); // Override default 1000 row limit
 
       if (error) throw error;
+      console.log('[DataManagement] Global mappings fetched:', data?.length || 0);
       return data.map(m => ({ ...m, type: 'global' as const, user_id: '' }));
     },
   });
@@ -384,6 +389,17 @@ export default function DataManagement() {
             </div>
           </div>
         </div>
+
+        {/* Data Truncation Warning */}
+        {(userMappings.length === 10000 || globalMappings.length === 10000) && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              Varning: Du har nått gränsen för produktmappningar ({userMappings.length === 10000 ? 'personliga' : 'globala'}). 
+              Vissa produkter kanske inte visas. Kontakta support om du behöver hantera fler mappningar.
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
