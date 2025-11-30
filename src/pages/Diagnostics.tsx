@@ -118,7 +118,7 @@ export default function Diagnostics() {
         enabled: !!user,
     });
 
-    // Mutation to delete all receipts
+    // Mutation to delete all receipts (current user only)
     const deleteAllReceipts = useMutation({
         mutationFn: async () => {
             if (!user) throw new Error("Not authenticated");
@@ -138,6 +138,30 @@ export default function Diagnostics() {
         },
         onError: (error) => {
             toast.error("Kunde inte radera kvitton: " + error.message);
+        }
+    });
+
+    // 🔥 GOD MODE: Delete ALL receipts from ALL users
+    const deleteAllReceiptsGodMode = useMutation({
+        mutationFn: async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) throw new Error("Not authenticated");
+
+            const response = await supabase.functions.invoke('admin-delete-all', {
+                body: { action: 'delete-all-receipts' }
+            });
+
+            if (response.error) throw response.error;
+            return response.data;
+        },
+        onSuccess: (data) => {
+            toast.success(`🔥 GOD MODE: ${data.deletedCount} kvitton raderade från alla användare!`);
+            queryClient.invalidateQueries({ queryKey: ['diagnostics-receipt-count'] });
+            queryClient.invalidateQueries({ queryKey: ['receipts-all'] });
+            queryClient.invalidateQueries({ queryKey: ['receipts'] });
+        },
+        onError: (error) => {
+            toast.error("God Mode misslyckades: " + error.message);
         }
     });
 
@@ -340,6 +364,54 @@ export default function Diagnostics() {
                                             <AlertDialogCancel>Avbryt</AlertDialogCancel>
                                             <AlertDialogAction onClick={() => deleteAllReceipts.mutate()}>
                                                 Ja, radera allt
+                                            </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                            </div>
+
+                            {/* 🔥 GOD MODE: Delete ALL receipts from ALL users */}
+                            <div className="flex items-center justify-between p-4 border-2 border-red-500 rounded-lg bg-red-950/20 mt-4">
+                                <div className="space-y-1">
+                                    <h3 className="font-medium text-red-400 flex items-center gap-2">
+                                        🔥 GOD MODE: Radera ALLA kvitton
+                                    </h3>
+                                    <p className="text-sm text-muted-foreground">
+                                        Raderar alla kvitton från <strong>ALLA användare</strong> i hela systemet.
+                                        Använd detta för att börja helt från början efter uppdateringar.
+                                    </p>
+                                    <p className="text-xs text-red-400 mt-1">
+                                        ⚠️ Detta påverkar alla användare, inte bara dig!
+                                    </p>
+                                </div>
+
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                        <Button
+                                            variant="destructive"
+                                            className="bg-red-600 hover:bg-red-700"
+                                            disabled={deleteAllReceiptsGodMode.isPending}
+                                        >
+                                            {deleteAllReceiptsGodMode.isPending ? "🔥 Raderar..." : "🔥 GOD MODE"}
+                                        </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent className="border-red-500">
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle className="text-red-500">🔥 GOD MODE: Radera ALLT?</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                                <span className="text-red-400 font-bold">VARNING!</span> Detta kommer att permanent radera 
+                                                ALLA kvitton från ALLA användare i hela systemet.
+                                                <br /><br />
+                                                Detta går inte att ångra. Produktkopplingar och inställningar bevaras.
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+                                            <AlertDialogAction 
+                                                className="bg-red-600 hover:bg-red-700"
+                                                onClick={() => deleteAllReceiptsGodMode.mutate()}
+                                            >
+                                                🔥 Ja, radera ALLT
                                             </AlertDialogAction>
                                         </AlertDialogFooter>
                                     </AlertDialogContent>
