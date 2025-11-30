@@ -68,6 +68,7 @@ export default function ProductManagement() {
     },
     enabled: !!user,
     staleTime: 0, // Don't cache - always refetch
+    refetchOnMount: true, // Force refetch on mount
   });
 
   // Fetch all global mappings
