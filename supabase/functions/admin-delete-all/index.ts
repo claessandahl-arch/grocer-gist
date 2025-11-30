@@ -56,18 +56,7 @@ serve(async (req) => {
         .from('receipts')
         .select('*', { count: 'exact', head: true });
 
-      // Delete all receipt_items first (foreign key constraint)
-      const { error: itemsError } = await supabaseAdmin
-        .from('receipt_items')
-        .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all (neq to impossible UUID)
-
-      if (itemsError) {
-        console.error('Error deleting receipt_items:', itemsError);
-        throw itemsError;
-      }
-
-      // Delete all receipts
+      // Delete all receipts (items are stored as JSONB within receipts)
       const { error: receiptsError } = await supabaseAdmin
         .from('receipts')
         .delete()
@@ -78,7 +67,7 @@ serve(async (req) => {
         throw receiptsError;
       }
 
-      console.log(`✅ Deleted ${beforeCount} receipts and their items`);
+      console.log(`✅ Deleted ${beforeCount} receipts`);
 
       return new Response(
         JSON.stringify({ 
@@ -95,11 +84,9 @@ serve(async (req) => {
 
       // Delete in order of dependencies
       const tables = [
-        'receipt_items',
         'receipts', 
         'product_mappings',
         'user_global_overrides',
-        'category_suggestion_feedback',
         'store_patterns'
       ];
 
