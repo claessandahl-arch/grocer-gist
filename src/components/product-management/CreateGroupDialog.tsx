@@ -100,7 +100,7 @@ export function CreateGroupDialog({
         updates.category = category;
       }
 
-      // Insert new mappings for unmapped products
+      // Insert new mappings for unmapped products (or update if they already exist)
       if (unmappedProducts.length > 0) {
         const newMappings = unmappedProducts.map(p => ({
           user_id: user.id,
@@ -111,7 +111,10 @@ export function CreateGroupDialog({
 
         const { error: insertError } = await supabase
           .from('product_mappings')
-          .insert(newMappings);
+          .upsert(newMappings, {
+            onConflict: 'user_id,original_name',
+            ignoreDuplicates: false
+          });
 
         if (insertError) throw insertError;
       }
