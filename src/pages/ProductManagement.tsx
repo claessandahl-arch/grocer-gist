@@ -337,9 +337,20 @@ export default function ProductManagement() {
                   existingGroups={productGroups}
                   isLoading={isLoading}
                   onRefresh={() => {
-                    queryClient.invalidateQueries({ queryKey: ['receipts-all'] });
-                    queryClient.invalidateQueries({ queryKey: ['user-product-mappings'] });
-                    queryClient.invalidateQueries({ queryKey: ['global-product-mappings'] });
+                    console.log('[ProductManagement] Refreshing after assignment...');
+                    // Use refetchType: 'all' to ensure partial key matching works
+                    queryClient.invalidateQueries({ 
+                      queryKey: ['receipts-all'],
+                      refetchType: 'all'
+                    });
+                    queryClient.invalidateQueries({ 
+                      queryKey: ['user-product-mappings'],
+                      refetchType: 'all'
+                    });
+                    queryClient.invalidateQueries({ 
+                      queryKey: ['global-product-mappings'],
+                      refetchType: 'all'
+                    });
                   }}
                 />
               </div>
@@ -353,9 +364,19 @@ export default function ProductManagement() {
                   allGroups={productGroups}
                   isLoading={isLoading}
                   onRefresh={() => {
-                    queryClient.invalidateQueries({ queryKey: ['receipts-all'] });
-                    queryClient.invalidateQueries({ queryKey: ['user-product-mappings'] });
-                    queryClient.invalidateQueries({ queryKey: ['global-product-mappings'] });
+                    console.log('[ProductManagement] Refreshing after group change...');
+                    queryClient.invalidateQueries({ 
+                      queryKey: ['receipts-all'],
+                      refetchType: 'all'
+                    });
+                    queryClient.invalidateQueries({ 
+                      queryKey: ['user-product-mappings'],
+                      refetchType: 'all'
+                    });
+                    queryClient.invalidateQueries({ 
+                      queryKey: ['global-product-mappings'],
+                      refetchType: 'all'
+                    });
                   }}
                 />
               </div>
