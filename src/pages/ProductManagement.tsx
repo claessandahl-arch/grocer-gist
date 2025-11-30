@@ -58,7 +58,8 @@ export default function ProductManagement() {
       const { data, error } = await supabase
         .from('product_mappings')
         .select('*')
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .limit(10000); // Override default 1000 row limit
 
       if (error) throw error;
       console.log('[ProductManagement] User mappings fetched:', data?.length || 0);
@@ -74,7 +75,8 @@ export default function ProductManagement() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('global_product_mappings')
-        .select('*');
+        .select('*')
+        .limit(10000); // Override default 1000 row limit
 
       if (error) throw error;
       return data.map(m => ({ ...m, type: 'global' as const }));
