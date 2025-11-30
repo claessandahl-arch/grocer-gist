@@ -5,7 +5,7 @@ import { CategoryBreakdown } from "@/components/dashboard/CategoryBreakdown";
 import { StoreComparison } from "@/components/dashboard/StoreComparison";
 import { MonthlySummary } from "@/components/dashboard/MonthlySummary";
 import { Button } from "@/components/ui/button";
-import { Upload, ArrowLeft, ChevronLeft, ChevronRight, Package } from "lucide-react";
+import { Upload, ArrowLeft, ChevronLeft, ChevronRight, Package, Store } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -82,6 +82,10 @@ const Dashboard = () => {
               <h1 className="text-2xl font-bold text-foreground">Kvittoinsikter</h1>
             </div>
             <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => navigate("/store-recommendations")} className="gap-2">
+                <Store className="h-4 w-4" />
+                Butiksråd
+              </Button>
               <Button variant="outline" size="sm" onClick={() => navigate("/product-management")} className="gap-2">
                 <Package className="h-4 w-4" />
                 Produkthantering
