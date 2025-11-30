@@ -250,6 +250,48 @@ npm preview
    - Columns: `user_id`, `year_month`, `total_spend`, `receipt_count`, `avg_per_receipt`
    - Improves dashboard performance by pre-calculating totals
 
+### Supabase API Row Limits ⚠️ CRITICAL
+
+**Problem**: Supabase has a default API row limit of **1000 rows per query**. Even if you add `.limit(10000)` or `.range(0, 9999)`, the API will still only return 1000 rows.
+
+**Symptoms**:
+- Queries return exactly 1000 rows even when more exist
+- New records don't appear in the UI after creation
+- `.limit()` and `.range()` appear to be ignored
+
+**Solution**: Use pagination to fetch all rows:
+```typescript
+const PAGE_SIZE = 1000;
+let allData: any[] = [];
+let from = 0;
+let hasMore = true;
+
+while (hasMore) {
+  const { data, error } = await supabase
+    .from('your_table')
+    .select('*')
+    .eq('user_id', user.id)
+    .range(from, from + PAGE_SIZE - 1);
+
+  if (error) throw error;
+  
+  if (data && data.length > 0) {
+    allData = [...allData, ...data];
+    from += PAGE_SIZE;
+    hasMore = data.length === PAGE_SIZE;
+  } else {
+    hasMore = false;
+  }
+}
+```
+
+**Alternative**: Increase the limit in Supabase Dashboard → Project Settings → API → "Max Rows"
+
+**Affected queries in this project**:
+- `ProductManagement.tsx`: user mappings query (uses pagination)
+- `DataManagement.tsx`: may need pagination if mappings exceed 1000
+- Any query on tables that might have >1000 rows per user
+
 2. **view_category_breakdown** - Spending by category per month with corrected categories
    - Applies category correction priority: user mappings > global mappings > receipt category > 'other'
    - Columns: `user_id`, `year_month`, `category`, `total_spend`, `item_count`
