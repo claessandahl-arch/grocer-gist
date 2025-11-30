@@ -139,6 +139,20 @@ export function CreateGroupDialog({
 
         console.log('[CreateGroup] Upsert result:', { data: upsertData, error: insertError });
         if (insertError) throw insertError;
+
+        // Verify the data was actually written
+        const { data: verifyData, error: verifyError } = await supabase
+          .from('product_mappings')
+          .select('*')
+          .eq('user_id', user.id)
+          .in('original_name', unmappedProducts.map(p => p.original_name));
+        
+        console.log('[CreateGroup] Verification query result:', { 
+          data: verifyData, 
+          error: verifyError,
+          expected: unmappedProducts.length,
+          found: verifyData?.length || 0
+        });
       }
 
       // Update existing user products
@@ -170,9 +184,11 @@ export function CreateGroupDialog({
       console.log('[CreateGroup] All operations completed successfully');
     },
     onSuccess: () => {
-      console.log('[CreateGroup] onSuccess called');
+      console.log('[CreateGroup] onSuccess called - about to call onSuccess callback');
       toast.success(`Produktgrupp "${groupName}" skapad med ${selectedProducts.length} produkt${selectedProducts.length !== 1 ? 'er' : ''}!`);
+      console.log('[CreateGroup] Toast shown, now calling parent onSuccess...');
       onSuccess();
+      console.log('[CreateGroup] Parent onSuccess called');
     },
     onError: (error: Error) => {
       console.error('[CreateGroup] onError:', error);
