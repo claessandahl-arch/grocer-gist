@@ -367,6 +367,7 @@ function parseICAReceiptText(text: string): { items: ParsedItem[]; store_name?: 
 
         let productName = nameParts.join(' ').replace(/^\*/, '').trim();
         let discount = 0;
+        let multiBuyPerItemPrice: number | null = null; // Calculated from offer pattern
 
         // Check next line(s) for name continuation or discount
         let j = i + 1;
@@ -391,10 +392,19 @@ function parseICAReceiptText(text: string): { items: ParsedItem[]; store_name?: 
               const offerMatch = beforeNegative.match(/^(.+?)\s*(\d+)\s*(?:för|f|\/)\s*(\d+[,.]?\d*)(?:kr)?$/i);
               if (offerMatch) {
                 const brandName = offerMatch[1].trim();
+                const bundleQty = parseInt(offerMatch[2]);
+                const bundlePrice = parseFloat(offerMatch[3].replace(',', '.'));
+                
                 // Prepend brand if it's different from product name and not empty
                 if (brandName && !productName.toLowerCase().includes(brandName.toLowerCase())) {
                   productName = brandName + ' ' + productName;
                   console.log(`  🏷️  Multi-buy offer detected, prepended brand: "${brandName}"`);
+                }
+                
+                // Calculate per-item price from the offer
+                if (bundleQty > 0 && bundlePrice > 0) {
+                  multiBuyPerItemPrice = bundlePrice / bundleQty;
+                  console.log(`  💰 Multi-buy price: ${bundleQty} för ${bundlePrice} kr = ${multiBuyPerItemPrice.toFixed(2)} kr/st`);
                 }
               } else {
                 // Regular name continuation
@@ -411,11 +421,21 @@ function parseICAReceiptText(text: string): { items: ParsedItem[]; store_name?: 
           const offerMatch = nextLine.match(/^(.+?)\s*(\d+)\s*(?:för|f|\/)\s*(\d+[,.]?\d*)(?:kr)?$/i);
           if (offerMatch) {
             const brandName = offerMatch[1].trim();
+            const bundleQty = parseInt(offerMatch[2]);
+            const bundlePrice = parseFloat(offerMatch[3].replace(',', '.'));
+            
             // Prepend brand if it's different from product name and not empty
             if (brandName && !productName.toLowerCase().includes(brandName.toLowerCase())) {
               productName = brandName + ' ' + productName;
               console.log(`  🏷️  Multi-buy offer detected on separate line, prepended brand: "${brandName}"`);
             }
+            
+            // Calculate per-item price from the offer
+            if (bundleQty > 0 && bundlePrice > 0) {
+              multiBuyPerItemPrice = bundlePrice / bundleQty;
+              console.log(`  💰 Multi-buy price: ${bundleQty} för ${bundlePrice} kr = ${multiBuyPerItemPrice.toFixed(2)} kr/st`);
+            }
+            
             // Don't append the offer pattern itself to product name
             j++;
             continue; // Continue to look for discount line
@@ -431,7 +451,17 @@ function parseICAReceiptText(text: string): { items: ParsedItem[]; store_name?: 
         }
 
         // Calculate final price
-        const finalPrice = discount > 0 ? summa - discount : summa;
+        let finalPrice: number;
+        if (multiBuyPerItemPrice !== null) {
+          // Use the multi-buy per-item price instead of receipt's discount allocation
+          finalPrice = parseFloat((multiBuyPerItemPrice * quantity).toFixed(2));
+          // Recalculate the actual discount
+          discount = parseFloat((summa - finalPrice).toFixed(2));
+          if (discount < 0) discount = 0; // Safety check
+          console.log(`  🔄 Recalculated from multi-buy: ${quantity}x ${multiBuyPerItemPrice.toFixed(2)} kr = ${finalPrice} kr (discount: ${discount} kr)`);
+        } else {
+          finalPrice = discount > 0 ? summa - discount : summa;
+        }
 
         console.log(`  ✅ Created item: ${productName} (${quantity}x ${finalPrice} kr${discount > 0 ? `, discount: ${discount}` : ''})`);
 
@@ -1063,31 +1093,44 @@ ${filenameHint}
    4. Calculate: price = 65.90 - 20.90 = 45.00
    5. OUTPUT: { name: "Linguine Rummo pasta", quantity: 2, price: 45.00, discount: 20.90 }
 
-   Example 3 - MULTI-BUY OFFER PATTERNS (🆕 CRITICAL):
+   Example 3 - MULTI-BUY OFFER PATTERNS (🆕 CRITICAL - PRICE CALCULATION):
    These patterns indicate a multi-buy discount and contain the BRAND NAME:
-   - "Nocco 3för45kr" → Brand "Nocco", offer "3 for 45 kr"
-   - "red bull 2f26" → Brand "Red Bull", offer "2 for 26 kr"
-   - "Mozzarella 3/45" → Brand "Mozzarella", offer "3 for 45 kr"
+   - "Nocco 3för45kr" → Brand "Nocco", offer "3 for 45 kr" → per-item = 15 kr
+   - "red bull 2f26" → Brand "Red Bull", offer "2 for 26 kr" → per-item = 13 kr
+   - "Mozzarella 3/45" → Brand "Mozzarella", offer "3 for 45 kr" → per-item = 15 kr
 
-   Line 1: "*Juicy Melba         7340131603507  20,95  2,00 st    39,90"
-   Line 2: "Nocco 3för45kr"           ← BRAND + OFFER (not name continuation!)
-   Line 3: "                                                        -14,85"  ← discount
+   Line 1: "*Juicy Melba         7340131603507  16,00  1,00 st    19,95"
+   Line 2: "Nocco 3för45kr"           ← BRAND + OFFER
+   Line 3: "                                                        -14,85"  ← discount (IGNORE THIS!)
+
+   🚨 CRITICAL PRICE CALCULATION:
+   The receipt's discount (-14.85) gives WRONG per-item price (19.95 - 14.85 = 5.10).
+   Instead, calculate from the OFFER PATTERN:
+   - Offer: 3för45 = 45 ÷ 3 = **15 kr per item**
+   - Final price for 1 item = 15 kr (NOT 5.10!)
+   - Recalculated discount = 19.95 - 15 = 4.95 kr
 
    PARSING LOGIC:
-   1. Read Line 1 → Product starts: "Juicy Melba", summa=39.90, qty=2
+   1. Read Line 1 → Product: "Juicy Melba", summa=19.95, qty=1
    2. Read Line 2 → Matches offer pattern "Nocco 3för45kr":
-      🚨 "Nocco" = BRAND NAME (prepend to product name, not append!)
-      🚨 "3för45kr" = OFFER PATTERN (ignore, don't add to name)
-   3. Combine name: "Nocco" + "Juicy Melba" = "Nocco Juicy Melba" (brand first!)
-   4. Read Line 3 → Discount line: discount=14.85
-   5. Calculate: price = 39.90 - 14.85 = 25.05
-   6. OUTPUT: { name: "Nocco Juicy Melba", quantity: 2, price: 25.05, discount: 14.85 }
+      🏷️ "Nocco" = BRAND NAME (prepend to product name)
+      💰 "3för45" = Calculate per-item price: 45 ÷ 3 = 15 kr
+   3. Combine name: "Nocco" + "Juicy Melba" = "Nocco Juicy Melba"
+   4. Read Line 3 → Discount line (use for validation, but calculate price from offer)
+   5. Calculate: price = 15 × 1 = 15 kr, discount = 19.95 - 15 = 4.95 kr
+   6. OUTPUT: { name: "Nocco Juicy Melba", quantity: 1, price: 15.00, discount: 4.95 }
+
+   ⚠️ IMPORTANT: When multi-buy offer detected, ALWAYS:
+   1. Calculate per_item_price = bundle_price ÷ bundle_quantity
+   2. Final price = per_item_price × quantity
+   3. Discount = original_summa - final_price
+   4. Do NOT use the receipt's raw discount value!
 
    MULTI-BUY OFFER PATTERN REGEX:
    Pattern: /^(.+?)\\s*(\\d+)\\s*(?:för|f|\\/)\\s*(\\d+[,.]?\\d*)(?:kr)?$/i
    Examples that MATCH:
-   - "Nocco 3för45kr" → brand="Nocco"
-   - "red bull 2f26" → brand="red bull"
+   - "Nocco 3för45kr" → brand="Nocco", bundle_qty=3, bundle_price=45, per_item=15
+   - "red bull 2f26" → brand="red bull", bundle_qty=2, bundle_price=26, per_item=13
    - "Mozzarella 3/45" → brand="Mozzarella"
    - "Monster 2för55" → brand="Monster"
 
@@ -1114,6 +1157,7 @@ ${filenameHint}
    ✓ 🆕 CRITICAL: Did you detect MULTI-BUY OFFER patterns (Xför#, Xf#, X/#)?
       ❌ "Juicy Melba" + "Nocco 3för45kr" = "Nocco Juicy Melba" (brand prepended!)
       ❌ Do NOT append "3för45kr" to the product name!
+      ❌ Calculate per_item_price = bundle_price ÷ bundle_qty (e.g., 45÷3=15kr)
    
 5. SWEDISH ABBREVIATIONS & CONTEXT:
    - "st" = styck (piece/quantity). Example: "2 st" means quantity 2.
