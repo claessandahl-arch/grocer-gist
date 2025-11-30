@@ -341,18 +341,22 @@ export default function ProductManagement() {
                   isLoading={isLoading}
                   onRefresh={async () => {
                     console.log('[ProductManagement] onRefresh called - Refreshing after assignment...');
-                    // Use refetchQueries instead of invalidateQueries for immediate refetch
+                    console.log('[ProductManagement] Current user id:', user?.id);
+                    // Use exact query key with user id for user mappings
                     console.log('[ProductManagement] Refetching user-product-mappings...');
                     await queryClient.refetchQueries({ 
-                      queryKey: ['user-product-mappings'],
+                      queryKey: ['user-product-mappings', user?.id],
+                      exact: true,
                     });
                     console.log('[ProductManagement] Refetching global-product-mappings...');
                     await queryClient.refetchQueries({ 
                       queryKey: ['global-product-mappings'],
+                      exact: true,
                     });
                     console.log('[ProductManagement] Refetching receipts-all...');
                     await queryClient.refetchQueries({ 
                       queryKey: ['receipts-all'],
+                      exact: true,
                     });
                     console.log('[ProductManagement] All refetches complete');
                   }}
@@ -370,13 +374,16 @@ export default function ProductManagement() {
                   onRefresh={async () => {
                     console.log('[ProductManagement] onRefresh called - Refreshing after group change...');
                     await queryClient.refetchQueries({ 
-                      queryKey: ['user-product-mappings'],
+                      queryKey: ['user-product-mappings', user?.id],
+                      exact: true,
                     });
                     await queryClient.refetchQueries({ 
                       queryKey: ['global-product-mappings'],
+                      exact: true,
                     });
                     await queryClient.refetchQueries({ 
                       queryKey: ['receipts-all'],
+                      exact: true,
                     });
                     console.log('[ProductManagement] All refetches complete');
                   }}
