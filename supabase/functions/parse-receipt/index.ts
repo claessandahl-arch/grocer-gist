@@ -371,7 +371,7 @@ function parseICAReceiptText(text: string): { items: ParsedItem[]; store_name?: 
         // Check next line(s) for name continuation or discount
         let j = i + 1;
         while (j < lines.length) {
-          const nextLine = lines[j];
+          const nextLine = lines[j].trim();
 
           // If next line has article number, it's a new product
           if (nextLine.match(/\d{8,13}/)) {
@@ -383,17 +383,45 @@ function parseICAReceiptText(text: string): { items: ParsedItem[]; store_name?: 
           if (negativeMatch) {
             discount = parseFloat(negativeMatch[1].replace(',', '.'));
 
-            // Check if there's text before the negative number (continuation of name)
+            // Check if there's text before the negative number (continuation of name or brand)
             const beforeNegative = nextLine.substring(0, nextLine.indexOf('-')).trim();
             if (beforeNegative && !beforeNegative.match(/^\d/)) {
-              productName += ' ' + beforeNegative;
+              // Check if this text contains a multi-buy offer pattern
+              // Patterns: "Nocco 3för45kr", "red bull 2f26", "Mozzarella 3/45"
+              const offerMatch = beforeNegative.match(/^(.+?)\s*(\d+)\s*(?:för|f|\/)\s*(\d+[,.]?\d*)(?:kr)?$/i);
+              if (offerMatch) {
+                const brandName = offerMatch[1].trim();
+                // Prepend brand if it's different from product name and not empty
+                if (brandName && !productName.toLowerCase().includes(brandName.toLowerCase())) {
+                  productName = brandName + ' ' + productName;
+                  console.log(`  🏷️  Multi-buy offer detected, prepended brand: "${brandName}"`);
+                }
+              } else {
+                // Regular name continuation
+                productName += ' ' + beforeNegative;
+              }
             }
 
             j++;
             break;
           }
 
-          // If no negative number, it might be name continuation
+          // Check if this line is a multi-buy offer pattern (without negative number yet)
+          // Patterns: "Nocco 3för45kr", "red bull 2f26", "Mozzarella 3/45"
+          const offerMatch = nextLine.match(/^(.+?)\s*(\d+)\s*(?:för|f|\/)\s*(\d+[,.]?\d*)(?:kr)?$/i);
+          if (offerMatch) {
+            const brandName = offerMatch[1].trim();
+            // Prepend brand if it's different from product name and not empty
+            if (brandName && !productName.toLowerCase().includes(brandName.toLowerCase())) {
+              productName = brandName + ' ' + productName;
+              console.log(`  🏷️  Multi-buy offer detected on separate line, prepended brand: "${brandName}"`);
+            }
+            // Don't append the offer pattern itself to product name
+            j++;
+            continue; // Continue to look for discount line
+          }
+
+          // If no negative number and not an offer pattern, it might be name continuation
           if (!nextLine.match(/^\d/) && nextLine.length > 0) {
             productName += ' ' + nextLine;
             j++;
@@ -1035,6 +1063,40 @@ ${filenameHint}
    4. Calculate: price = 65.90 - 20.90 = 45.00
    5. OUTPUT: { name: "Linguine Rummo pasta", quantity: 2, price: 45.00, discount: 20.90 }
 
+   Example 3 - MULTI-BUY OFFER PATTERNS (🆕 CRITICAL):
+   These patterns indicate a multi-buy discount and contain the BRAND NAME:
+   - "Nocco 3för45kr" → Brand "Nocco", offer "3 for 45 kr"
+   - "red bull 2f26" → Brand "Red Bull", offer "2 for 26 kr"
+   - "Mozzarella 3/45" → Brand "Mozzarella", offer "3 for 45 kr"
+
+   Line 1: "*Juicy Melba         7340131603507  20,95  2,00 st    39,90"
+   Line 2: "Nocco 3för45kr"           ← BRAND + OFFER (not name continuation!)
+   Line 3: "                                                        -14,85"  ← discount
+
+   PARSING LOGIC:
+   1. Read Line 1 → Product starts: "Juicy Melba", summa=39.90, qty=2
+   2. Read Line 2 → Matches offer pattern "Nocco 3för45kr":
+      🚨 "Nocco" = BRAND NAME (prepend to product name, not append!)
+      🚨 "3för45kr" = OFFER PATTERN (ignore, don't add to name)
+   3. Combine name: "Nocco" + "Juicy Melba" = "Nocco Juicy Melba" (brand first!)
+   4. Read Line 3 → Discount line: discount=14.85
+   5. Calculate: price = 39.90 - 14.85 = 25.05
+   6. OUTPUT: { name: "Nocco Juicy Melba", quantity: 2, price: 25.05, discount: 14.85 }
+
+   MULTI-BUY OFFER PATTERN REGEX:
+   Pattern: /^(.+?)\\s*(\\d+)\\s*(?:för|f|\\/)\\s*(\\d+[,.]?\\d*)(?:kr)?$/i
+   Examples that MATCH:
+   - "Nocco 3för45kr" → brand="Nocco"
+   - "red bull 2f26" → brand="red bull"
+   - "Mozzarella 3/45" → brand="Mozzarella"
+   - "Monster 2för55" → brand="Monster"
+
+   ⚠️ IMPORTANT: When you find a multi-buy offer line:
+   1. Extract the BRAND NAME (text before the offer pattern)
+   2. PREPEND the brand to the product name (brand first, e.g., "Nocco Juicy Melba")
+   3. DO NOT append the offer pattern itself (e.g., "3för45kr") to the product name
+   4. If the brand is already in the product name, don't duplicate it
+
 4. VALIDATION CHECKLIST (before returning results):
 
    ✓ Did you check EVERY product line for a discount on the next line?
@@ -1049,6 +1111,9 @@ ${filenameHint}
       ❌ This is NOT a separate item - it's name continuation + discount!
    ✓ 🚨 CRITICAL: For items starting with "*", check if next line has text + discount
       ❌ "*Blood Orange... 45,90" + "Nocco -5,90" = ONE item "Blood Orange Nocco" (40 kr)!
+   ✓ 🆕 CRITICAL: Did you detect MULTI-BUY OFFER patterns (Xför#, Xf#, X/#)?
+      ❌ "Juicy Melba" + "Nocco 3för45kr" = "Nocco Juicy Melba" (brand prepended!)
+      ❌ Do NOT append "3för45kr" to the product name!
    
 5. SWEDISH ABBREVIATIONS & CONTEXT:
    - "st" = styck (piece/quantity). Example: "2 st" means quantity 2.
