@@ -49,17 +49,20 @@ export function AssignToGroupDropdown({
       const isUnmapped = product.id.startsWith('unmapped-');
 
       if (isUnmapped) {
-        // Create new mapping for unmapped product
+        // Create new mapping for unmapped product (or update if it already exists)
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error("Not authenticated");
 
         const { error } = await supabase
           .from('product_mappings')
-          .insert({
+          .upsert({
             user_id: user.id,
             original_name: product.original_name,
             mapped_name: groupName,
             category: categoryToAssign || null, // Auto-assign category
+          }, {
+            onConflict: 'user_id,original_name',
+            ignoreDuplicates: false
           });
 
         if (error) throw error;
