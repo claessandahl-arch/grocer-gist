@@ -50,21 +50,38 @@ export default function ProductManagement() {
     staleTime: 0, // Don't use cached data
   });
 
-  // Fetch all user mappings
+  // Fetch all user mappings (with pagination to bypass Supabase max rows limit)
   const { data: userMappings = [], isLoading: userMappingsLoading } = useQuery({
     queryKey: ['user-product-mappings', user?.id],
     queryFn: async () => {
-      console.log('[ProductManagement] Fetching user mappings...');
+      console.log('[ProductManagement] Fetching all user mappings with pagination...');
       if (!user) return [];
-      const { data, error } = await supabase
-        .from('product_mappings')
-        .select('*')
-        .eq('user_id', user.id)
-        .limit(10000); // Override default 1000 row limit
+      
+      const PAGE_SIZE = 1000;
+      let allData: any[] = [];
+      let from = 0;
+      let hasMore = true;
+      
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('product_mappings')
+          .select('*')
+          .eq('user_id', user.id)
+          .range(from, from + PAGE_SIZE - 1);
 
-      if (error) throw error;
-      console.log('[ProductManagement] User mappings fetched:', data?.length || 0);
-      return data.map(m => ({ ...m, type: 'user' as const }));
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allData = [...allData, ...data];
+          from += PAGE_SIZE;
+          hasMore = data.length === PAGE_SIZE;
+        } else {
+          hasMore = false;
+        }
+      }
+      
+      console.log('[ProductManagement] User mappings fetched (paginated):', allData.length);
+      return allData.map(m => ({ ...m, type: 'user' as const }));
     },
     enabled: !!user,
     staleTime: 0, // Don't cache - always refetch
