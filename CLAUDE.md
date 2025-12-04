@@ -6,6 +6,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a grocery receipt tracking application that uses AI to parse receipt images and PDFs, extract structured data, and provide spending insights. The app is built with React, TypeScript, Vite, shadcn-ui, and Supabase.
 
+## Context7 Integration
+
+Always use Context7 when I need code generation, setup or configuration steps, or library/API documentation. This means you should automatically use the Context7 MCP tools (`resolve-library-id` and `get-library-docs`) without me having to explicitly ask.
+
+**Key libraries in this project:**
+- **React** (`/facebook/react`) - UI framework
+- **TypeScript** - Type safety
+- **Vite** (`/vitejs/vite`) - Build tool and dev server
+- **Supabase** (`/supabase/supabase`) - Backend, database, auth, storage, Edge Functions
+- **TanStack React Query** (`/tanstack/query`) - Server state management
+- **React Router** (`/remix-run/react-router`) - Client-side routing
+- **shadcn/ui** (`/shadcn-ui/ui`) - UI component library (Radix-based)
+- **Tailwind CSS** (`/tailwindcss/tailwindcss`) - Utility-first CSS
+- **React Hook Form** (`/react-hook-form/react-hook-form`) - Form handling
+- **Recharts** (`/recharts/recharts`) - Charts and data visualization
+- **date-fns** (`/date-fns/date-fns`) - Date utilities
+- **Zod** (`/colinhacks/zod`) - Schema validation
+- **Deno** (`/denoland/deno`) - Runtime for Supabase Edge Functions
+- **Sonner** - Toast notifications
+- **Lucide React** - Icons
 
 ## Lovable Integration
 
