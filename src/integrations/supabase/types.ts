@@ -355,12 +355,41 @@ export type Database = {
           quantity_unit: string
         }[]
       }
+      get_product_price_history: {
+        Args: { target_mapped_name: string; target_unit: string }
+        Returns: Database["public"]["CompositeTypes"]["price_history_item"][]
+        SetofOptions: {
+          from: "*"
+          to: "price_history_item"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      toggle_receipt_item_ignore: {
+        Args: {
+          set_ignored: boolean
+          target_item_index: number
+          target_receipt_id: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
     }
     CompositeTypes: {
-      [_ in never]: never
+      price_history_item: {
+        receipt_id: string | null
+        receipt_date: string | null
+        store_name: string | null
+        original_name: string | null
+        price: number | null
+        quantity: number | null
+        effective_amount: number | null
+        unit_price: number | null
+        is_ignored: boolean | null
+        item_index: number | null
+      }
     }
   }
 }
