@@ -67,22 +67,41 @@ export default function DataManagement() {
     staleTime: 0, // Don't use cached data
   });
 
-  // Fetch user mappings
+  // Fetch user mappings with pagination (Supabase has 1000 row limit per query)
   const { data: userMappings = [], isLoading: userMappingsLoading } = useQuery({
     queryKey: ['user-product-mappings', user?.id],
     queryFn: async () => {
       if (!user) return [];
-      const { data, error } = await supabase
-        .from('product_mappings')
-        .select('*')
-        .eq('user_id', user.id)
-        .limit(10000); // Override default 1000 row limit
+      
+      const PAGE_SIZE = 1000;
+      let allData: any[] = [];
+      let from = 0;
+      let hasMore = true;
 
-      if (error) throw error;
-      console.log('[DataManagement] User mappings fetched:', data?.length || 0);
-      return data.map(m => ({ ...m, type: 'user' as const }));
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('product_mappings')
+          .select('*')
+          .eq('user_id', user.id)
+          .range(from, from + PAGE_SIZE - 1);
+
+        if (error) throw error;
+        
+        if (data && data.length > 0) {
+          allData = [...allData, ...data];
+          from += PAGE_SIZE;
+          hasMore = data.length === PAGE_SIZE;
+        } else {
+          hasMore = false;
+        }
+      }
+
+      console.log('[DataManagement] User mappings fetched (paginated):', allData.length);
+      return allData.map(m => ({ ...m, type: 'user' as const }));
     },
     enabled: !!user,
+    refetchOnMount: true,
+    staleTime: 0,
   });
 
   // Fetch global mappings
@@ -268,11 +287,13 @@ export default function DataManagement() {
 
         const { error } = await supabase
           .from('product_mappings')
-          .insert({
+          .upsert({
             user_id: user.id,
             original_name: productName,
             mapped_name: productName,
             category: category,
+          }, { 
+            onConflict: 'user_id,original_name' 
           });
 
         if (error) {
