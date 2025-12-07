@@ -18,9 +18,12 @@ type PriceComparisonItem = {
   data_points: number;
 };
 
+import { PriceHistorySheet } from "@/components/dashboard/PriceHistorySheet";
+
 export default function PriceComparison() {
   const [searchTerm, setSearchTerm] = useState("");
   const navigate = useNavigate();
+  const [selectedProduct, setSelectedProduct] = useState<{ name: string, unit: string } | null>(null);
 
   const { data: items, isLoading } = useQuery({
     queryKey: ['price-comparison', new Date().toISOString().split('T')[0]], // Add date to force daily refresh
@@ -74,7 +77,11 @@ export default function PriceComparison() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredItems?.map((item) => (
-            <Card key={`${item.mapped_name}-${item.quantity_unit}`} className="hover:shadow-md transition-shadow border-l-4 border-l-primary">
+            <Card
+              key={`${item.mapped_name}-${item.quantity_unit}`}
+              className="hover:shadow-md transition-shadow border-l-4 border-l-primary cursor-pointer active:scale-[0.98] transition-transform"
+              onClick={() => setSelectedProduct({ name: item.mapped_name, unit: item.quantity_unit })}
+            >
               <CardHeader className="pb-2">
                 <div className="flex justify-between items-start">
                   <CardTitle className="text-lg font-semibold">{item.mapped_name}</CardTitle>
@@ -111,8 +118,8 @@ export default function PriceComparison() {
                   </div>
                 </div>
 
-                <div className="text-xs text-muted-foreground text-right">
-                  Baserat på {item.data_points} köp
+                <div className="text-xs text-muted-foreground text-right border-t pt-2 mt-2">
+                  Klicka för att se {item.data_points} köp
                 </div>
               </CardContent>
             </Card>
@@ -124,6 +131,15 @@ export default function PriceComparison() {
             </div>
           )}
         </div>
+      )}
+
+      {selectedProduct && (
+        <PriceHistorySheet
+          isOpen={!!selectedProduct}
+          onOpenChange={(open) => !open && setSelectedProduct(null)}
+          productName={selectedProduct.name}
+          unit={selectedProduct.unit}
+        />
       )}
     </div>
   );
