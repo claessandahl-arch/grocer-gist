@@ -293,7 +293,8 @@ export default function DataManagement() {
             mapped_name: productName,
             category: category,
           }, { 
-            onConflict: 'user_id,original_name' 
+            onConflict: 'user_id,original_name',
+            ignoreDuplicates: false
           });
 
         if (error) {
