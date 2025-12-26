@@ -780,7 +780,7 @@ Return a JSON array of categories in the same order: ["category1", "category2", 
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              model: 'gemini-2.0-flash',
+              model: 'gemini-2.5-flash',
               messages: [
                 { role: 'user', content: categorizationPrompt }
               ],
@@ -1229,7 +1229,7 @@ Return ONLY the function call with properly formatted JSON. No additional text o
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gemini-2.0-flash',
+        model: 'gemini-2.5-flash',
         messages: [
           {
             role: 'system',
