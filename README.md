@@ -1,73 +1,93 @@
-# Welcome to your Lovable project
+# Receipt Insights (grocer-gist)
 
-## Project info
+A smart grocery spending tracker that uses AI to parse receipt images and PDFs, providing insights into spending habits and price comparisons across stores.
 
-**URL**: https://lovable.dev/projects/f21d8444-2059-42cc-a52a-739ae8a6d579
+## Features
 
-## How can I edit this code?
+- 📷 **Receipt Parsing** - Upload receipt images or PDFs, AI extracts items automatically
+- 📊 **Spending Dashboard** - Visualize spending by category, store, and time period
+- 💰 **Price Comparison** - Compare prices across stores to find the best deals
+- 🏷️ **Smart Categorization** - AI-powered product categorization with learning from corrections
+- 🔄 **Product Grouping** - Automatically group similar products for better tracking
 
-There are several ways of editing your application.
+## Tech Stack
 
-**Use Lovable**
+- **Frontend**: React + TypeScript + Vite
+- **UI**: shadcn/ui + Tailwind CSS
+- **Backend**: Supabase (Database, Auth, Storage, Edge Functions)
+- **AI**: Google Gemini API (Receipt parsing, categorization)
+- **Hosting**: Lovable Cloud (frontend) / Supabase (backend)
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/f21d8444-2059-42cc-a52a-739ae8a6d579) and start prompting.
+## Development
 
-Changes made via Lovable will be committed automatically to this repo.
+### Prerequisites
 
-**Use your preferred IDE**
+- Node.js 18+ (install via [nvm](https://github.com/nvm-sh/nvm))
+- npm
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+### Getting Started
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+# Clone the repository
+git clone https://github.com/claessandahl-arch/grocer-gist.git
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# Navigate to project directory
+cd grocer-gist
 
-# Step 3: Install the necessary dependencies.
-npm i
+# Install dependencies
+npm install
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+The app will be available at `http://localhost:8080`.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### Environment Variables
 
-**Use GitHub Codespaces**
+Create a `.env` file in the root directory:
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+```env
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_PUBLISHABLE_KEY=your_supabase_anon_key
+```
 
-## What technologies are used for this project?
+### Edge Functions
 
-This project is built with:
+The app uses Supabase Edge Functions for AI-powered features:
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+| Function | Purpose |
+|----------|---------|
+| `parse-receipt` | Parse receipt images/PDFs using Gemini AI |
+| `suggest-categories` | AI category suggestions for products |
+| `suggest-product-groups` | AI product grouping suggestions |
+| `suggest-group-merges` | AI merge suggestions for product groups |
+| `auto-map-products` | Auto-map products to groups |
+| `admin-delete-all` | Admin utility for data cleanup |
 
-## How can I deploy this project?
+Edge Functions require `GEMINI_API_KEY` to be set as a secret.
 
-Simply open [Lovable](https://lovable.dev/projects/f21d8444-2059-42cc-a52a-739ae8a6d579) and click on Share -> Publish.
+## Project Structure
 
-## Can I connect a custom domain to my Lovable project?
+```
+├── src/
+│   ├── components/     # React components
+│   ├── pages/          # Page components
+│   ├── hooks/          # Custom React hooks
+│   ├── integrations/   # Supabase client & types
+│   └── lib/            # Utility functions
+├── supabase/
+│   ├── functions/      # Edge Functions
+│   └── migrations/     # Database migrations
+└── public/             # Static assets
+```
 
-Yes, you can!
+## Documentation
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+- [CLAUDE.md](./CLAUDE.md) - Detailed project documentation and guidelines
+- [TODO.md](./TODO.md) - Roadmap and planned features
+- [TECH_STACK.md](./TECH_STACK.md) - Technology stack details
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## License
+
+Private project - All rights reserved.
