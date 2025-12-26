@@ -27,13 +27,15 @@ Always use Context7 when I need code generation, setup or configuration steps, o
 - **Sonner** - Toast notifications
 - **Lucide React** - Icons
 
-## Lovable Integration
+## Hosting & Infrastructure
 
-This project is actively developed with Lovable.ai:
-- Project URL: https://lovable.dev/projects/f21d8444-2059-42cc-a52a-739ae8a6d579
-- Changes via Lovable auto-commit to this repo
-- Local changes pushed to repo sync with Lovable
-- AI Gateway uses Lovable API key for Gemini access
+This project uses:
+- **Frontend Hosting**: Lovable Cloud
+- **Database**: Lovable Cloud (Supabase-based)
+- **Edge Functions**: Supabase Edge Functions (deployed via Lovable)
+- **AI**: Direct Google Gemini API (`gemini-2.5-flash`)
+
+> **Note**: AI Gateway migration complete (Dec 2024). Edge Functions now use `GEMINI_API_KEY` directly instead of `LOVABLE_API_KEY`.
 
 ### Working with Lovable on Edge Functions
 
@@ -165,7 +167,7 @@ npm preview
    - Duplicate detection checks (date + amount + fuzzy store name match)
 
 2. **AI Parsing**: Images are sent to the `parse-receipt` Supabase Edge Function
-   - Uses `google/gemini-2.5-flash` via Lovable AI Gateway
+   - Uses `gemini-2.5-flash` via direct Google Gemini API
    - **New**: Supports direct PDF text extraction (if PDF URL provided) for 100% accuracy
    - **New**: Enhanced Swedish abbreviation handling (st, kg, pant, rabatt)
    - Applies learned patterns from `store_patterns` table for improved accuracy
@@ -422,7 +424,7 @@ Location: `supabase/functions/`
    - Falls back to AI parser if structured parsing fails or returns no items
 
 3. **AI Vision Fallback** (always runs if structured parser fails):
-   - Uses `google/gemini-2.5-flash` via Lovable AI Gateway
+   - Uses `gemini-2.5-flash` via direct Google Gemini API
    - Receives PDF text in prompt for improved accuracy
    - Applies learned patterns from `store_patterns` table
    - Handles multi-line names, discounts, Swedish abbreviations
@@ -455,7 +457,7 @@ Location: `supabase/functions/`
 ```
 
 **Environment Variables:**
-- `LOVABLE_API_KEY` - For AI gateway access
+- `GEMINI_API_KEY` - For direct Gemini API access
 - `SUPABASE_URL` - Supabase project URL
 - `SUPABASE_SERVICE_ROLE_KEY` - For accessing store patterns
 
@@ -478,7 +480,7 @@ Location: `supabase/functions/`
 - Fetches training data from user mappings, global mappings, and receipts
 - Fetches previous feedback from `category_suggestion_feedback` table for learning
 - Builds Swedish-language prompt with examples
-- Calls Lovable AI Gateway with Gemini
+- Calls Gemini API directly
 
 **Output:**
 ```typescript
@@ -717,10 +719,9 @@ All major patterns verified against Context7 documentation:
 - Console.log statements in ProductManagement.tsx (debug logs)
 - `any` type casts on database view queries (acceptable workaround)
 
-## Future: Lovable Migration
+## Future: Complete Independence
 
-See `TODO.md` for migration plan outline. Key phases:
-1. **Phase 1**: Own Supabase instance (database, edge functions, storage)
-2. **Phase 2**: Replace AI Gateway (direct Gemini API)
-3. **Phase 3**: (Optional) Migrate to Vercel
-
+See `TODO.md` for migration plan. Current status:
+- [x] **Phase 2**: Replace AI Gateway (direct Gemini API) ✅ COMPLETE
+- [ ] **Phase 1**: Own Supabase instance (database, edge functions, storage)
+- [ ] **Phase 3**: (Optional) Migrate to Vercel
