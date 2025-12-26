@@ -73,7 +73,7 @@ serve(async (req) => {
     userMappings?.forEach(m => existingOriginalNames.add(m.original_name.toLowerCase()));
 
     // Filter out products that already have mappings
-    const productsToMap = products.filter(p => 
+    const productsToMap = products.filter(p =>
       p.name && !existingOriginalNames.has(p.name.toLowerCase())
     );
 
@@ -89,7 +89,7 @@ serve(async (req) => {
 
     // Build existing groups from user + global mappings
     const groupMap = new Map<string, ExistingGroup>();
-    
+
     // Add user groups
     userMappings?.forEach(m => {
       if (m.mapped_name) {
@@ -124,9 +124,9 @@ serve(async (req) => {
     console.log(`[auto-map-products] Found ${existingGroups.length} existing groups`);
 
     // Call AI to map products
-    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
-    if (!lovableApiKey) {
-      throw new Error('LOVABLE_API_KEY not configured');
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+    if (!geminiApiKey) {
+      throw new Error('GEMINI_API_KEY not configured');
     }
 
     const prompt = buildPrompt(productsToMap, existingGroups);
@@ -135,15 +135,15 @@ serve(async (req) => {
     const timeoutId = setTimeout(() => controller.abort(), 55000); // 55 second timeout
 
     try {
-      const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      const aiResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${lovableApiKey}`,
+          'Authorization': `Bearer ${geminiApiKey}`,
         },
         signal: controller.signal,
         body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
+          model: 'gemini-2.0-flash',
           messages: [
             {
               role: 'system',

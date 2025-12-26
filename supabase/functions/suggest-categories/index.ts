@@ -93,20 +93,20 @@ serve(async (req) => {
     // Build AI prompt
     const prompt = buildPrompt(products, trainingExamples, feedbackData || []);
 
-    // Call Lovable AI Gateway
-    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
-    if (!lovableApiKey) {
-      throw new Error('LOVABLE_API_KEY not configured');
+    // Call Google Gemini API directly (OpenAI-compatible endpoint)
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+    if (!geminiApiKey) {
+      throw new Error('GEMINI_API_KEY not configured');
     }
 
-    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const aiResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${lovableApiKey}`,
+        'Authorization': `Bearer ${geminiApiKey}`,
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'gemini-2.0-flash',
         messages: [
           {
             role: 'user',

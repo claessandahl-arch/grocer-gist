@@ -309,16 +309,16 @@ function parseICAReceiptText(text: string): { items: ParsedItem[]; store_name?: 
 
       // Stop parsing at footer section (anything after "Betalat" is not a product)
       if (line.includes('Betalat') || line.includes('Moms %') ||
-          line.includes('Betalningsinformation') || line.includes('Page 2') ||
-          line.includes('ÖPPETTIDER') || line.includes('Returkod')) {
+        line.includes('Betalningsinformation') || line.includes('Page 2') ||
+        line.includes('ÖPPETTIDER') || line.includes('Returkod')) {
         console.log(`  🛑 Reached footer section, stopping product parsing`);
         break;
       }
 
       // Skip non-product lines within the product section
       if (line.includes('Moms') || line.includes('Totalt') ||
-          line.includes('Kort') || line.includes('Netto') || line.includes('Brutto') ||
-          line.includes('Erhållen rabatt') || line.includes('Avrundning')) {
+        line.includes('Kort') || line.includes('Netto') || line.includes('Brutto') ||
+        line.includes('Erhållen rabatt') || line.includes('Avrundning')) {
         console.log(`  ⏭️  Header/footer line, skipping`);
         i++;
         continue;
@@ -394,13 +394,13 @@ function parseICAReceiptText(text: string): { items: ParsedItem[]; store_name?: 
                 const brandName = offerMatch[1].trim();
                 const bundleQty = parseInt(offerMatch[2]);
                 const bundlePrice = parseFloat(offerMatch[3].replace(',', '.'));
-                
+
                 // Prepend brand if it's different from product name and not empty
                 if (brandName && !productName.toLowerCase().includes(brandName.toLowerCase())) {
                   productName = brandName + ' ' + productName;
                   console.log(`  🏷️  Multi-buy offer detected, prepended brand: "${brandName}"`);
                 }
-                
+
                 // Calculate per-item price from the offer
                 if (bundleQty > 0 && bundlePrice > 0) {
                   multiBuyPerItemPrice = bundlePrice / bundleQty;
@@ -423,19 +423,19 @@ function parseICAReceiptText(text: string): { items: ParsedItem[]; store_name?: 
             const brandName = offerMatch[1].trim();
             const bundleQty = parseInt(offerMatch[2]);
             const bundlePrice = parseFloat(offerMatch[3].replace(',', '.'));
-            
+
             // Prepend brand if it's different from product name and not empty
             if (brandName && !productName.toLowerCase().includes(brandName.toLowerCase())) {
               productName = brandName + ' ' + productName;
               console.log(`  🏷️  Multi-buy offer detected on separate line, prepended brand: "${brandName}"`);
             }
-            
+
             // Calculate per-item price from the offer
             if (bundleQty > 0 && bundlePrice > 0) {
               multiBuyPerItemPrice = bundlePrice / bundleQty;
               console.log(`  💰 Multi-buy price: ${bundleQty} för ${bundlePrice} kr = ${multiBuyPerItemPrice.toFixed(2)} kr/st`);
             }
-            
+
             // Don't append the offer pattern itself to product name
             j++;
             continue; // Continue to look for discount line
@@ -610,9 +610,9 @@ serve(async (req) => {
       console.log('Original filename:', originalFilename);
     }
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY is not configured');
+    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+    if (!GEMINI_API_KEY) {
+      throw new Error('GEMINI_API_KEY is not configured');
     }
 
     console.log('Fetching store patterns for improved accuracy...');
@@ -773,14 +773,14 @@ Return a JSON array of categories in the same order: ["category1", "category2", 
 
         try {
           // Call AI just for categorization
-          const categorizationResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+          const categorizationResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+              'Authorization': `Bearer ${GEMINI_API_KEY}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              model: 'google/gemini-2.5-flash',
+              model: 'gemini-2.0-flash',
               messages: [
                 { role: 'user', content: categorizationPrompt }
               ],
@@ -1222,14 +1222,14 @@ Return ONLY the function call with properly formatted JSON. No additional text o
       }))
     ];
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Authorization': `Bearer ${GEMINI_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'gemini-2.0-flash',
         messages: [
           {
             role: 'system',

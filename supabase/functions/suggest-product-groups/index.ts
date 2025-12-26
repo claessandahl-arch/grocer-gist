@@ -20,9 +20,9 @@ serve(async (req) => {
             );
         }
 
-        const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-        if (!LOVABLE_API_KEY) {
-            throw new Error('LOVABLE_API_KEY is not configured');
+        const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+        if (!GEMINI_API_KEY) {
+            throw new Error('GEMINI_API_KEY is not configured');
         }
 
         const promptText = `You are a product grouping assistant. Your task is to analyze product names within the same category and group products that represent the same item.
@@ -53,21 +53,21 @@ RETURN FORMAT (JSON):
 }`;
 
         console.log(`Processing ${products.length} products for category ${category}`);
-        
+
         // Create a timeout controller
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 50000); // 50 second timeout
 
         try {
-            const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+            const response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+                    'Authorization': `Bearer ${GEMINI_API_KEY}`,
                     'Content-Type': 'application/json',
                 },
                 signal: controller.signal,
                 body: JSON.stringify({
-                    model: 'google/gemini-2.5-flash',
+                    model: 'gemini-2.0-flash',
                     messages: [
                         {
                             role: 'system',
@@ -87,21 +87,21 @@ RETURN FORMAT (JSON):
             if (!response.ok) {
                 const errorText = await response.text();
                 console.error('AI gateway error:', response.status, errorText);
-                
+
                 if (response.status === 429) {
                     throw new Error('Rate limit exceeded. Please try again in a moment.');
                 }
                 if (response.status === 402) {
                     throw new Error('AI credits exhausted. Please add more credits.');
                 }
-                
+
                 throw new Error(`AI gateway returned ${response.status}: ${errorText}`);
             }
 
             const data = await response.json();
             const content = data.choices[0].message.content;
             const parsedContent = JSON.parse(content);
-            
+
             console.log(`Generated ${parsedContent.suggestions?.length || 0} suggestions`);
 
             return new Response(
