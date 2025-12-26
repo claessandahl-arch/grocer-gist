@@ -686,3 +686,41 @@ When testing the upload functionality:
    - **Cause**: Syntax errors or type errors in the code (e.g., duplicated braces `}}`) that break the build.
    - **Solution**: Run `npm run build` locally. If it fails, fix the errors before pushing.
    - **Prevention**: Never push code that hasn't passed a local build check.
+
+## Context7 MCP Integration
+
+This project uses **Context7** MCP server to fetch up-to-date documentation before implementing new features.
+
+**Workflow**: Use `/context7` command before implementation requests to trigger documentation lookup.
+
+**Workflow file**: `.agent/workflows/context7.md`
+
+**Key library IDs verified for this project:**
+- Supabase: `/supabase/supabase-js`
+- TanStack Query: `/websites/tanstack_query`
+- React Router: `/remix-run/react-router`
+- React Hook Form: `/react-hook-form/react-hook-form`
+- Zod: `/colinhacks/zod`
+
+## Code Review Findings (2024-12-26)
+
+All major patterns verified against Context7 documentation:
+
+✅ **Compliant:**
+- Supabase client setup with typed Database generic
+- TanStack Query v5 hooks and cache management
+- React Router v6 declarative routing
+- React.lazy() + Suspense code splitting
+- Pagination for Supabase 1000 row limit
+
+⚠️ **Minor observations:**
+- Console.log statements in ProductManagement.tsx (debug logs)
+- `any` type casts on database view queries (acceptable workaround)
+
+## Future: Lovable Migration
+
+See `TODO.md` for migration plan outline. Key phases:
+1. **Phase 1**: Own Supabase instance (database, edge functions, storage)
+2. **Phase 2**: Replace AI Gateway (direct Gemini API)
+3. **Phase 3**: (Optional) Migrate to Vercel
+
