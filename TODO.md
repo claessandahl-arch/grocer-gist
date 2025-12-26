@@ -40,32 +40,38 @@ The following patterns were verified and are correct:
 
 Plan to migrate off Lovable dependencies to gain full control of infrastructure.
 
-### Phase 1: Own Supabase Instance
-- [ ] Create own Supabase account/project
+### Phase 2: Replace AI Gateway ✅ COMPLETE (Dec 2024)
+- [x] Replace `LOVABLE_API_KEY` with direct Gemini API key (`GEMINI_API_KEY`)
+- [x] Update all 5 Edge Functions to use Gemini API directly
+- [x] Test all AI features (parse-receipt, suggest-categories, etc.)
+
+### Phase 3: Frontend Cleanup ✅ COMPLETE (Dec 2024)
+- [x] Remove `lovable-tagger` package
+- [x] Update OpenGraph images
+- [x] Update documentation (README.md, CLAUDE.md)
+
+### Phase 1: Own Supabase Instance (NEXT)
+- [ ] Create own Supabase account/project (Free tier)
 - [ ] Export data from Lovable Cloud database
 - [ ] Run all migrations on new Supabase instance
 - [ ] Update environment variables (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`)
-- [ ] Deploy Edge Functions to own Supabase project
+- [ ] Deploy Edge Functions via Supabase CLI
 - [ ] Migrate storage (receipt images)
+- [ ] Set `GEMINI_API_KEY` secret on new Supabase
 
-### Phase 2: Replace AI Gateway
-- [ ] Replace `LOVABLE_API_KEY` with direct Gemini API key
-- [ ] Update Edge Functions to use Gemini API directly (or via Vertex AI)
-- [ ] Test all AI features (parse-receipt, suggest-categories, etc.)
-
-### Phase 3: (Optional) Migrate to Vercel
+### Phase 4: (Optional) Migrate to Vercel
 - [ ] Set up Vercel project
 - [ ] Configure build settings for Vite
 - [ ] Set up environment variables
 - [ ] Configure custom domain (if needed)
-- [ ] Update deployment workflow
 
-### Current Lovable Dependencies
-| Component | Lovable Dependency | Migration Target |
-|-----------|-------------------|------------------|
+### Current Status
+| Component | Current State | Target |
+|-----------|--------------|--------|
+| AI Gateway | ✅ Direct Gemini API | Done |
+| Frontend Code | ✅ Cleaned | Done |
 | Database | Lovable Cloud | Own Supabase |
 | Edge Functions | Lovable deploy | Supabase CLI |
-| AI Gateway | `LOVABLE_API_KEY` | Direct Gemini API |
-| Frontend Hosting | Lovable publish | Vercel / Netlify |
+| Frontend Hosting | Lovable publish | Vercel |
 
-**⚠️ NOTE**: This section needs detailed step-by-step instructions before execution.
+**📋 Detailed plan**: See `.gemini/antigravity/brain/*/implementation_plan.md` for step-by-step instructions.
