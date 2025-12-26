@@ -35,9 +35,9 @@ serve(async (req) => {
             );
         }
 
-        const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-        if (!LOVABLE_API_KEY) {
-            throw new Error('LOVABLE_API_KEY is not configured');
+        const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+        if (!GEMINI_API_KEY) {
+            throw new Error('GEMINI_API_KEY is not configured');
         }
 
         // Limit to 200 groups to avoid token limits
@@ -47,12 +47,12 @@ serve(async (req) => {
 
 PRODUCT GROUPS (${limitedGroups.length} groups):
 ${JSON.stringify(limitedGroups.map(g => ({
-    name: g.name,
-    products: g.productCount,
-    categories: g.categories,
-    samples: g.sampleProducts,
-    global: g.isGlobal
-})), null, 2)}
+            name: g.name,
+            products: g.productCount,
+            categories: g.categories,
+            samples: g.sampleProducts,
+            global: g.isGlobal
+        })), null, 2)}
 
 RULES:
 1. Find groups that represent the SAME product but with different names.
@@ -108,20 +108,20 @@ IMPORTANT:
 - Maximum 20 suggestions to keep it manageable`;
 
         console.log(`[suggest-group-merges] Processing ${limitedGroups.length} groups for user ${userId}`);
-        
+
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 55000);
 
         try {
-            const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+            const response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+                    'Authorization': `Bearer ${GEMINI_API_KEY}`,
                     'Content-Type': 'application/json',
                 },
                 signal: controller.signal,
                 body: JSON.stringify({
-                    model: 'google/gemini-2.5-flash',
+                    model: 'gemini-2.0-flash',
                     messages: [
                         {
                             role: 'system',
@@ -142,20 +142,20 @@ IMPORTANT:
             if (!response.ok) {
                 const errorText = await response.text();
                 console.error('AI gateway error:', response.status, errorText);
-                
+
                 if (response.status === 429) {
                     throw new Error('Rate limit exceeded. Please try again in a moment.');
                 }
                 if (response.status === 402) {
                     throw new Error('AI credits exhausted. Please add more credits.');
                 }
-                
+
                 throw new Error(`AI gateway returned ${response.status}: ${errorText}`);
             }
 
             const data = await response.json();
             const content = data.choices[0].message.content;
-            
+
             let parsedContent;
             try {
                 let jsonString = content.trim();
@@ -169,7 +169,7 @@ IMPORTANT:
                 console.error('Failed to parse AI response:', content);
                 throw new Error('Invalid AI response format');
             }
-            
+
             // Validate suggestions
             interface RawSuggestion {
                 sourceGroups?: string[];
