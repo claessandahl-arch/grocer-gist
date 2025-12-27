@@ -14,8 +14,8 @@ WITH user_purchases AS (
         COALESCE((item->>'quantity')::DECIMAL, 1) as quantity,
         r.receipt_date
     FROM
-        public.receipts r,
-        jsonb_array_elements(r.items) as item
+        public.receipts r
+    CROSS JOIN LATERAL jsonb_array_elements(r.items) as item
     LEFT JOIN
         public.product_mappings pm ON (item->>'name') = pm.original_name AND pm.user_id = r.user_id
     WHERE
@@ -48,8 +48,8 @@ WITH product_prices AS (
         COALESCE((item->>'quantity')::DECIMAL, 1) as quantity,
         r.receipt_date
     FROM
-        public.receipts r,
-        jsonb_array_elements(r.items) as item
+        public.receipts r
+    CROSS JOIN LATERAL jsonb_array_elements(r.items) as item
     LEFT JOIN
         public.product_mappings pm ON (item->>'name') = pm.original_name AND pm.user_id = r.user_id
     WHERE
