@@ -1,3 +1,6 @@
+-- Drop and recreate function with updated signature
+DROP FUNCTION IF EXISTS public.extract_unit_info(TEXT);
+
 -- Update the extraction function to be more aggressive/smart
 CREATE OR REPLACE FUNCTION public.extract_unit_info(product_name TEXT)
 RETURNS TABLE (quantity_amount DECIMAL, quantity_unit TEXT) AS $$
@@ -53,20 +56,27 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
--- Re-run backfill for user mappings
+-- Re-run backfill for user mappings using CTE
+WITH unit_info AS (
+    SELECT id, (public.extract_unit_info(original_name)).*
+    FROM public.product_mappings
+)
 UPDATE public.product_mappings pm
 SET
-  quantity_amount = info.quantity_amount,
-  quantity_unit = info.quantity_unit
-FROM public.product_mappings pm2
-CROSS JOIN LATERAL public.extract_unit_info(pm2.original_name) AS info
-WHERE pm.id = pm2.id;
+  quantity_amount = ui.quantity_amount,
+  quantity_unit = ui.quantity_unit
+FROM unit_info ui
+WHERE pm.id = ui.id;
 
--- Re-run backfill for global mappings
+-- Re-run backfill for global mappings using CTE
+WITH unit_info AS (
+    SELECT id, (public.extract_unit_info(original_name)).*
+    FROM public.global_product_mappings
+)
 UPDATE public.global_product_mappings gpm
 SET
-  quantity_amount = info.quantity_amount,
-  quantity_unit = info.quantity_unit
-FROM public.global_product_mappings gpm2
-CROSS JOIN LATERAL public.extract_unit_info(gpm2.original_name) AS info
-WHERE gpm.id = gpm2.id;
+  quantity_amount = ui.quantity_amount,
+  quantity_unit = ui.quantity_unit
+FROM unit_info ui
+WHERE gpm.id = ui.id;
+

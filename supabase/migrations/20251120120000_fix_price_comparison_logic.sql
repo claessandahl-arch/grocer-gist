@@ -64,19 +64,30 @@ END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
 -- 2. Re-run backfill to apply new regex to existing data
+WITH unit_info AS (
+    SELECT id, (public.extract_unit_info(original_name)).*
+    FROM public.product_mappings
+    WHERE quantity_amount IS NULL OR quantity_unit IS NULL
+)
 UPDATE public.product_mappings pm
 SET 
-    quantity_amount = info.amount,
-    quantity_unit = info.unit
-FROM LATERAL public.extract_unit_info(pm.original_name) AS info
-WHERE pm.quantity_amount IS NULL OR pm.quantity_unit IS NULL; -- Optionally re-run for all if we trust the new regex better
+    quantity_amount = ui.amount,
+    quantity_unit = ui.unit
+FROM unit_info ui
+WHERE pm.id = ui.id;
 
+WITH unit_info AS (
+    SELECT id, (public.extract_unit_info(original_name)).*
+    FROM public.global_product_mappings
+    WHERE quantity_amount IS NULL OR quantity_unit IS NULL
+)
 UPDATE public.global_product_mappings gpm
 SET 
-    quantity_amount = info.amount,
-    quantity_unit = info.unit
-FROM LATERAL public.extract_unit_info(gpm.original_name) AS info
-WHERE gpm.quantity_amount IS NULL OR gpm.quantity_unit IS NULL;
+    quantity_amount = ui.amount,
+    quantity_unit = ui.unit
+FROM unit_info ui
+WHERE gpm.id = ui.id;
+
 
 -- 3. Update View to exclude Pant and filter outliers
 CREATE OR REPLACE VIEW public.view_price_comparison AS

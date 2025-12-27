@@ -50,14 +50,14 @@ Plan to migrate off Lovable dependencies to gain full control of infrastructure.
 - [x] Update OpenGraph images
 - [x] Update documentation (README.md, CLAUDE.md)
 
-### Phase 1: Own Supabase Instance (NEXT)
-- [ ] Create own Supabase account/project (Free tier)
-- [ ] Export data from Lovable Cloud database
-- [ ] Run all migrations on new Supabase instance
-- [ ] Update environment variables (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`)
-- [ ] Deploy Edge Functions via Supabase CLI
-- [ ] Migrate storage (receipt images)
-- [ ] Set `GEMINI_API_KEY` secret on new Supabase
+### Phase 1: Own Supabase Instance ✅ COMPLETE (Dec 27, 2024)
+- [x] Create own Supabase account/project (Free tier)
+- [x] Run all migrations on new Supabase instance (40 migrations)
+- [x] Deploy Edge Functions via Supabase CLI (6 functions)
+- [x] Set `GEMINI_API_KEY` secret on new Supabase
+- [x] Storage bucket auto-created with policies
+- [x] Update local environment variables
+- [ ] Export/migrate data from Lovable Cloud (pending)
 
 ### Phase 4: (Optional) Migrate to Vercel
 - [ ] Set up Vercel project
@@ -70,8 +70,9 @@ Plan to migrate off Lovable dependencies to gain full control of infrastructure.
 |-----------|--------------|--------|
 | AI Gateway | ✅ Direct Gemini API | Done |
 | Frontend Code | ✅ Cleaned | Done |
-| Database | Lovable Cloud | Own Supabase |
-| Edge Functions | Lovable deploy | Supabase CLI |
-| Frontend Hosting | Lovable publish | Vercel |
+| Database | ✅ Own Supabase (`issddemuomsuqkkrzqzn`) | Done |
+| Edge Functions | ✅ Supabase CLI deployed | Done |
+| Data Migration | ⏳ Pending | Export from Lovable |
+| Frontend Hosting | Lovable publish | Vercel (optional) |
 
 **📋 Detailed plan**: See `.gemini/antigravity/brain/*/implementation_plan.md` for step-by-step instructions.

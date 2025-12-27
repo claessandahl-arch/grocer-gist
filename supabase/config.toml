@@ -1,4 +1,4 @@
-project_id = "mbxrezbotqxttjemwvqk"
+project_id = "issddemuomsuqkkrzqzn"
 
 [functions.parse-receipt]
 verify_jwt = false

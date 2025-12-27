@@ -22,3 +22,14 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment variables (contains secrets)
+.env
+.env.local
+.env*.local
+
+# Export data files (contain user data)
+lovable-export*.json
+
+# Supabase temp files
+supabase/.temp/
