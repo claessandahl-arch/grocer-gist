@@ -7,6 +7,12 @@
   - Error: `FunctionsHttpError: Edge Function returned a non-2xx status code`
   - Location: Products → Auto-Gruppering → "Sök liknande grupper" button
 
+## Future Improvements 🚀
+
+- [ ] **Create new GitHub repo "Grocer-gist-2.0"**
+  - Fresh repo decoupled from old Lovable project
+  - Best time: During Phase 4 (Vercel migration)
+  - Steps: Create new repo → push code → update Vercel/Supabase configs
 
 ## Context7 Code Review Findings (2024-12-26)
 
