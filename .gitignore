@@ -27,3 +27,9 @@ dist-ssr
 .env
 .env.local
 .env*.local
+
+# Export data files (contain user data)
+lovable-export*.json
+
+# Supabase temp files
+supabase/.temp/
