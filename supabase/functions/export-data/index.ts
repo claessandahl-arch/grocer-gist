@@ -45,10 +45,38 @@ Deno.serve(async (req) => {
     // Use service role client to bypass RLS for reading
     const serviceClient = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Export user-specific data
-    const [receiptsRes, productMappingsRes, userOverridesRes, feedbackRes] = await Promise.all([
+    // Paginated fetch for product_mappings (can exceed 1000 rows)
+    const fetchAllProductMappings = async () => {
+      const allMappings: Record<string, unknown>[] = [];
+      let from = 0;
+      const pageSize = 1000;
+
+      while (true) {
+        const { data, error } = await serviceClient
+          .from("product_mappings")
+          .select("*")
+          .eq("user_id", user.id)
+          .range(from, from + pageSize - 1);
+
+        if (error) {
+          console.error(`product_mappings pagination error at offset ${from}:`, error);
+          throw error;
+        }
+
+        if (!data || data.length === 0) break;
+        allMappings.push(...data);
+        console.log(`Fetched ${data.length} product_mappings (total: ${allMappings.length})`);
+        from += pageSize;
+        if (data.length < pageSize) break;
+      }
+
+      return allMappings;
+    };
+
+    // Export user-specific data (product_mappings uses pagination)
+    const [receiptsRes, productMappings, userOverridesRes, feedbackRes] = await Promise.all([
       serviceClient.from("receipts").select("*").eq("user_id", user.id),
-      serviceClient.from("product_mappings").select("*").eq("user_id", user.id),
+      fetchAllProductMappings(),
       serviceClient.from("user_global_overrides").select("*").eq("user_id", user.id),
       serviceClient.from("category_suggestion_feedback").select("*").eq("user_id", user.id),
     ]);
@@ -62,7 +90,7 @@ Deno.serve(async (req) => {
     // Check for errors
     const errors = [];
     if (receiptsRes.error) errors.push(`receipts: ${receiptsRes.error.message}`);
-    if (productMappingsRes.error) errors.push(`product_mappings: ${productMappingsRes.error.message}`);
+    // productMappings is already resolved array, no error check needed (throws on error)
     if (userOverridesRes.error) errors.push(`user_global_overrides: ${userOverridesRes.error.message}`);
     if (feedbackRes.error && feedbackRes.error.code !== "42P01") {
       // 42P01 = table doesn't exist, which is ok
@@ -80,7 +108,7 @@ Deno.serve(async (req) => {
       user_id: user.id,
       tables: {
         receipts: receiptsRes.data || [],
-        product_mappings: productMappingsRes.data || [],
+        product_mappings: productMappings,
         global_product_mappings: globalMappingsRes.data || [],
         store_patterns: storePatternsRes.data || [],
         user_global_overrides: userOverridesRes.data || [],
