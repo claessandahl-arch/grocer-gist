@@ -1,5 +1,13 @@
 # TODO
 
+## Known Bugs 🐛
+
+- [ ] **"Sök liknande grupper" returns 500 error**
+  - Function: `suggest-group-merges` Edge Function
+  - Error: `FunctionsHttpError: Edge Function returned a non-2xx status code`
+  - Location: Products → Auto-Gruppering → "Sök liknande grupper" button
+
+
 ## Context7 Code Review Findings (2024-12-26)
 
 ### Completed ✅
